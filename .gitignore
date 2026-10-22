@@ -1,0 +1,16 @@
+# Build output
+/dist/
+*.exe
+*.syso
+*.test
+*.out
+
+# Local data created when running the app from the repo
+/data/
+/dev-data/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

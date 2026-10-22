@@ -1,0 +1,55 @@
+VALHEIM EASY SERVER
+===================
+
+Run your own Valheim server on this computer, with a simple control panel
+for you and your friends.
+
+
+SETTING UP (once, on the server computer)
+-----------------------------------------
+1. Make a folder for the server, for example   C:\Valheim Server
+   and put ValheimEasyServer.exe in it. Everything the server needs
+   (server files, worlds, backups, logs) is kept in that folder.
+
+2. Double-click ValheimEasyServer.exe.
+   If Windows says "Windows protected your PC", click "More info",
+   then "Run anyway". (The app isn't signed by a software company.)
+
+3. The control panel opens in its own window. Click "Install the server"
+   and wait a few minutes. It downloads the free Valheim dedicated server
+   from Steam (about 1 GB). You don't need to own Valheim on this computer.
+
+4. Click "Start server". When it says "Online", friends can join with the
+   join code and password shown under "How friends join".
+
+5. Finish the checklist under "Setup on this computer" on the Home page:
+   - Allow it through Windows Firewall (click Yes when Windows asks)
+   - Turn on hibernation
+   - Let friends use the control panel from their own phone or computer
+   - Start this app with Windows
+
+Closing the window doesn't stop anything: the app stays next to the clock
+(the shield icon). Click the icon to open the control panel again. Right-click
+it for Start, Stop, Hibernate and Close.
+
+
+FOR FRIENDS
+-----------
+To play:   open Valheim, go to Join Game and enter the join code (or the
+           address) and the password from the control panel.
+
+To control the server (if the owner allowed it): open the link the owner
+           gave you, for example http://192.168.1.20:8456, and log in with
+           the control panel password. You can start and stop the server,
+           switch worlds, upload worlds, see stats, and hibernate the computer.
+
+
+WAKING THE COMPUTER UP
+----------------------
+After "Hibernate", press the power button on the server computer. If the
+server was running before, it starts again by itself.
+
+
+MORE HELP
+---------
+https://github.com/TheCrowBro/Valheim-Easy-Server-

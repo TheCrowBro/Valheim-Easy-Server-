@@ -1,0 +1,127 @@
+# Valheim Easy Server
+
+Run a Valheim dedicated server on a spare Windows PC, such as an old Mac Pro running Windows 10 through Boot Camp, and give your friends a simple control panel for it. Nobody needs to touch a command line.
+
+![The control panel's home page](docs/screenshots/home.png)
+
+## What it does
+
+- **Start and stop with one button.** Stopping always saves the world first, the same way the official guide does it (Ctrl+C), just without the console window.
+- **How to join, always visible.** The panel shows the crossplay join code, the address and the password, with copy buttons. Crossplay codes work without setting up your router.
+- **Several worlds.** Switch worlds with one click, create new ones (with Valheim's difficulty presets and modifiers), rename old ones, and delete worlds. Deleted worlds keep a backup.
+- **World transfers.** Upload a world from a friend's PC (a Valheim 1.0 world folder, an older `.fwl` + `.db` pair, or a zip of either) and download any world as a zip. "Import from this PC" copies worlds from the Valheim game installed on the server computer.
+- **Backups.** Valheim's own automatic backups and the app's backups are listed together, and each one can be restored or downloaded. The app makes a backup before anything is replaced, restored over or deleted.
+- **Hibernate.** Saves the world, stops the server and hibernates the computer. When someone presses the power button, the server starts again. It can also hibernate on its own when nobody has played for a while.
+- **Stats.** CPU, memory, GPU and network use for the Valheim server and the whole computer, over 15 minutes to 24 hours. A breakdown by number of players estimates what each extra player costs.
+- **Players.** See who's online and everyone who has played, with total play time. Make someone an admin or ban them with one click, without hunting for Steam IDs.
+- **Looks after itself.** It updates the server through Steam before each start, so friends never get a "version mismatch". It restarts the server after a crash and keeps Windows from falling asleep while people play. Closing the window doesn't stop the server, and the app picks it back up when it starts again.
+- **Friends can use it too.** Turn on remote access and set a password. Friends then open the panel in a browser on their own phone or computer.
+
+| Worlds | Stats | Players | On a phone |
+|---|---|---|---|
+| ![Worlds](docs/screenshots/worlds.png) | ![Stats](docs/screenshots/stats.png) | ![Players](docs/screenshots/players.png) | ![Phone](docs/screenshots/phone.png) |
+
+## Getting it
+
+1. Open the [Actions tab](../../actions), click the newest successful **Build and test** run, and download **ValheimEasyServer-windows** at the bottom. Or use a [release](../../releases) if there is one.
+2. Unzip it. You get `ValheimEasyServer.exe` and `READ-ME-FIRST.txt`.
+
+## Setting up the server computer (once)
+
+1. Make a folder such as `C:\Valheim Server` and put `ValheimEasyServer.exe` in it. Everything goes in that folder: the server, worlds, backups and logs. To move or back up the whole setup, copy the folder.
+2. Double-click `ValheimEasyServer.exe`. If Windows shows **"Windows protected your PC"**, click **More info → Run anyway**. The app isn't code-signed, so Windows doesn't recognise it yet.
+3. The control panel opens in its own window. Click **Install the server**. It downloads the free Valheim dedicated server from Steam with Valve's SteamCMD tool, about 1 GB. You don't need to own Valheim on this PC.
+4. Go to **Settings** and set the server name and password. A password is generated for you, and friends need it to join.
+5. Click **Start server**. When it says **Online**, friends can join.
+6. Work through **Setup on this computer** on the Home page:
+   - **Allow it through Windows Firewall.** Windows asks for permission; click Yes. If Windows showed its own firewall pop-up earlier and it was dismissed, this also fixes that.
+   - **Turn on hibernation**, which the Hibernate button needs.
+   - **Let friends use this control panel.** See below.
+   - **Start this app with Windows**, so everything comes back after a reboot.
+
+The app lives next to the clock as a shield icon. Click the icon to open the panel; right-click it for Start, Stop, Hibernate and Close.
+
+## How friends join the game
+
+The **How friends join** card on the Home page has everything:
+
+- **Crossplay on (recommended, the default).** Friends enter the 6-digit **join code** in Valheim under *Join Game*, then the password. This works for Steam, Xbox, PlayStation 5, Switch 2 and Game Pass players, and needs **no router setup**. The code changes each time the server restarts. Valheim doesn't accept local network addresses for crossplay servers, so people in the same house use the code too.
+- **Crossplay off (Steam only).** Friends join by address. Friends outside your home need **UDP ports 2456–2457 forwarded** on your router to the server computer.
+
+Everyone needs the same Valheim version as the server. The app updates the server before each start, so friends just need to update their game.
+
+## Letting friends use the control panel
+
+On the server computer, open **Settings → Control panel access**, turn on **Let friends use this control panel**, choose a control panel password (different from the game password), and save. The panel then shows the links to send to friends.
+
+- **Same Wi-Fi or network:** the `http://192.168.x.x:8456` link works straight away.
+- **Friends elsewhere:** the easiest safe option is [Tailscale](https://tailscale.com) (free). Install it on the server computer and on your friends' devices, and the panel shows a Tailscale link that works from anywhere. You could forward TCP port 8456 on your router instead, but the panel then travels the internet without encryption, so Tailscale is better.
+
+Friends can do everything except change these access settings and folders, which only the server computer itself can do. Too many wrong passwords from one place cause a 15-minute pause. Setting a new password logs everyone else out.
+
+## Worlds
+
+- **Play a world:** on the Worlds page, click **Play this world**, or **Switch to this world** while the server runs. The server saves, restarts with that world, and is back in about a minute.
+- **New world:** click **New world**, pick a name and optionally a difficulty. The server creates it with a random seed when it starts. For a specific seed, create the world in Valheim on your own PC and upload it.
+- **Bring a world from someone's PC:** on that PC, press <kbd>Windows</kbd>+<kbd>R</kbd>, paste `%userprofile%\AppData\LocalLow\IronGate\Valheim\worlds_local` and press Enter. In Valheim 1.0 each world is a **folder** there; upload the whole folder (drag it onto the upload window or use **Choose a world folder**). Older worlds are two files, `Name.fwl` and `Name.db`. The server converts them to the 1.0 format the first time it loads them. A zip of either works. Worlds saved in Steam Cloud must first be moved to local saves in Valheim (*Manage saves*).
+- **Download a world** as a zip to play it yourself or move it to another server.
+- **Backups:** each world's ⋯ menu has **Backups**, where you can restore or download any backup. Restoring keeps a copy of the current world first.
+
+## Hibernate and waking up
+
+**Hibernate** (top right on every page, or the tray menu) saves the world, stops the server and hibernates the computer, which then uses almost no power. To wake it, press the computer's power button. If the server was running before, it starts again by itself after about 20 seconds.
+
+Nobody can wake the computer remotely, so when a friend clicks Hibernate the panel warns them first. **Settings → Hibernate when nobody is playing** does it automatically after a set time without players, but never while someone is using the computer's keyboard or mouse.
+
+If the button says hibernation is off, click **Turn on hibernation** on the server computer and accept the Windows prompt. Most Boot Camp Macs can hibernate in Windows.
+
+## Stats
+
+The **Stats** page shows the Valheim server's own CPU and memory use next to the whole computer's, plus GPU, network and players over time. **Show as table** lists the same numbers as a table. **Usage by number of players** averages the readings for each player count and estimates the cost of each extra player, including what a full server of 10 would need.
+
+The dedicated server runs without graphics, so GPU usage stays low; that's normal. GPU readings need a reasonably recent graphics driver (WDDM 2.0 or later). If the GPU tile says "not available", the driver is too old to report it.
+
+## Troubleshooting
+
+| Problem | What to do |
+|---|---|
+| Friends see "Incompatible version" | Everyone (and the server) needs the latest Valheim. Make sure **Update the server before it starts** is on and restart the server; friends update their game in Steam. |
+| Friends can't connect by address | Use the crossplay join code, or forward UDP 2456–2457 to the server computer, and click **Allow through Windows Firewall**. |
+| "Valheim rejected the server password" | The password can't be part of the server name, the world name or the world's seed. Pick another in Settings. |
+| The server stopped unexpectedly | The Home page offers **See what happened**, and the **Log** page shows the server's own output. With **Restart the server if it crashes** on, it restarts itself. It gives up after 3 crashes in 15 minutes. |
+| A world doesn't load | Restore a backup from the world's **Backups**. |
+| The panel window doesn't open | Click the shield icon next to the clock, or double-click `ValheimEasyServer.exe` again. Both open the panel already logged in. |
+| Mods (BepInEx) | Install them into the server folder (**Settings → Folders → Open**); the app starts the server the same way. Use **Repair server files** to undo. |
+
+The app's own log is in `logs\app.log` inside its folder, and the server's logs are next to it.
+
+## How it works
+
+`ValheimEasyServer.exe` is a single program with no installer and nothing else to download. It:
+
+- runs `valheim_server.exe` hidden in the background with the settings from the panel. To stop it, it sends Ctrl+C to the server's hidden console, which is how Valheim expects to be stopped, so the world is saved;
+- reads the server's log to see who joins, leaves and dies, the join code, saves and errors;
+- installs and updates the server with Valve's SteamCMD (`app_update 896660`);
+- understands both Valheim world formats: 1.0 world folders (`_main.N.fwl2`, `.db2`, `.chunk` files) and the older `.fwl` + `.db` pairs;
+- serves the control panel from inside the app and opens it in a Microsoft Edge app window. The window logs in with a secret key that only this computer has. Friends log in with the control panel password: it's stored as a salted hash, sessions use HttpOnly SameSite cookies, and every change needs an anti-forgery header;
+- reads CPU, GPU, memory and network usage from Windows' performance counters, the same source Task Manager uses.
+
+Its folder holds `settings.json`, `server\` (the Valheim server), `saves\worlds_local\` (worlds), `saves\adminlist.txt` and the other player lists, `backups\`, `logs\` and `steamcmd\`.
+
+## Building from source
+
+You need [Go](https://go.dev/dl/) 1.24 or newer.
+
+```sh
+go test ./...
+GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o ValheimEasyServer.exe .
+```
+
+For the program icon, run `go run github.com/tc-hib/go-winres@v0.3.3 make --in winres/winres.json --arch amd64` before building. GitHub Actions does all of this on every push: it runs the tests on Linux and Windows, including stopping a server with Ctrl+C on real Windows, and publishes the `.exe`.
+
+To try the app without the real server, use the stand-in server in `cmd/fakevalheim`. It writes Valheim-style logs and world folders and simulates players:
+
+```sh
+go build -o fakevalheim ./cmd/fakevalheim
+FAKE_VALHEIM_SIM=1 go run . --data ./dev-data --dev-fake-server ./fakevalheim
+```
