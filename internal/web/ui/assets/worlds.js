@@ -24,7 +24,10 @@ const VALUE_LABELS = {
 };
 const KEY_LABELS = {
   nobuildcost: 'No build cost', playerevents: 'Raids based on each player’s progress',
-  passivemobs: 'Passive enemies', nomap: 'No map',
+  passivemobs: 'Passive enemies', nomap: 'No map', fire: 'Fire hazard',
+};
+const KEY_HELP = {
+  fire: 'Fire spreads to wood everywhere, not just in the Ashlands, so buildings can burn down.',
 };
 const MODIFIERS = {
   combat: ['veryeasy', 'easy', 'hard', 'veryhard'],
@@ -282,7 +285,7 @@ function optionsForm(current) {
   const keyFields = Object.entries(KEY_LABELS).map(([k, label]) => {
     const cb = h('input', { type: 'checkbox', checked: (o.keys || []).includes(k) });
     keys[k] = cb;
-    return h('label', { class: 'row', style: { gap: '8px', cursor: 'pointer' } }, cb, label);
+    return h('label', { class: 'key-option' }, cb, h('span', null, label, KEY_HELP[k] ? h('small', null, KEY_HELP[k]) : null));
   });
   const more = h('details', { open: Object.keys(o.modifiers || {}).length || (o.keys || []).length ? true : null },
     h('summary', { style: { cursor: 'pointer', color: 'var(--text)' } }, 'More options'),

@@ -87,7 +87,7 @@ func main() {
 		case "-modifier":
 			next()
 			next()
-		case "-public", "-backuplong", "-preset", "-setkey", "-instanceid":
+		case "-public", "-backuplong", "-preset", "-setkey", "-removekey", "-instanceid":
 			next()
 		}
 	}

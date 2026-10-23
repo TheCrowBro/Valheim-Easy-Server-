@@ -76,6 +76,7 @@ func (m *Manager) SetWorldOptions(name string, o config.WorldOptions) error {
 	if next.WorldOptions == nil {
 		next.WorldOptions = map[string]config.WorldOptions{}
 	}
+	o = o.WithOff(next.WorldOptions[name])
 	if o.IsZero() {
 		delete(next.WorldOptions, name)
 	} else {

@@ -475,6 +475,9 @@ tr:last-child td { border-bottom: 0; }
 .choice .title { font-weight: 600; }
 .choice .help { color: var(--text-2); font-size: 13px; margin-top: 2px; }
 .subhead { font-size: 14px; font-weight: 600; margin: 22px 0 6px; }
+.key-option { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+.key-option input { margin: 4px 0 0; accent-color: var(--accent); }
+.key-option small { display: block; color: var(--muted); font-size: 13px; }
 .mac { font-size: 20px; letter-spacing: .04em; color: var(--text); }
 
 /* add a world */

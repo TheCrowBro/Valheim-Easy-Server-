@@ -58,7 +58,7 @@ func TestServerArgs(t *testing.T) {
 	s.WorldOptions = map[string]WorldOptions{"My World": {
 		Preset:    "hard",
 		Modifiers: map[string]string{"raids": "none", "combat": "veryhard"},
-		Keys:      []string{"nomap", "nobuildcost"},
+		Keys:      []string{"fire", "nomap", "nobuildcost"},
 	}}
 	s.ExtraArgs = `-instanceid 2 -something "with space"`
 	args, err := s.ServerArgs(`C:\VES\saves`, `C:\VES\logs\server.log`)
@@ -70,7 +70,7 @@ func TestServerArgs(t *testing.T) {
 		"-password", "fjord-1234", "-public", "1", "-savedir", `C:\VES\saves`, "-logFile", `C:\VES\logs\server.log`,
 		"-saveinterval", "600", "-backups", "3", "-backupshort", "3600", "-backuplong", "21600", "-crossplay",
 		"-preset", "hard", "-modifier", "combat", "veryhard", "-modifier", "raids", "none",
-		"-setkey", "nobuildcost", "-setkey", "nomap", "-instanceid", "2", "-something", "with space",
+		"-setkey", "nobuildcost", "-setkey", "nomap", "-setkey", "fire", "-instanceid", "2", "-something", "with space",
 	}
 	if !reflect.DeepEqual(args, want) {
 		t.Fatalf("args\n got  %q\n want %q", args, want)
@@ -80,6 +80,41 @@ func TestServerArgs(t *testing.T) {
 	args, _ = s.ServerArgs("x", "y")
 	if strings.Contains(strings.Join(args, " "), "-preset") {
 		t.Fatalf("options leaked to another world: %v", args)
+	}
+}
+
+func TestWorldOptionsOff(t *testing.T) {
+	on := WorldOptions{Keys: []string{"fire", "nomap"}}
+	off := WorldOptions{Keys: []string{"nomap"}}.WithOff(on)
+	if !reflect.DeepEqual(off.Off, []string{"fire"}) {
+		t.Fatalf("unticking fire: Off = %v", off.Off)
+	}
+	// Keys stay off through later changes, and come back when ticked again.
+	later := WorldOptions{Modifiers: map[string]string{"combat": "hard"}}.WithOff(off)
+	if !reflect.DeepEqual(later.Off, []string{"nomap", "fire"}) {
+		t.Fatalf("after another change: Off = %v", later.Off)
+	}
+	back := WorldOptions{Keys: []string{"fire"}}.WithOff(later)
+	if !reflect.DeepEqual(back.Off, []string{"nomap"}) {
+		t.Fatalf("ticking fire again: Off = %v", back.Off)
+	}
+	// Only keys turned off are kept, so the options aren't empty.
+	if (WorldOptions{Keys: []string{"fire"}}).WithOff(WorldOptions{}).Off != nil || (WorldOptions{}.WithOff(on)).IsZero() {
+		t.Fatal("WithOff kept too much or too little")
+	}
+
+	s := Defaults()
+	s.World = "Ember"
+	s.WorldOptions = map[string]WorldOptions{"Ember": back}
+	args, err := s.ServerArgs("x", "y")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(args, " "); !strings.Contains(got, "-removekey nomap -setkey fire") {
+		t.Fatalf("args = %s", got)
+	}
+	if (WorldOptions{Off: []string{"nope"}}).Problem() == "" {
+		t.Fatal("an unknown key in Off was accepted")
 	}
 }
 

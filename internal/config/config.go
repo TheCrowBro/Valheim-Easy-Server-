@@ -58,6 +58,9 @@ type WorldOptions struct {
 	Preset    string            `json:"preset,omitempty"`
 	Modifiers map[string]string `json:"modifiers,omitempty"`
 	Keys      []string          `json:"keys,omitempty"`
+	// Off are keys that were turned on here and later off again. The world
+	// keeps a key it was given, so the server is told to remove these.
+	Off []string `json:"off,omitempty"`
 }
 
 const DefaultGamePort = 2456
@@ -83,8 +86,9 @@ var Modifiers = map[string][]string{
 // ModifierOrder is the order modifiers are shown and passed in.
 var ModifierOrder = []string{"combat", "deathpenalty", "resources", "raids", "portals"}
 
-// Keys are the values Valheim accepts for -setkey.
-var Keys = []string{"nobuildcost", "playerevents", "passivemobs", "nomap"}
+// Keys are the values Valheim accepts for -setkey. "fire" is the Fire hazard
+// world modifier: fire spreads to wood everywhere, not only in the Ashlands.
+var Keys = []string{"nobuildcost", "playerevents", "passivemobs", "nomap", "fire"}
 
 // Defaults returns first-run settings, with a freshly generated password.
 func Defaults() Settings {
@@ -129,12 +133,25 @@ func (o WorldOptions) Clone() WorldOptions {
 		}
 	}
 	c.Keys = append([]string(nil), o.Keys...)
+	c.Off = append([]string(nil), o.Off...)
 	return c
 }
 
 // IsZero reports whether no modifier is set, so the world keeps its own.
 func (o WorldOptions) IsZero() bool {
-	return o.Preset == "" && len(o.Modifiers) == 0 && len(o.Keys) == 0
+	return o.Preset == "" && len(o.Modifiers) == 0 && len(o.Keys) == 0 && len(o.Off) == 0
+}
+
+// WithOff returns o, changed from prev, with Off listing every key that was
+// on (or already off) in prev and isn't on in o.
+func (o WorldOptions) WithOff(prev WorldOptions) WorldOptions {
+	o.Off = nil
+	for _, k := range Keys {
+		if !contains(o.Keys, k) && (contains(prev.Keys, k) || contains(prev.Off, k)) {
+			o.Off = append(o.Off, k)
+		}
+	}
+	return o
 }
 
 // fillMissing repairs zero values left by an old or hand-edited file.
@@ -341,9 +358,11 @@ func (o WorldOptions) Problem() string {
 			return fmt.Sprintf("%q is not a valid value for %s.", v, k)
 		}
 	}
-	for _, k := range o.Keys {
-		if !contains(Keys, k) {
-			return fmt.Sprintf("unknown world option %q.", k)
+	for _, list := range [][]string{o.Keys, o.Off} {
+		for _, k := range list {
+			if !contains(Keys, k) {
+				return fmt.Sprintf("unknown world option %q.", k)
+			}
 		}
 	}
 	return ""
@@ -479,6 +498,8 @@ func (s Settings) ServerArgs(saveDir, logFile string) ([]string, error) {
 		for _, k := range Keys {
 			if contains(o.Keys, k) {
 				args = append(args, "-setkey", k)
+			} else if contains(o.Off, k) {
+				args = append(args, "-removekey", k)
 			}
 		}
 	}
