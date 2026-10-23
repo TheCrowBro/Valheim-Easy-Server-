@@ -58,7 +58,8 @@ Everyone who plays that world needs the mod in their own game too:
   3. Start Valheim from the mod manager ("Start modded" in r2modman),
      then join as usual.
 If joining fails because the versions don't match, update the mod in the
-mod manager. The Home page shows these steps too.
+mod manager. On the Home page, "Which mod do I need?" shows these steps
+with the mod's download page.
 Xbox, PlayStation, Switch and Game Pass players can't use mods.
 
 

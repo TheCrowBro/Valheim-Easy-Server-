@@ -56,7 +56,11 @@ func (m *Manager) saveSettingsLocked(s config.Settings) error {
 		return fmt.Errorf("couldn't save settings: %w", err)
 	}
 	m.settings = s
+	oldServer := m.paths.Server
 	m.paths = config.ResolvePaths(m.opt.DataDir, s)
+	if m.paths.Server != oldServer {
+		m.modVersions = (&mods.Installer{Dir: m.paths.Server}).Installed()
+	}
 	if lib := m.library(); lib.Worlds != m.paths.Worlds || lib.Backups != m.paths.Backups || lib.Staging != m.paths.Staging {
 		m.libPtr.Store(newLibrary(m.paths))
 	}

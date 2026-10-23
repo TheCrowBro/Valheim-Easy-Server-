@@ -254,8 +254,8 @@ func TestModsAtStart(t *testing.T) {
 	if o := m.Settings().WorldOptions[world]; len(o.Mods) != 1 || len(o.Keys) != 1 {
 		t.Fatalf("world options = %+v", o)
 	}
-	if st := m.Status(); len(st.Mods) != 1 || st.Mods[0] != "Advanced Portals" {
-		t.Fatalf("status mods = %v", st.Mods)
+	if st := m.Status(); len(st.Mods) != 1 || st.Mods[0].Name != "Advanced Portals" || st.Mods[0].URL == "" || st.Mods[0].Version != "" {
+		t.Fatalf("status mods = %+v", st.Mods)
 	}
 	if err := m.SetWorldMods(world, []string{"nope"}); err == nil {
 		t.Fatal("an unknown mod was accepted")
@@ -281,6 +281,9 @@ func TestModsAtStart(t *testing.T) {
 	}
 	if !installed {
 		t.Fatalf("no activity about the install: %+v", acts)
+	}
+	if st := m.Status(); len(st.Mods) != 1 || st.Mods[0].Version != "1.2.0" {
+		t.Fatalf("status mods after install = %+v", st.Mods)
 	}
 
 	// Turning it off while the server runs needs a restart, which switches

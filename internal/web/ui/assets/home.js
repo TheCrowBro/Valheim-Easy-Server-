@@ -148,25 +148,22 @@ function joinCard(app) {
       h('li', null, 'Friends outside your home need UDP ports ', h('b', null, `${j.port}–${j.port + 1}`), ' forwarded on your router to this computer. Or turn on Crossplay in Settings to get a join code that works without port forwarding.')));
   }
   const mods = st.mods || [];
-  if (mods.length) body.unshift(modsHelp(mods));
+  if (mods.length) body.unshift(modsNotice(mods));
   return h('section', { class: 'card', 'aria-label': 'How to join' },
     h('div', { class: 'card-head' }, h('h2', null, 'How friends join'),
       h('span', { class: 'badge' }, j.crossplay ? 'Crossplay on' : 'Steam only')),
     body);
 }
 
-// modsHelp tells players how to get the mods. Valheim can't send mods to a
-// player, so each player installs them once with a mod manager.
-function modsHelp(mods) {
-  const names = mods.join(' and ');
+// modsNotice says the world needs mods; its button opens the pop-up with
+// which ones and where to download them.
+function modsNotice(mods) {
+  const many = mods.length > 1;
   return h('div', { class: 'callout info mods-help' }, icon('info'), h('div', { class: 'body small' },
-    h('p', null, h('strong', null, `This world uses the ${names} mod${mods.length > 1 ? 's' : ''}. `),
-      'Everyone needs it in their own game first (PC only; console players can’t join while it’s on):'),
-    h('ol', { class: 'steps' },
-      h('li', null, 'Install a free mod manager: ', h('b', null, 'r2modman'), ' or ', h('b', null, 'Gale'), ' (from thunderstore.io).'),
-      h('li', null, 'Choose Valheim, search for ', h('b', null, mods.length > 1 ? 'each mod' : `“${names}”`), ' and install it (', h('b', null, 'Download'), ' in r2modman). BepInEx and Jötunn come with it.'),
-      h('li', null, 'Start Valheim from the mod manager (', h('b', null, 'Start modded'), ' in r2modman), then join as usual.')),
-    h('p', { class: 'muted', style: { marginTop: '6px' } }, 'If joining fails because the versions don’t match, update the mod in the mod manager. The server keeps it up to date.')));
+    h('p', null, h('strong', null, `This world needs the ${mods.map((m) => m.name).join(' and ')} mod${many ? 's' : ''}. `),
+      `Every player installs ${many ? 'them' : 'it'} once on their own PC.`),
+    h('div', { class: 'actions' },
+      h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'mods-help' }, icon('help'), many ? 'Which mods do I need?' : 'Which mod do I need?'))));
 }
 
 function playersCard(app) {

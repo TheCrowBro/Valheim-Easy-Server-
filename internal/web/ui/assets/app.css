@@ -217,7 +217,15 @@ code, .mono { font-family: var(--mono); font-size: .92em; }
 .kv dd.mono { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .steps { margin: 12px 0 0; padding-left: 20px; color: var(--text-2); font-size: 14px; }
 .mods-help { margin-bottom: 14px; }
-.mods-help .steps { margin-top: 6px; font-size: 13px; }
+.mod-box { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: 12px; background: var(--bg-2); border: 1px solid var(--line); }
+.mod-name { font-size: 16px; color: var(--text); }
+.mod-howto { font-size: 15px; color: var(--text); margin-bottom: -6px; }
+.address { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.address a { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.address .muted, .address .btn { flex: none; }
+.address .muted { font-size: 13px; }
+.managers { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.link-button { border: 0; padding: 0; background: none; color: var(--accent-2); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .steps li + li { margin-top: 3px; }
 
 /* lists */

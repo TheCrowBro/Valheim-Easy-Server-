@@ -4,6 +4,7 @@
 import { h, icon, api, toast, openModal, confirmDialog, fmtBytes, ago, dateTime, field, toggle } from './dom.js';
 import { uploadSection, recent } from './upload.js';
 import { saveZip, downloads, today } from './download.js';
+import { openModsHelp } from './modshelp.js';
 
 let data = null;
 let loadedAt = 0;
@@ -111,7 +112,10 @@ function modRows(w, busy) {
     return h('div', { class: 'world-mod', 'data-key': m.id },
       h('div', { class: 'grow' },
         h('div', { class: 'title' }, m.name, h('span', { class: 'muted' }, ' mod')),
-        h('div', { class: 'help' }, on.includes(m.id) ? 'On. Everyone who plays this world needs it too.' : 'Portals that let metal through.')),
+        on.includes(m.id)
+          ? h('div', { class: 'help' }, 'On. Everyone who plays this world needs it too. ',
+            h('button', { class: 'link-button', type: 'button', 'data-action': 'world-mod-help', 'data-mod': m.id }, 'Player instructions'))
+          : h('div', { class: 'help' }, 'Portals that let metal through.')),
       toggle({ 'data-action': 'world-mod', 'data-name': w.name, 'data-mod': m.id, checked, disabled: busy, 'aria-label': `${m.name} mod for ${w.name}` }));
   });
 }
@@ -251,11 +255,13 @@ function registerActions(app) {
       message: `Players can join without the mod again. Portals built with it won’t work while it’s off.${running ? ' Restart the server to apply this.' : ''}`,
       confirm: 'Turn off',
     });
+    let done = false;
     if (ok) {
       const others = ((data.options[d.name] || {}).mods || []).filter((x) => x !== d.mod);
       try {
         await api('/api/worlds/mods', { method: 'POST', body: { name: d.name, mods: on ? [...others, d.mod] : others } });
         toast(`${m.name} is ${on ? 'on' : 'off'} for “${d.name}”.${running ? ' Restart the server to use the change.' : ''}`, 'good');
+        done = true;
       } catch (e) {
         toast(e.message, 'bad');
       }
@@ -264,7 +270,9 @@ function registerActions(app) {
     await load(true);
     app.render();
     app.poll();
+    if (done && on) openModsHelp([m]); // what to tell the players
   };
+  A['world-mod-help'] = (d) => openModsHelp(data.mods.filter((m) => m.id === d.mod));
   A['world-download'] = (d) => {
     const st = app.status;
     let note = 'There’s a note inside on how to play it on another PC.';

@@ -165,6 +165,10 @@ func (m *Manager) prepareMods(ctx context.Context, j *jobCtl, s config.Settings,
 		j.step("Getting the mods ready…", -1)
 	}
 	res, err := in.Prepare(ctx, ids, s.UpdateOnStart, func(msg string) { j.step(msg, -1) })
+	installed := in.Installed()
+	m.mu.Lock()
+	m.modVersions = installed
+	m.mu.Unlock()
 	for _, c := range res.Changed {
 		m.addActivity("update", "", c)
 	}

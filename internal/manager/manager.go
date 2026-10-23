@@ -19,6 +19,7 @@ import (
 
 	"valheim-easy-server/internal/config"
 	"valheim-easy-server/internal/logparse"
+	"valheim-easy-server/internal/mods"
 	"valheim-easy-server/internal/platform"
 	"valheim-easy-server/internal/stats"
 	"valheim-easy-server/internal/steamcmd"
@@ -92,6 +93,7 @@ type Manager struct {
 	resumeOnWake   bool
 	net            netInfo
 	checks         checkCache
+	modVersions    map[string]string // installed mod packages and their versions
 	subs           []func()
 }
 
@@ -177,6 +179,7 @@ func New(opt Options) (*Manager, error) {
 	}
 	m.settings = s
 	m.paths = config.ResolvePaths(opt.DataDir, s)
+	m.modVersions = (&mods.Installer{Dir: m.paths.Server}).Installed()
 	if !existed {
 		if err := config.Save(settingsPath, s); err != nil {
 			return nil, fmt.Errorf("can't write to %s: %w", opt.DataDir, err)

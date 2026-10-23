@@ -85,9 +85,9 @@ Each world's card on the Worlds page has a switch for one mod: [Advanced Portals
   2. Choose Valheim, search for **Advanced Portals** and install it (**Download** in r2modman). BepInEx and Jötunn come with it.
   3. Start Valheim from the mod manager (**Start modded** in r2modman), then join as usual.
 
-  If joining fails because the versions don't match, the player updates the mod in their mod manager: the server keeps it up to date. Valheim has no way to send mods to players, and mod managers' "profile codes" expire and don't work in every mod manager, so the app shows these steps instead.
+  If joining fails because the versions don't match, the player updates the mod in their mod manager: the server keeps it up to date.
 
-  The **How friends join** card on the Home page shows these steps while a modded world is selected or running. The mod checks this when someone joins and turns away players who don't have it. Xbox, PlayStation, Switch and Game Pass players can't use mods, so they can't join a modded world.
+  While a modded world is selected or running, the **How friends join** card on the Home page has a **Which mod do I need?** button. It opens a pop-up with the mod, its version on the server, its download page and these steps. A world card's **Player instructions** link opens the same pop-up, and so does switching a mod on. The mod checks this when someone joins and turns away players who don't have it. Xbox, PlayStation, Switch and Game Pass players can't use mods, so they can't join a modded world.
 - Reports differ on whether crossplay join codes work with a modded server. If friends on PC can't join with the code, turn **Crossplay** off in Settings and join by address (friends outside your home then need UDP ports 2456–2457 forwarded on your router).
 - The mod's own settings (portal costs and which items each portal allows) are in `BepInEx\config\randyknapp.mods.advancedportals.cfg` in the server folder. They're synced to players, and an admin can also change them in the game.
 

@@ -98,7 +98,8 @@ function steps(st) {
             ['In Valheim, pick your character and go to ', b('Join Game'), '. Add the server by the address from ', b('How friends join'), ' on the Home page, then enter the password.'],
           ]),
         ...(mods.length
-          ? [[`This world uses the ${mods.join(' and ')} mod${mods.length > 1 ? 's' : ''}, so install the same in your game first with a free mod manager such as r2modman or Gale. `, b('How friends join'), ' on the Home page shows how.']]
+          ? [[`This world uses the ${mods.map((m) => m.name).join(' and ')} mod${mods.length > 1 ? 's' : ''}, so install it in your game first. `,
+            b(mods.length > 1 ? 'Which mods do I need?' : 'Which mod do I need?'), ' on the ', b('How friends join'), ' card shows which one and where to download it.']]
           : []),
       ],
     },

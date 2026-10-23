@@ -24,7 +24,7 @@ type Status struct {
 	RunningWorld string                `json:"runningWorld"` // world of the running server
 	Players      []PlayerView          `json:"players"`
 	Join         JoinInfo              `json:"join"`
-	Mods         []string              `json:"mods,omitempty"` // names of the mods turned on
+	Mods         []ModInfo             `json:"mods,omitempty"` // the mods players need
 	Version      string                `json:"version,omitempty"`
 	Build        string                `json:"build,omitempty"`
 	BuildDate    *time.Time            `json:"buildDate,omitempty"`
@@ -143,7 +143,7 @@ func (m *Manager) Status() Status {
 	}
 	for _, id := range s.WorldOptions[world].Mods {
 		if md, ok := mods.Find(id); ok {
-			st.Mods = append(st.Mods, md.Name)
+			st.Mods = append(st.Mods, ModInfo{Mod: md, Version: m.modVersions[md.Package]})
 		}
 	}
 	if r := m.run; r != nil {
