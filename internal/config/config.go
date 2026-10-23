@@ -49,7 +49,8 @@ type Settings struct {
 	// WorldOptions holds difficulty settings per world name.
 	WorldOptions map[string]WorldOptions `json:"worldOptions,omitempty"`
 
-	// Mods are the mods (IDs from the mods catalog) the server runs with.
+	// Mods is where the previous version kept one list of mods for every
+	// world. Load moves it to the selected world's options.
 	Mods []string `json:"mods,omitempty"`
 
 	// Advanced: other folders and extra launch options.
@@ -68,6 +69,13 @@ type WorldOptions struct {
 	// with -resetmodifiers, which clears the world's modifiers (not its boss
 	// progress) before the ones here are applied again.
 	Off []string `json:"off,omitempty"`
+	// Mods are the mods (IDs from the mods catalog) the world is played with.
+	Mods []string `json:"mods,omitempty"`
+}
+
+// WorldMods returns the mods the selected world is played with.
+func (s Settings) WorldMods() []string {
+	return s.WorldOptions[s.World].Mods
 }
 
 const DefaultGamePort = 2456
@@ -142,12 +150,14 @@ func (o WorldOptions) Clone() WorldOptions {
 	}
 	c.Keys = append([]string(nil), o.Keys...)
 	c.Off = append([]string(nil), o.Off...)
+	c.Mods = append([]string(nil), o.Mods...)
 	return c
 }
 
-// IsZero reports whether no modifier is set, so the world keeps its own.
+// IsZero reports whether nothing is set, so the world keeps its own
+// modifiers and is played without mods.
 func (o WorldOptions) IsZero() bool {
-	return o.Preset == "" && len(o.Modifiers) == 0 && len(o.Keys) == 0 && len(o.Off) == 0
+	return o.Preset == "" && len(o.Modifiers) == 0 && len(o.Keys) == 0 && len(o.Off) == 0 && len(o.Mods) == 0
 }
 
 // WithOff returns o, changed from prev, with Off listing every key that was
@@ -173,6 +183,19 @@ func (s *Settings) fillMissing() {
 	}
 	if strings.TrimSpace(s.World) == "" {
 		s.World = d.World
+	}
+	if len(s.Mods) > 0 { // from the previous version: the selected world's now
+		o := s.WorldOptions[s.World].Clone()
+		for _, id := range s.Mods {
+			if !contains(o.Mods, id) {
+				o.Mods = append(o.Mods, id)
+			}
+		}
+		if s.WorldOptions == nil {
+			s.WorldOptions = map[string]WorldOptions{}
+		}
+		s.WorldOptions[s.World] = o
+		s.Mods = nil
 	}
 	if s.Port == 0 {
 		s.Port = d.Port
@@ -286,12 +309,6 @@ func (e FieldErrors) Error() string {
 func (s Settings) Validate() FieldErrors {
 	errs := FieldErrors{}
 
-	for _, id := range s.Mods {
-		if _, ok := mods.Find(id); !ok {
-			errs["mods"] = fmt.Sprintf("There's no mod called %q in this app.", id)
-		}
-	}
-
 	name := strings.TrimSpace(s.ServerName)
 	switch {
 	case name == "":
@@ -377,6 +394,11 @@ func (o WorldOptions) Problem() string {
 			if !contains(Keys, k) {
 				return fmt.Sprintf("unknown world option %q.", k)
 			}
+		}
+	}
+	for _, id := range o.Mods {
+		if _, ok := mods.Find(id); !ok {
+			return fmt.Sprintf("there's no mod called %q in this app.", id)
 		}
 	}
 	return ""

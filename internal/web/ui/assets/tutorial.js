@@ -36,11 +36,14 @@ function joinPicture(crossplay) {
 const worldCard = (name, playing, extra) =>
   h('div', { class: `tut-world${playing ? ' playing' : ''}` }, h('span', { class: 'world-name' }, name), extra);
 
-// The world card's ⋯ menu, and the Difficulty window it opens.
-const worldMenu = () => worldCard('Midgard', false, h('div', { class: 'tut-menu' },
-  h('span', null, icon('archive'), 'Backups'),
-  press(h('span', null, icon('gauge'), 'Difficulty')),
-  h('span', null, icon('trash'), 'Delete…')));
+// The world card's ⋯ menu and mod switch, and the Difficulty window.
+const worldMenu = () => worldCard('Midgard', false, [
+  h('div', { class: 'tut-menu' },
+    h('span', null, icon('archive'), 'Backups'),
+    press(h('span', null, icon('gauge'), 'Difficulty')),
+    h('span', null, icon('trash'), 'Delete…')),
+  h('div', { class: 'tut-mod' }, h('span', null, 'Advanced Portals'), h('span', { class: 'switch' }, h('span'))),
+]);
 
 const check = (on, label) => h('span', { class: `tut-check${on ? ' on' : ''}` }, h('span', { class: 'box' }, on ? icon('check') : null), label);
 const difficultyWindow = () => h('div', { class: 'tut-dialog' },
@@ -57,14 +60,14 @@ function steps(st) {
   return [
     {
       icon: 'gauge',
-      title: 'Set the world’s difficulty',
+      title: 'Set the world’s difficulty and mods',
       picture: flow(
         [worldMenu(), 'Worlds, then ⋯ on the world'],
         [difficultyWindow(), 'Pick a preset and switches']),
       text: [
-        ['Best done before a world is first played, but you can change it any time. Open ', b('Worlds'), ', click ', b('⋯'), ' on the world’s card and choose ', b('Difficulty'), '. A new world gets the same choices under ', b('New world'), '.'],
-        ['Pick a preset such as Casual or Hard. Under ', b('More options'), ' you can change combat, resources, raids and portals, and tick switches like ', b('No map'), ' or ', b('Fire hazard'), '.'],
-        ['Changes apply the next time the server starts the world. Mods, such as Advanced Portals, are in ', b('Settings'), '.'],
+        ['Best done before a world is first played, but you can change it any time. Open ', b('Worlds'), ', click ', b('⋯'), ' on the world’s card and choose ', b('Difficulty'), '. Pick a preset such as Casual or Hard, and under ', b('More options'), ' change combat, resources, raids and portals, or tick switches like ', b('No map'), ' or ', b('Fire hazard'), '.'],
+        ['To play a world with the ', b('Advanced Portals'), ' mod, turn on the switch on its card. Everyone who plays that world then needs the mod too.'],
+        ['A new world gets the same choices under ', b('New world'), '. Changes apply the next time the server starts the world.'],
       ],
     },
     {
@@ -95,7 +98,7 @@ function steps(st) {
             ['In Valheim, pick your character and go to ', b('Join Game'), '. Add the server by the address from ', b('How friends join'), ' on the Home page, then enter the password.'],
           ]),
         ...(mods.length
-          ? [[`This server uses the ${mods.join(', ')} mod${mods.length > 1 ? 's' : ''}, so install the same in your game first, with a mod manager such as r2modman or Gale.`]]
+          ? [[`This world uses the ${mods.join(' and ')} mod${mods.length > 1 ? 's' : ''}, so install the same in your game first with a free mod manager such as r2modman or Gale. `, b('How friends join'), ' on the Home page shows how.']]
           : []),
       ],
     },

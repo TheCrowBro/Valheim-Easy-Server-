@@ -16,7 +16,6 @@ import (
 
 	"valheim-easy-server/internal/config"
 	"valheim-easy-server/internal/manager"
-	"valheim-easy-server/internal/mods"
 	"valheim-easy-server/internal/platform"
 	"valheim-easy-server/internal/stats"
 	"valheim-easy-server/internal/worlds"
@@ -45,6 +44,7 @@ func (s *Server) routes() http.Handler {
 	a("POST /api/worlds/select", s.selectWorld)
 	a("POST /api/worlds/create", s.createWorld)
 	a("POST /api/worlds/options", s.worldOptions)
+	a("POST /api/worlds/mods", s.worldMods)
 	a("POST /api/worlds/rename", s.renameWorld)
 	a("POST /api/worlds/delete", s.worldAction(func(name, _ string) error { return s.m.DeleteWorld(name) }))
 	a("POST /api/worlds/backup", s.worldAction(func(name, _ string) error { return s.m.BackupWorld(name) }))
@@ -207,6 +207,26 @@ func (s *Server) worldOptions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.m.SetWorldOptions(body.Name, body.Options); err != nil {
+		fail(w, err)
+		return
+	}
+	ok(w)
+}
+
+func (s *Server) worldMods(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name string   `json:"name"`
+		Mods []string `json:"mods"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		fail(w, err)
+		return
+	}
+	if msg := config.WorldNameProblem(body.Name); msg != "" {
+		writeErr(w, http.StatusBadRequest, msg)
+		return
+	}
+	if err := s.m.SetWorldMods(body.Name, body.Mods); err != nil {
 		fail(w, err)
 		return
 	}
@@ -423,15 +443,8 @@ type settingsView struct {
 	ModifierOrder []string            `json:"modifierOrder"`
 	Keys          []string            `json:"keys"`
 	Paths         config.Paths        `json:"paths"`
-	Mods          []modView           `json:"mods"`
 	LaunchOnLogin bool                `json:"launchOnLogin"`
 	Version       string              `json:"version"` // this app's
-}
-
-// modView is a mod the app offers, with the version installed, if any.
-type modView struct {
-	mods.Mod
-	Version string `json:"version,omitempty"`
 }
 
 func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
@@ -442,12 +455,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		ModifierOrder: config.ModifierOrder,
 		Keys:          config.Keys,
 		Paths:         s.m.Paths(),
-		Mods:          []modView{},
 		Version:       s.version,
-	}
-	installed := (&mods.Installer{Dir: v.Paths.Server}).Installed()
-	for _, md := range mods.Catalog {
-		v.Mods = append(v.Mods, modView{Mod: md, Version: installed[md.Package]})
 	}
 	v.LaunchOnLogin, _ = platform.LaunchOnLogin()
 	writeJSON(w, http.StatusOK, v)

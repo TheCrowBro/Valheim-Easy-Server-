@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"valheim-easy-server/internal/config"
+	"valheim-easy-server/internal/mods"
 	"valheim-easy-server/internal/worlds"
 )
 
@@ -17,7 +18,8 @@ func (m *Manager) UpdateSettings(in config.Settings) error {
 	cur := m.settings
 	next := in.Clone()
 	next.World = cur.World
-	next.WorldOptions = cur.Clone().WorldOptions
+	next.WorldOptions = cur.Clone().WorldOptions // set on the Worlds page
+	next.Mods = nil                              // each world has its own now
 	next.Normalize()
 	if errs := next.Validate(); errs != nil {
 		return errs
@@ -65,18 +67,35 @@ func (m *Manager) saveSettingsLocked(s config.Settings) error {
 	return nil
 }
 
-// SetWorldOptions changes a world's difficulty settings.
+// SetWorldOptions changes a world's difficulty settings, keeping its mods.
 func (m *Manager) SetWorldOptions(name string, o config.WorldOptions) error {
-	if msg := o.Problem(); msg != "" {
-		return errors.New(msg)
-	}
+	return m.changeWorldOptions(name, func(prev config.WorldOptions) config.WorldOptions {
+		o = o.WithOff(prev)
+		o.Mods = prev.Mods
+		return o
+	})
+}
+
+// SetWorldMods changes which mods a world is played with, keeping its
+// difficulty settings.
+func (m *Manager) SetWorldMods(name string, ids []string) error {
+	return m.changeWorldOptions(name, func(prev config.WorldOptions) config.WorldOptions {
+		prev.Mods = ids
+		return prev
+	})
+}
+
+func (m *Manager) changeWorldOptions(name string, change func(config.WorldOptions) config.WorldOptions) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	next := m.settings.Clone()
 	if next.WorldOptions == nil {
 		next.WorldOptions = map[string]config.WorldOptions{}
 	}
-	o = o.WithOff(next.WorldOptions[name])
+	o := change(next.WorldOptions[name].Clone())
+	if msg := o.Problem(); msg != "" {
+		return errors.New(msg)
+	}
 	if o.IsZero() {
 		delete(next.WorldOptions, name)
 	} else {
@@ -135,7 +154,14 @@ type WorldsView struct {
 	Selected string                         `json:"selected"`
 	Running  string                         `json:"running"`
 	Options  map[string]config.WorldOptions `json:"options"`
+	Mods     []ModInfo                      `json:"mods"` // the mods a world can be played with
 	Folder   string                         `json:"folder"`
+}
+
+// ModInfo is a mod the app offers, with the version installed, if any.
+type ModInfo struct {
+	mods.Mod
+	Version string `json:"version,omitempty"`
 }
 
 // Worlds lists the worlds and their backups.
@@ -144,9 +170,13 @@ func (m *Manager) Worlds() (WorldsView, error) {
 	if err != nil {
 		return WorldsView{}, err
 	}
+	installed := (&mods.Installer{Dir: m.Paths().Server}).Installed()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	v := WorldsView{Worlds: ws, Orphans: orphans, Selected: m.settings.World, Options: m.settings.Clone().WorldOptions, Folder: m.paths.Worlds}
+	for _, md := range mods.Catalog {
+		v.Mods = append(v.Mods, ModInfo{Mod: md, Version: installed[md.Package]})
+	}
 	if v.Worlds == nil {
 		v.Worlds = []worlds.World{}
 	}
@@ -216,7 +246,8 @@ func (m *Manager) CreateWorld(name string, o config.WorldOptions, restart bool) 
 		return fmt.Errorf("there's already a world called %q", name)
 	}
 	if !o.IsZero() {
-		if err := m.SetWorldOptions(name, o); err != nil {
+		o.Off = nil // a new world has nothing to turn off
+		if err := m.changeWorldOptions(name, func(config.WorldOptions) config.WorldOptions { return o }); err != nil {
 			return err
 		}
 	}

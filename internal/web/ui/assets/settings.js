@@ -1,5 +1,5 @@
 // Settings: one form for the server, automation, resting and waking up,
-// mods, backups and folders, plus maintenance.
+// backups and folders, plus maintenance.
 
 import { h, icon, api, toast, confirmDialog, toggle } from './dom.js';
 
@@ -118,24 +118,6 @@ function restSection(app) {
       h('p', null, 'No wired network connection was found. Connect the computer to the router with an Ethernet cable: Wake-on-LAN doesn’t work over Wi-Fi.'))));
 }
 
-function modsSection() {
-  const on = new Set(draft.mods || []);
-  return h('section', { class: 'card' },
-    h('div', { class: 'card-head' }, h('h2', null, 'Mods')),
-    h('p', { class: 'text-2', style: { marginBottom: '6px' } },
-      'The app downloads a mod from Thunderstore (where Valheim mod managers get them) the next time the server starts, and keeps it up to date when “Update the server before it starts” is on.'),
-    (view.mods || []).map((m) => h('div', { class: 'toggle-row', 'data-key': m.id },
-      h('div', { class: 'grow' },
-        h('div', { class: 'title' }, m.name, ' ', h('span', { class: 'muted', style: { fontWeight: 400 } }, `by ${m.author}`)),
-        h('div', { class: 'help' }, m.summary, m.version ? ` Installed: version ${m.version}.` : ''),
-        on.has(m.id) ? h('div', { class: 'callout warn', style: { marginTop: '10px' } }, icon('alert'), h('div', { class: 'body small' },
-          h('p', null, h('strong', null, 'Everyone who plays needs this mod too. '),
-            'Install it in Valheim with a mod manager such as r2modman or Gale. Players without it are turned away when they join.'),
-          h('p', null, 'Xbox, PlayStation, Switch and Game Pass players can’t use mods, so they can’t join while it’s on.'),
-          draft.crossplay ? h('p', null, 'If friends on PC can’t join with the join code, turn Crossplay off above and join by address instead.') : null)) : null),
-      toggle({ 'data-mod': m.id, checked: on.has(m.id), 'aria-label': m.name }))));
-}
-
 function backupSection() {
   const num = (name, attrs) => input(name, { type: 'number', ...attrs });
   return h('section', { class: 'card' },
@@ -198,7 +180,6 @@ export default {
       serverSection(),
       automationSection(),
       restSection(app),
-      modsSection(),
       backupSection(),
       foldersSection(),
       maintenanceSection(app),
@@ -275,15 +256,7 @@ function onLeave(e) {
 function onInput(e) {
   const el = e.target;
   if (!draft || !el.dataset) return;
-  if (el.dataset.mod && e.type === 'change') {
-    const on = new Set(draft.mods || []);
-    if (el.checked) on.add(el.dataset.mod);
-    else on.delete(el.dataset.mod);
-    const ids = view.mods.map((m) => m.id).filter((id) => on.has(id));
-    if (ids.length) draft.mods = ids;
-    else delete draft.mods; // as saved, so the page doesn't think something changed
-    appRef.render();
-  } else if (el.dataset.field) {
+  if (el.dataset.field) {
     const k = el.dataset.field;
     if (el.type === 'checkbox') draft[k] = el.checked;
     else if (el.type === 'number') draft[k] = el.value === '' ? 0 : Number(el.value);

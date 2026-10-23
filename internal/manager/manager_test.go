@@ -243,13 +243,22 @@ func TestModsAtStart(t *testing.T) {
 	m.opt.ModsURL = store.URL
 	install(t, m)
 
-	s := m.Settings()
-	s.Mods = []string{"advancedportals"}
-	if err := m.UpdateSettings(s); err != nil {
+	world := m.Settings().World
+	if err := m.SetWorldMods(world, []string{"advancedportals"}); err != nil {
 		t.Fatal(err)
+	}
+	// Saving the world's difficulty keeps its mods.
+	if err := m.SetWorldOptions(world, config.WorldOptions{Keys: []string{"fire"}}); err != nil {
+		t.Fatal(err)
+	}
+	if o := m.Settings().WorldOptions[world]; len(o.Mods) != 1 || len(o.Keys) != 1 {
+		t.Fatalf("world options = %+v", o)
 	}
 	if st := m.Status(); len(st.Mods) != 1 || st.Mods[0] != "Advanced Portals" {
 		t.Fatalf("status mods = %v", st.Mods)
+	}
+	if err := m.SetWorldMods(world, []string{"nope"}); err == nil {
+		t.Fatal("an unknown mod was accepted")
 	}
 	if err := m.StartServer(); err != nil {
 		t.Fatal(err)
@@ -276,9 +285,7 @@ func TestModsAtStart(t *testing.T) {
 
 	// Turning it off while the server runs needs a restart, which switches
 	// the mod loader off.
-	s = m.Settings()
-	s.Mods = nil
-	if err := m.UpdateSettings(s); err != nil {
+	if err := m.SetWorldMods(world, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !m.Status().NeedsRestart {

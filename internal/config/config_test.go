@@ -38,7 +38,7 @@ func TestValidation(t *testing.T) {
 		{"worldOptions", func(s *Settings) {
 			s.WorldOptions = map[string]WorldOptions{s.World: {Modifiers: map[string]string{"combat": "impossible"}}}
 		}},
-		{"mods", func(s *Settings) { s.Mods = []string{"advancedportals", "epicloot"} }},
+		{"worldOptions", func(s *Settings) { s.WorldOptions = map[string]WorldOptions{s.World: {Mods: []string{"epicloot"}}} }},
 	}
 	for _, c := range cases {
 		s := Defaults()
@@ -121,6 +121,26 @@ func TestWorldOptionsOff(t *testing.T) {
 	}
 	if (WorldOptions{Off: []string{"nope"}}).Problem() == "" {
 		t.Fatal("an unknown key in Off was accepted")
+	}
+}
+
+func TestLoadMovesModsToTheSelectedWorld(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	old := `{"serverName":"Viking Night","password":"fjord-1234","world":"Midgard","port":2456,
+		"worldOptions":{"Midgard":{"keys":["fire"]}},"mods":["advancedportals"]}`
+	if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, _, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := s.WorldOptions["Midgard"]
+	if s.Mods != nil || !reflect.DeepEqual(o.Mods, []string{"advancedportals"}) || !reflect.DeepEqual(o.Keys, []string{"fire"}) {
+		t.Fatalf("after load: mods %v, Midgard %+v", s.Mods, o)
+	}
+	if !reflect.DeepEqual(s.WorldMods(), []string{"advancedportals"}) {
+		t.Fatalf("WorldMods = %v", s.WorldMods())
 	}
 }
 

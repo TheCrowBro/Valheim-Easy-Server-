@@ -1,7 +1,7 @@
 // Worlds: add worlds (the Add a world section), pick which world the server
 // plays, create new ones, download them, and manage backups.
 
-import { h, icon, api, toast, openModal, confirmDialog, fmtBytes, ago, dateTime, field } from './dom.js';
+import { h, icon, api, toast, openModal, confirmDialog, fmtBytes, ago, dateTime, field, toggle } from './dom.js';
 import { uploadSection, recent } from './upload.js';
 import { saveZip, downloads, today } from './download.js';
 
@@ -10,6 +10,7 @@ let loadedAt = 0;
 let loading = false;
 let openMenu = null;
 let appRef = null;
+let pendingMod = null; // { name, mod, on } while its question is open
 
 const PRESET_LABELS = {
   normal: 'Normal', casual: 'Casual', easy: 'Easy', hard: 'Hard', hardcore: 'Hardcore',
@@ -92,6 +93,7 @@ function worldCard(app, w) {
       h('dt', null, 'Size'), h('dd', null, fmtBytes(w.size)),
       h('dt', null, 'Last saved'), h('dd', null, w.modified ? ago(w.modified) : '–'),
       opts ? h('dt', null, 'Difficulty') : null, opts ? h('dd', null, opts) : null),
+    modRows(w, busy),
     h('div', { class: 'actions' },
       playBtn,
       downloadButton(w),
@@ -99,6 +101,19 @@ function worldCard(app, w) {
       h('div', { class: 'menu' },
         h('button', { class: 'btn btn-sm btn-icon', 'data-action': 'world-menu', 'data-name': w.name, 'aria-label': `More for ${w.name}`, 'aria-expanded': openMenu === w.name ? 'true' : 'false' }, icon('more')),
         menu)));
+}
+
+// modRows are the switches for the mods a world can be played with.
+function modRows(w, busy) {
+  const on = (data.options[w.name] || {}).mods || [];
+  return (data.mods || []).map((m) => {
+    const checked = pendingMod && pendingMod.name === w.name && pendingMod.mod === m.id ? pendingMod.on : on.includes(m.id);
+    return h('div', { class: 'world-mod', 'data-key': m.id },
+      h('div', { class: 'grow' },
+        h('div', { class: 'title' }, m.name, h('span', { class: 'muted' }, ' mod')),
+        h('div', { class: 'help' }, on.includes(m.id) ? 'On. Everyone who plays this world needs it too.' : 'Portals that let metal through.')),
+      toggle({ 'data-action': 'world-mod', 'data-name': w.name, 'data-mod': m.id, checked, disabled: busy, 'aria-label': `${m.name} mod for ${w.name}` }));
+  });
 }
 
 function downloadButton(w) {
@@ -218,6 +233,38 @@ function registerActions(app) {
     load(true);
     app.poll();
   };
+  A['world-mod'] = async (d, el) => {
+    const m = data.mods.find((x) => x.id === d.mod);
+    const on = el.checked;
+    const running = data.running === d.name;
+    pendingMod = { name: d.name, mod: d.mod, on };
+    const ok = await confirmDialog(on ? {
+      title: `Play “${d.name}” with ${m.name}?`,
+      message: h('div', { class: 'stack', style: { gap: '10px' } },
+        h('p', null, m.summary),
+        h('p', null, h('strong', null, 'Everyone who plays this world needs the mod too, '),
+          'installed with a mod manager such as r2modman or Gale. Xbox, PlayStation, Switch and Game Pass players can’t join while it’s on.'),
+        h('p', null, `The server downloads the mod from Thunderstore the next time it starts this world${running ? ', so restart it to use the mod' : ''}.`)),
+      confirm: 'Turn on',
+    } : {
+      title: `Turn ${m.name} off for “${d.name}”?`,
+      message: `Players can join without the mod again. Portals built with it won’t work while it’s off.${running ? ' Restart the server to apply this.' : ''}`,
+      confirm: 'Turn off',
+    });
+    if (ok) {
+      const others = ((data.options[d.name] || {}).mods || []).filter((x) => x !== d.mod);
+      try {
+        await api('/api/worlds/mods', { method: 'POST', body: { name: d.name, mods: on ? [...others, d.mod] : others } });
+        toast(`${m.name} is ${on ? 'on' : 'off'} for “${d.name}”.${running ? ' Restart the server to use the change.' : ''}`, 'good');
+      } catch (e) {
+        toast(e.message, 'bad');
+      }
+    }
+    pendingMod = null;
+    await load(true);
+    app.render();
+    app.poll();
+  };
   A['world-download'] = (d) => {
     const st = app.status;
     let note = 'There’s a note inside on how to play it on another PC.';
@@ -335,11 +382,15 @@ function newWorldModal(app) {
   const form = optionsForm(null);
   const running = serverRunning(app);
   const now = h('input', { type: 'checkbox', checked: !running });
+  const modBoxes = (data.mods || []).map((m) => ({ id: m.id, cb: h('input', { type: 'checkbox' }), name: m.name }));
   openModal({
     title: 'New world',
     body: [
       field('World name', name, 'Up to 40 characters. Avoid \\ / : * ? " < > |'),
       ...form.el,
+      modBoxes.length ? h('div', { class: 'field' }, h('div', { class: 'label' }, 'Mods'),
+        modBoxes.map((x) => h('label', { class: 'key-option' }, x.cb,
+          h('span', null, `Play with ${x.name}`, h('small', null, 'Everyone who plays this world then needs the mod too.'))))) : null,
       h('label', { class: 'row', style: { gap: '8px', cursor: 'pointer', color: 'var(--text)' } }, now,
         running ? 'Restart the server and switch to it now' : 'Start the server with it now'),
       h('div', { class: 'callout info' }, icon('info'), h('div', { class: 'body small' },
@@ -347,7 +398,8 @@ function newWorldModal(app) {
     ],
     actions: [{ label: 'Cancel' }, {
       label: 'Create world', kind: 'primary', icon: 'plus', onClick: async () => {
-        await api('/api/worlds/create', { method: 'POST', body: { name: name.value.trim(), options: form.value(), restart: running && now.checked } });
+        const options = { ...form.value(), mods: modBoxes.filter((x) => x.cb.checked).map((x) => x.id) };
+        await api('/api/worlds/create', { method: 'POST', body: { name: name.value.trim(), options, restart: running && now.checked } });
         if (!running && now.checked) await api('/api/server/start', { method: 'POST', body: {} });
         toast(`“${name.value.trim()}” is now the selected world.`, 'good');
         load(true);

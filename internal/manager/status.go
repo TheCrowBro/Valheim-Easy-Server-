@@ -137,7 +137,11 @@ func (m *Manager) Status() Status {
 		}
 	}
 	st.Join = JoinInfo{Crossplay: s.Crossplay, Port: s.Port, Password: s.Password, Public: s.Public, LANAddrs: lanAddrs(s.Port)}
-	for _, id := range s.Mods {
+	world := s.World // the mods players need: the running world's, or the next one's
+	if m.run != nil {
+		world = m.run.info.World
+	}
+	for _, id := range s.WorldOptions[world].Mods {
 		if md, ok := mods.Find(id); ok {
 			st.Mods = append(st.Mods, md.Name)
 		}

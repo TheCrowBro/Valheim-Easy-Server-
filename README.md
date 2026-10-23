@@ -11,7 +11,7 @@ Run a Valheim dedicated server on a spare Windows PC, such as an old Mac Pro run
 - **How to join, always visible.** The panel shows the crossplay join code, the address and the password, with copy buttons. Crossplay codes work without setting up your router.
 - **Several worlds.** Switch worlds with one click, create new ones (with Valheim's difficulty presets and world modifiers, Fire hazard included), rename old ones, and delete worlds. Deleted worlds keep a backup.
 - **Add a world by dropping it in.** Drop a world onto the app (a Valheim 1.0 world folder, an older `.fwl` + `.db` pair, or a zip of either) and it goes into the server's worlds folder by itself. The app only asks when the server already has a world with that name: replace it (keeping a backup) or keep both. Replacing the world that's running restarts the server with the new copy. Any world can be downloaded as a zip, and "Import from this PC" copies worlds from the Valheim game installed on the server computer.
-- **A mod you can switch on.** Settings → Mods turns on RandyKnapp's Advanced Portals (portals that let metal through). The app downloads it with BepInEx and Jötunn from Thunderstore and keeps it up to date; switched off, the server runs plain Valheim again.
+- **A mod per world.** Each world's card has a switch for RandyKnapp's Advanced Portals (portals that let metal through). The app downloads it with BepInEx and Jötunn from Thunderstore when that world starts and keeps it up to date; worlds without it run plain Valheim. Players get step-by-step instructions on the Home page.
 - **Backups.** Valheim's own automatic backups and the app's backups are listed together, and each one can be restored or downloaded. The app makes a backup before anything is replaced, restored over or deleted.
 - **Hibernate or sleep, and wake with Wake-on-LAN.** Saves the world, stops the server and hibernates the computer (or puts it to sleep). Wake it from an IP KVM's Wake-on-LAN, or with the power button, and the server starts again. It can also rest on its own when nobody has played for a while.
 - **Stats.** CPU, memory, GPU and network use for the Valheim server and the whole computer, over 15 minutes to 24 hours. A breakdown by number of players estimates what each extra player costs.
@@ -76,11 +76,18 @@ The app is made to be used on the server computer itself, so anyone who can see 
 
 ## Mods
 
-**Settings → Mods** has one mod you can switch on: [Advanced Portals](https://thunderstore.io/c/valheim/p/RandyKnapp/AdvancedPortals/) by RandyKnapp. It adds three portals that let metal through: the Ancient Portal takes copper and tin, the Obsidian Portal iron, and the Black Marble Portal anything.
+Each world's card on the Worlds page has a switch for one mod: [Advanced Portals](https://thunderstore.io/c/valheim/p/RandyKnapp/AdvancedPortals/) by RandyKnapp. It adds three portals that let metal through: the Ancient Portal takes copper and tin, the Obsidian Portal iron, and the Black Marble Portal anything. A new world can get it in the **New world** window too.
 
-- The next time the server starts, the app downloads the mod from Thunderstore, with the two things it needs (the BepInEx mod loader and the Jötunn library), into the server folder, laid out the way mod managers do it. With **Update the server before it starts** on, it keeps them up to date too. BepInEx's console window is turned off, because the server runs without a window.
-- Switching the mod off turns the mod loader off at the next start, so the server runs plain Valheim again. The files stay, so switching it back on is quick.
-- **Everyone who plays needs the mod too**, installed with a mod manager such as r2modman or Gale. The mod checks this when someone joins and turns away players who don't have it. Xbox, PlayStation, Switch and Game Pass players can't use mods, so they can't join while it's on.
+- Mods belong to a world. When the server starts a world with the switch on, the app downloads the mod from Thunderstore, with the two things it needs (the BepInEx mod loader and the Jötunn library), into the server folder, laid out the way mod managers do it. With **Update the server before it starts** on, it keeps them up to date too. BepInEx's console window is turned off, because the server runs without a window.
+- A world with the switch off runs plain Valheim: the mod loader is switched off when it starts. The files stay, so switching back is quick. Portals built with the mod don't work while it's off.
+- **Everyone who plays a modded world needs the mod too.** Valheim can't send mods to players when they join, so each player installs it once:
+  1. Install a free mod manager: [r2modman](https://thunderstore.io/c/valheim/p/ebkr/r2modman/) or [Gale](https://thunderstore.io/c/valheim/p/Kesomannen/GaleModManager/).
+  2. Choose Valheim, search for **Advanced Portals** and install it (**Download** in r2modman). BepInEx and Jötunn come with it.
+  3. Start Valheim from the mod manager (**Start modded** in r2modman), then join as usual.
+
+  If joining fails because the versions don't match, the player updates the mod in their mod manager: the server keeps it up to date. Valheim has no way to send mods to players, and mod managers' "profile codes" expire and don't work in every mod manager, so the app shows these steps instead.
+
+  The **How friends join** card on the Home page shows these steps while a modded world is selected or running. The mod checks this when someone joins and turns away players who don't have it. Xbox, PlayStation, Switch and Game Pass players can't use mods, so they can't join a modded world.
 - Reports differ on whether crossplay join codes work with a modded server. If friends on PC can't join with the code, turn **Crossplay** off in Settings and join by address (friends outside your home then need UDP ports 2456–2457 forwarded on your router).
 - The mod's own settings (portal costs and which items each portal allows) are in `BepInEx\config\randyknapp.mods.advancedportals.cfg` in the server folder. They're synced to players, and an admin can also change them in the game.
 

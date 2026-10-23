@@ -148,15 +148,25 @@ function joinCard(app) {
       h('li', null, 'Friends outside your home need UDP ports ', h('b', null, `${j.port}–${j.port + 1}`), ' forwarded on your router to this computer. Or turn on Crossplay in Settings to get a join code that works without port forwarding.')));
   }
   const mods = st.mods || [];
-  if (mods.length) {
-    body.unshift(h('div', { class: 'callout info', style: { marginBottom: '14px' } }, icon('info'), h('div', { class: 'body small' },
-      h('p', null, h('strong', null, `This server uses the ${mods.join(', ')} mod${mods.length > 1 ? 's' : ''}. `),
-        'Install the same in Valheim first, with a mod manager such as r2modman or Gale. Console players can’t join a modded server.'))));
-  }
+  if (mods.length) body.unshift(modsHelp(mods));
   return h('section', { class: 'card', 'aria-label': 'How to join' },
     h('div', { class: 'card-head' }, h('h2', null, 'How friends join'),
       h('span', { class: 'badge' }, j.crossplay ? 'Crossplay on' : 'Steam only')),
     body);
+}
+
+// modsHelp tells players how to get the mods. Valheim can't send mods to a
+// player, so each player installs them once with a mod manager.
+function modsHelp(mods) {
+  const names = mods.join(' and ');
+  return h('div', { class: 'callout info mods-help' }, icon('info'), h('div', { class: 'body small' },
+    h('p', null, h('strong', null, `This world uses the ${names} mod${mods.length > 1 ? 's' : ''}. `),
+      'Everyone needs it in their own game first (PC only; console players can’t join while it’s on):'),
+    h('ol', { class: 'steps' },
+      h('li', null, 'Install a free mod manager: ', h('b', null, 'r2modman'), ' or ', h('b', null, 'Gale'), ' (from thunderstore.io).'),
+      h('li', null, 'Choose Valheim, search for ', h('b', null, mods.length > 1 ? 'each mod' : `“${names}”`), ' and install it (', h('b', null, 'Download'), ' in r2modman). BepInEx and Jötunn come with it.'),
+      h('li', null, 'Start Valheim from the mod manager (', h('b', null, 'Start modded'), ' in r2modman), then join as usual.')),
+    h('p', { class: 'muted', style: { marginTop: '6px' } }, 'If joining fails because the versions don’t match, update the mod in the mod manager. The server keeps it up to date.')));
 }
 
 function playersCard(app) {
