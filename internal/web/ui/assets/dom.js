@@ -106,6 +106,10 @@ const ICONS = {
   wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z"/>',
   sparkle: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/>',
   table: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>',
+  help: '<circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  arrowRight: '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+  arrowLeft: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+  pointer: '<path d="M4 3l7 17 2.5-7.5L21 10z"/>',
 };
 
 const tpl = document.createElement('template');
@@ -251,7 +255,10 @@ export function openModal({ title, body, actions = [], wide = false, onClose }) 
     h('div', { class: 'modal-body' }, body),
     actions.length ? foot : null);
   const backdrop = h('div', { class: 'modal-backdrop' }, modal);
-  backdrop.addEventListener('mousedown', (e) => { if (e.target === backdrop) close(); });
+  // A click outside closes the dialog, but not the second click of a
+  // double-click on the button that opened it.
+  const opened = Date.now();
+  backdrop.addEventListener('mousedown', (e) => { if (e.target === backdrop && Date.now() - opened > 600) close(); });
   document.addEventListener('keydown', onKey);
   root.append(backdrop);
   const first = modal.querySelector('input, select, textarea') || foot.querySelector('.btn-primary, .btn-danger') || closeBtn;

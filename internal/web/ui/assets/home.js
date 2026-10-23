@@ -70,6 +70,9 @@ function hero(app) {
   } else {
     actions = [h('button', { class: 'btn btn-danger', 'data-action': 'force-stop' }, icon('power'), 'Force stop')];
   }
+  // Always here, next to the server buttons, so it's as easy to find as they are.
+  actions.push(h('button', { class: 'btn btn-lg btn-guide', 'data-action': 'tutorial', title: 'A short guide to starting and stopping the server' },
+    icon('help'), 'Tutorial'));
 
   const extra = [];
   if (job) extra.push(jobLine(job));

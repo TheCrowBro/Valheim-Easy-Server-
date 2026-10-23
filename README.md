@@ -7,6 +7,7 @@ Run a Valheim dedicated server on a spare Windows PC, such as an old Mac Pro run
 ## What it does
 
 - **Start and stop with one button.** Stopping always saves the world first, the same way the official guide does it (Ctrl+C), just without the console window.
+- **A tutorial for friends.** The **Tutorial** button, right next to Start server, explains the basics in five short steps with pictures of the real buttons: starting the server, joining from Valheim, stopping, switching worlds and hibernating.
 - **How to join, always visible.** The panel shows the crossplay join code, the address and the password, with copy buttons. Crossplay codes work without setting up your router.
 - **Several worlds.** Switch worlds with one click, create new ones (with Valheim's difficulty presets and modifiers), rename old ones, and delete worlds. Deleted worlds keep a backup.
 - **Add a world by dropping it in.** Drop a world onto the app (a Valheim 1.0 world folder, an older `.fwl` + `.db` pair, or a zip of either) and it goes into the server's worlds folder by itself. The app only asks when the server already has a world with that name: replace it (keeping a backup) or keep both. Replacing the world that's running restarts the server with the new copy. Any world can be downloaded as a zip, and "Import from this PC" copies worlds from the Valheim game installed on the server computer.
@@ -17,9 +18,9 @@ Run a Valheim dedicated server on a spare Windows PC, such as an old Mac Pro run
 - **Looks after itself.** It updates the server through Steam before each start, so friends never get a "version mismatch". It restarts the server after a crash and keeps Windows from falling asleep while people play. Closing the window doesn't stop the server, and the app picks it back up when it starts again.
 - **Only on this computer.** The control panel only works on the server computer itself, so there's no password to set up and nothing for strangers to reach. Friends use it through an IP KVM or remote desktop, the same way they'd use the computer.
 
-| Worlds | Adding a world | Stats | Players |
-|---|---|---|---|
-| ![Worlds](docs/screenshots/worlds.png) | ![Adding a world](docs/screenshots/add-world.png) | ![Stats](docs/screenshots/stats.png) | ![Players](docs/screenshots/players.png) |
+| Tutorial | Worlds | Adding a world | Stats | Players |
+|---|---|---|---|---|
+| ![Tutorial](docs/screenshots/tutorial.png) | ![Worlds](docs/screenshots/worlds.png) | ![Adding a world](docs/screenshots/add-world.png) | ![Stats](docs/screenshots/stats.png) | ![Players](docs/screenshots/players.png) |
 
 ## Getting it
 
@@ -56,6 +57,7 @@ Everyone needs the same Valheim version as the server. The app updates the serve
 The app is made to be used on the server computer itself, so anyone who can see its screen and use its keyboard and mouse can run it, including friends connected through an IP KVM or remote desktop.
 
 - The control panel is the **Valheim Easy Server** window. If it was closed, click the shield icon next to the clock or double-click `ValheimEasyServer.exe` again.
+- New to the panel? Click **Tutorial** on the Home page, next to **Start server**.
 - Files you drop on **Add a world** must be on the server computer. Bring them over on a USB stick, through the KVM's virtual drive if it has one, or by downloading them there from a chat or cloud drive.
 - After **Hibernate** (or **Sleep**), wake the computer with the KVM's Wake-on-LAN. The address it needs is in **Settings → Resting and waking up**.
 - **Download** saves files on the server computer, because that's the computer the KVM shows. It asks where to save: choose a cloud-drive folder (such as OneDrive) or a USB stick, so you can get the file on your own PC.

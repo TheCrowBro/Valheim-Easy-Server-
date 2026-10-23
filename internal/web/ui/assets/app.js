@@ -9,6 +9,7 @@ import stats from './stats.js';
 import settings from './settings.js';
 import logPage from './log.js';
 import { initUploads, uploadStatus, ownsJob } from './upload.js';
+import { openTutorial } from './tutorial.js';
 
 const PAGES = [home, worlds, players, stats, settings, logPage];
 
@@ -238,6 +239,7 @@ A['dismiss-job'] = (d) => {
 };
 A['show-log'] = () => go('log');
 A['show-settings'] = () => go('settings');
+A.tutorial = () => openTutorial(app);
 A.reveal = (d, el) => {
   const target = document.getElementById(d.target);
   if (!target) return;

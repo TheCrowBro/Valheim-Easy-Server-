@@ -37,6 +37,13 @@ Closing the window doesn't stop anything: the app stays next to the clock
 it for Start, Stop, Hibernate and Close.
 
 
+NEW TO THE CONTROL PANEL?
+-------------------------
+Click "Tutorial" on the Home page, right next to "Start server". In five
+short steps it shows how to start the server, join it from Valheim, stop it,
+switch worlds and let the computer rest.
+
+
 ADDING A WORLD
 --------------
 1. On the PC where the world was played, press Windows + R, paste this and
