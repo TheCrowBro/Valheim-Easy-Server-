@@ -11,7 +11,7 @@ Run a Valheim dedicated server on a spare Windows PC, such as an old Mac Pro run
 - **How to join, always visible.** The panel shows the crossplay join code, the address and the password, with copy buttons. Crossplay codes work without setting up your router.
 - **Several worlds.** Switch worlds with one click, create new ones (with Valheim's difficulty presets and world modifiers, Fire hazard included), rename old ones, and delete worlds. Deleted worlds keep a backup.
 - **Add a world by dropping it in.** Drop a world onto the app (a Valheim 1.0 world folder, an older `.fwl` + `.db` pair, or a zip of either) and it goes into the server's worlds folder by itself. The app only asks when the server already has a world with that name: replace it (keeping a backup) or keep both. Replacing the world that's running restarts the server with the new copy. Any world can be downloaded as a zip, and "Import from this PC" copies worlds from the Valheim game installed on the server computer.
-- **A mod per world.** Each world's card has a switch for RandyKnapp's Advanced Portals (portals that let metal through). The app downloads it with BepInEx and Jötunn from Thunderstore when that world starts and keeps it up to date; worlds without it run plain Valheim. Players get step-by-step instructions on the Home page.
+- **Mods per world.** Each world's card has switches for two mods: RandyKnapp's Advanced Portals (portals that let metal through) and RustyMods' Seasonality (winter, spring, summer and fall). The app downloads them with what they need from Thunderstore when that world starts and keeps them up to date; worlds without mods run plain Valheim. A pop-up tells players which mod they need and where to download it.
 - **Backups.** Valheim's own automatic backups and the app's backups are listed together, and each one can be restored or downloaded. The app makes a backup before anything is replaced, restored over or deleted.
 - **Hibernate or sleep, and wake with Wake-on-LAN.** Saves the world, stops the server and hibernates the computer (or puts it to sleep). Wake it from an IP KVM's Wake-on-LAN, or with the power button, and the server starts again. It can also rest on its own when nobody has played for a while.
 - **Stats.** CPU, memory, GPU and network use for the Valheim server and the whole computer, over 15 minutes to 24 hours. A breakdown by number of players estimates what each extra player costs.
@@ -76,20 +76,25 @@ The app is made to be used on the server computer itself, so anyone who can see 
 
 ## Mods
 
-Each world's card on the Worlds page has a switch for one mod: [Advanced Portals](https://thunderstore.io/c/valheim/p/RandyKnapp/AdvancedPortals/) by RandyKnapp. It adds three portals that let metal through: the Ancient Portal takes copper and tin, the Obsidian Portal iron, and the Black Marble Portal anything. A new world can get it in the **New world** window too.
+Each world's card on the Worlds page has switches for two mods, and the **New world** window has the same choice:
 
-- Mods belong to a world. When the server starts a world with the switch on, the app downloads the mod from Thunderstore, with the two things it needs (the BepInEx mod loader and the Jötunn library), into the server folder, laid out the way mod managers do it. With **Update the server before it starts** on, it keeps them up to date too. BepInEx's console window is turned off, because the server runs without a window.
-- A world with the switch off runs plain Valheim: the mod loader is switched off when it starts. The files stay, so switching back is quick. Portals built with the mod don't work while it's off.
+- [Advanced Portals](https://thunderstore.io/c/valheim/p/RandyKnapp/AdvancedPortals/) by RandyKnapp adds three portals that let metal through: the Ancient Portal takes copper and tin, the Obsidian Portal iron, and the Black Marble Portal anything. It needs the Jötunn library.
+- [Seasonality](https://thunderstore.io/c/valheim/p/RustyMods/Seasonality/) by RustyMods adds winter, spring, summer and fall: the world's colors and textures change as the in-game days pass, with seasonal weather and effects. It needs the YamlDotNet library.
+
+How it works:
+
+- Mods belong to a world. When the server starts a world, the app downloads that world's mods from Thunderstore, with what they need (the BepInEx mod loader and their libraries), into the server folder, laid out the way mod managers do it. With **Update the server before it starts** on, it keeps them up to date too. BepInEx's console window is turned off, because the server runs without a window.
+- Only the world's own mods are loaded: mods installed for other worlds wait in `BepInEx\plugins-off`, which BepInEx doesn't read. A world without mods runs plain Valheim, with the mod loader switched off. The files stay, so switching back is quick. Things built with a mod, such as its portals, don't work while it's off.
 - **Everyone who plays a modded world needs the mod too.** Valheim can't send mods to players when they join, so each player installs it once:
   1. Install a free mod manager: [r2modman](https://thunderstore.io/c/valheim/p/ebkr/r2modman/) or [Gale](https://thunderstore.io/c/valheim/p/Kesomannen/GaleModManager/).
-  2. Choose Valheim, search for **Advanced Portals** and install it (**Download** in r2modman). BepInEx and Jötunn come with it.
+  2. Choose Valheim, search for the mod (**Advanced Portals** or **Seasonality**) and install it (**Download** in r2modman). Anything else it needs, such as BepInEx, comes with it.
   3. Start Valheim from the mod manager (**Start modded** in r2modman), then join as usual.
 
   If joining fails because the versions don't match, the player updates the mod in their mod manager: the server keeps it up to date.
 
   While a modded world is selected or running, the **How friends join** card on the Home page has a **Which mod do I need?** button. It opens a pop-up with the mod, its version on the server, its download page and these steps. A world card's **Player instructions** link opens the same pop-up, and so does switching a mod on. The mod checks this when someone joins and turns away players who don't have it. Xbox, PlayStation, Switch and Game Pass players can't use mods, so they can't join a modded world.
 - Reports differ on whether crossplay join codes work with a modded server. If friends on PC can't join with the code, turn **Crossplay** off in Settings and join by address (friends outside your home then need UDP ports 2456–2457 forwarded on your router).
-- The mod's own settings (portal costs and which items each portal allows) are in `BepInEx\config\randyknapp.mods.advancedportals.cfg` in the server folder. They're synced to players, and an admin can also change them in the game.
+- Each mod's own settings are in the server folder's `BepInEx\config` folder, for example `randyknapp.mods.advancedportals.cfg` (portal costs and which items each portal allows). Seasonality keeps its season textures in `BepInEx\config\Seasonality`; the app never overwrites a texture someone has changed.
 
 ## Hibernate, sleep and waking up
 

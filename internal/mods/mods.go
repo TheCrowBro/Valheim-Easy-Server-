@@ -28,6 +28,7 @@ type Mod struct {
 	Package string `json:"package"` // Thunderstore name, Namespace-Name
 	Name    string `json:"name"`
 	Author  string `json:"author"`
+	Short   string `json:"short"` // a few words, for the world cards
 	Summary string `json:"summary"`
 	URL     string `json:"url"`
 }
@@ -38,8 +39,17 @@ var Catalog = []Mod{{
 	Package: "RandyKnapp-AdvancedPortals",
 	Name:    "Advanced Portals",
 	Author:  "RandyKnapp",
+	Short:   "Portals that let metal through.",
 	Summary: "Three new portals that let metal through: the Ancient Portal takes copper and tin, the Obsidian Portal iron, and the Black Marble Portal anything.",
 	URL:     "https://thunderstore.io/c/valheim/p/RandyKnapp/AdvancedPortals/",
+}, {
+	ID:      "seasonality",
+	Package: "RustyMods-Seasonality",
+	Name:    "Seasonality",
+	Author:  "RustyMods",
+	Short:   "Winter, spring, summer and fall.",
+	Summary: "Four seasons, winter, spring, summer and fall: the world’s colors and textures change as the in-game days pass, with seasonal weather and effects.",
+	URL:     "https://thunderstore.io/c/valheim/p/RustyMods/Seasonality/",
 }}
 
 // Find returns the catalog entry for id.
@@ -62,6 +72,7 @@ const DefaultURL = "https://thunderstore.io"
 const (
 	proxyDLL   = "winhttp.dll" // loads BepInEx when the server starts on Windows
 	proxyOff   = "winhttp.dll.off"
+	parkedDir  = "plugins-off"          // in BepInEx: packages the next start doesn't use
 	loaderRoot = "BepInExPack_Valheim/" // the pack's files, inside its zip
 	recordFile = "valheim-easy-server.json"
 	maxZip     = 200 << 20
@@ -131,14 +142,14 @@ func (in *Installer) Prepare(ctx context.Context, ids []string, update bool, ste
 		want = append(want, m.Package)
 	}
 	if !update && in.complete(rec, want) {
-		return res, in.switchLoader(true)
+		return res, in.turnOn(rec, want)
 	}
 	step("Checking the mods on Thunderstore…")
 	pkgs, err := in.resolve(ctx, want)
 	if err != nil {
 		if ctx.Err() == nil && in.complete(rec, want) {
 			res.Warning = fmt.Sprintf("Couldn't check for mod updates (%v). Starting with the installed versions.", err)
-			return res, in.switchLoader(true)
+			return res, in.turnOn(rec, want)
 		}
 		return res, err
 	}
@@ -156,7 +167,43 @@ func (in *Installer) Prepare(ctx context.Context, ids []string, update bool, ste
 		}
 		res.Changed = append(res.Changed, fmt.Sprintf("Installed %s %s.", Title(p.Name), p.Version))
 	}
-	return res, in.switchLoader(true)
+	return res, in.turnOn(rec, want)
+}
+
+// turnOn switches the mod loader on with exactly the packages in want, and
+// what they need, in BepInEx/plugins. BepInEx loads every plugin there, so
+// the other packages this app installed wait in BepInEx/plugins-off.
+func (in *Installer) turnOn(rec record, want []string) error {
+	need := rec.closure(want)
+	for name := range rec.Packages {
+		if name == Loader {
+			continue
+		}
+		if err := in.switchPlugin(name, need[name]); err != nil {
+			return err
+		}
+	}
+	return in.switchLoader(true)
+}
+
+// switchPlugin moves a package's plugin folder into BepInEx/plugins, or out
+// of it into BepInEx/plugins-off.
+func (in *Installer) switchPlugin(name string, on bool) error {
+	from := filepath.Join(in.Dir, "BepInEx", "plugins", name)
+	to := filepath.Join(in.Dir, "BepInEx", parkedDir, name)
+	if on {
+		from, to = to, from
+	}
+	if _, err := os.Stat(from); err != nil {
+		return nil // already where it belongs
+	}
+	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+		return err
+	}
+	if err := os.RemoveAll(to); err != nil {
+		return err
+	}
+	return os.Rename(from, to)
 }
 
 // Title is a package's name for people.
@@ -195,6 +242,16 @@ func Env(dir string, on bool) []string {
 // complete reports whether the packages in want and everything they need
 // are installed and still on disk.
 func (in *Installer) complete(r record, want []string) bool {
+	for name := range r.closure(want) {
+		if _, ok := r.Packages[name]; !ok || !in.onDisk(name) {
+			return false
+		}
+	}
+	return true
+}
+
+// closure is the packages in want and everything they need, as recorded.
+func (r record) closure(want []string) map[string]bool {
 	seen := map[string]bool{}
 	for queue := slices.Clone(want); len(queue) > 0; {
 		name := queue[0]
@@ -203,13 +260,9 @@ func (in *Installer) complete(r record, want []string) bool {
 			continue
 		}
 		seen[name] = true
-		p, ok := r.Packages[name]
-		if !ok || !in.onDisk(name) {
-			return false
-		}
-		queue = append(queue, p.Deps...)
+		queue = append(queue, r.Packages[name].Deps...)
 	}
-	return true
+	return seen
 }
 
 func (in *Installer) onDisk(name string) bool {
@@ -220,7 +273,7 @@ func (in *Installer) onDisk(name string) bool {
 	if name == Loader {
 		return exists("BepInEx", "core", "BepInEx.Preloader.dll") && (exists(proxyDLL) || exists(proxyOff))
 	}
-	return exists("BepInEx", "plugins", name)
+	return exists("BepInEx", "plugins", name) || exists("BepInEx", parkedDir, name)
 }
 
 // resolve finds the latest version of each package in want and of
@@ -385,7 +438,7 @@ func (in *Installer) unpackLoader(zr *zip.Reader) error {
 // unpackPlugin puts a mod into BepInEx/plugins/<package>, replacing an older
 // copy, the way the mod managers lay it out.
 func (in *Installer) unpackPlugin(zr *zip.Reader, name string) error {
-	for _, dir := range []string{"plugins", "patchers"} {
+	for _, dir := range []string{"plugins", parkedDir, "patchers"} {
 		if err := os.RemoveAll(filepath.Join(in.Dir, "BepInEx", dir, name)); err != nil {
 			return err
 		}

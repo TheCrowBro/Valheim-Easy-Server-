@@ -109,6 +109,62 @@ func TestPrepareInstallsAndSwitches(t *testing.T) {
 	}
 }
 
+func TestPrepareKeepsOtherWorldsModsAside(t *testing.T) {
+	in, fake, _ := setup(t)
+	ctx := context.Background()
+	plugin := func(name string) string {
+		switch {
+		case exists(in.Dir, "BepInEx", "plugins", name):
+			return "on"
+		case exists(in.Dir, "BepInEx", "plugins-off", name):
+			return "aside"
+		}
+		return "missing"
+	}
+	state := func() string {
+		return strings.Join([]string{plugin(modstest.Portal), plugin(modstest.Jotunn), plugin(modstest.Seasons), plugin(modstest.Yaml)}, " ")
+	}
+
+	if _, err := in.Prepare(ctx, []string{"advancedportals"}, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	// A world with only Seasonality: the portals and Jötunn wait aside.
+	res, err := in.Prepare(ctx, []string{"seasonality"}, false, nil)
+	if err != nil || strings.Join(res.Changed, "|") != "Installed YamlDotNet 16.3.1.|Installed Seasonality 3.8.4." {
+		t.Fatalf("seasonality: %v %v", res, err)
+	}
+	if got := state(); got != "aside aside on on" {
+		t.Fatalf("seasonality only: %s", got)
+	}
+	if !exists(in.Dir, "BepInEx", "plugins", modstest.Seasons, "Seasonality.dll") ||
+		read(t, in.Dir, "BepInEx", "config", "Seasonality", "Textures", "winter.png") != "snow" ||
+		exists(in.Dir, "BepInEx", "plugins", modstest.Yaml, "LICENSE.txt") {
+		t.Fatal("Seasonality isn't laid out like a mod manager would")
+	}
+	// Both, without going online again; then back to the portals only.
+	n := fake.Requests.Load()
+	if _, err := in.Prepare(ctx, []string{"advancedportals", "seasonality"}, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := state(); got != "on on on on" || fake.Requests.Load() != n {
+		t.Fatalf("both: %s (went online: %v)", got, fake.Requests.Load() != n)
+	}
+	if _, err := in.Prepare(ctx, []string{"advancedportals"}, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := state(); got != "on on aside aside" {
+		t.Fatalf("portals only: %s", got)
+	}
+	// An update of a package that's aside replaces it there too.
+	fake.SetVersion(modstest.Seasons, "3.9.0")
+	if _, err := in.Prepare(ctx, []string{"seasonality"}, true, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := state(); got != "aside aside on on" || read(t, in.Dir, "BepInEx", "plugins", modstest.Seasons, "Seasonality.dll") != "seasons 3.9.0" {
+		t.Fatalf("after update: %s", got)
+	}
+}
+
 func TestPrepareOffline(t *testing.T) {
 	in, _, srv := setup(t)
 	ctx := context.Background()

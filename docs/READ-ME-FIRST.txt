@@ -47,14 +47,16 @@ rest.
 
 MODS
 ----
-Each world's card on the Worlds page has a switch for one mod: Advanced
-Portals by RandyKnapp (portals that let metal through). The app downloads
-it the next time the server starts that world.
+Each world's card on the Worlds page has switches for two mods:
+  - Advanced Portals by RandyKnapp: portals that let metal through.
+  - Seasonality by RustyMods: winter, spring, summer and fall.
+The app downloads a world's mods the next time the server starts it.
 
 Everyone who plays that world needs the mod in their own game too:
   1. Install a free mod manager: r2modman or Gale (from thunderstore.io).
-  2. Choose Valheim, search for "Advanced Portals" and install it
-     ("Download" in r2modman). BepInEx and Jotunn come with it.
+  2. Choose Valheim, search for the mod ("Advanced Portals" or
+     "Seasonality") and install it ("Download" in r2modman). Anything
+     else it needs, such as BepInEx, comes with it.
   3. Start Valheim from the mod manager ("Start modded" in r2modman),
      then join as usual.
 If joining fails because the versions don't match, update the mod in the

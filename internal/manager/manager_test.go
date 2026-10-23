@@ -303,6 +303,24 @@ func TestModsAtStart(t *testing.T) {
 	if exists("winhttp.dll") || !exists("winhttp.dll.off") {
 		t.Fatal("the mod loader is still on")
 	}
+
+	// Another mod for the world: only that one is loaded.
+	if err := m.SetWorldMods(world, []string{"seasonality"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.RestartServer(); err != nil {
+		t.Fatal(err)
+	}
+	if job := waitJob(t, m, currentJobID(m)); job.Error != "" {
+		t.Fatalf("restart with seasonality: %s", job.Error)
+	}
+	if !exists("winhttp.dll") || !exists("BepInEx", "plugins", "RustyMods-Seasonality", "Seasonality.dll") ||
+		!exists("BepInEx", "plugins-off", "RandyKnapp-AdvancedPortals") || exists("BepInEx", "plugins", "RandyKnapp-AdvancedPortals") {
+		t.Fatal("the world's mods weren't the only ones switched on")
+	}
+	if st := m.Status(); len(st.Mods) != 1 || st.Mods[0].Name != "Seasonality" || st.Mods[0].Version != "3.8.4" {
+		t.Fatalf("status mods = %+v", st.Mods)
+	}
 }
 
 func TestCrashRestartsAutomatically(t *testing.T) {

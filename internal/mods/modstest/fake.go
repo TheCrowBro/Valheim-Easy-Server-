@@ -14,9 +14,11 @@ import (
 )
 
 const (
-	Loader = "denikson-BepInExPack_Valheim"
-	Jotunn = "ValheimModding-Jotunn"
-	Portal = "RandyKnapp-AdvancedPortals"
+	Loader  = "denikson-BepInExPack_Valheim"
+	Jotunn  = "ValheimModding-Jotunn"
+	Portal  = "RandyKnapp-AdvancedPortals"
+	Yaml    = "ValheimModding-YamlDotNet"
+	Seasons = "RustyMods-Seasonality"
 )
 
 // Fake answers the package and download requests mods.Installer makes.
@@ -28,10 +30,10 @@ type Fake struct {
 	extra    map[string]map[string]string // package -> extra file name -> content
 }
 
-// New returns a Fake offering the current versions of the three packages.
+// New returns a Fake offering the current versions of the packages.
 func New() *Fake {
 	return &Fake{
-		versions: map[string]string{Loader: "5.4.2351", Jotunn: "2.30.2", Portal: "1.2.0"},
+		versions: map[string]string{Loader: "5.4.2351", Jotunn: "2.30.2", Portal: "1.2.0", Yaml: "16.3.1", Seasons: "3.8.4"},
 		extra:    map[string]map[string]string{},
 	}
 }
@@ -54,9 +56,11 @@ func (f *Fake) AddFile(name, file, content string) {
 }
 
 var deps = map[string][]string{
-	Loader: nil,
-	Jotunn: {Loader + "-5.4.2333"},
-	Portal: {Loader + "-5.4.2333", Jotunn + "-2.27.0"},
+	Loader:  nil,
+	Jotunn:  {Loader + "-5.4.2333"},
+	Portal:  {Loader + "-5.4.2333", Jotunn + "-2.27.0"},
+	Yaml:    nil,
+	Seasons: {Loader + "-5.4.2333", Yaml + "-16.3.1"},
 }
 
 func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -100,6 +104,12 @@ func (f *Fake) zip(name, version string) []byte {
 	case Portal:
 		files["plugins/AdvancedPortals.dll"] = "portals " + version
 		files["icon.png"] = "png"
+	case Yaml:
+		files["plugins/YamlDotNet.dll"] = "yaml " + version
+		files["LICENSE.txt"] = "MIT"
+	case Seasons:
+		files["Seasonality.dll"] = "seasons " + version // at the top, like the real one
+		files["config/Seasonality/Textures/winter.png"] = "snow"
 	}
 	for k, v := range f.extra[name] {
 		files[k] = v

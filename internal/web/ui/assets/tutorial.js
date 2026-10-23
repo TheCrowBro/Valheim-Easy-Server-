@@ -66,7 +66,7 @@ function steps(st) {
         [difficultyWindow(), 'Pick a preset and switches']),
       text: [
         ['Best done before a world is first played, but you can change it any time. Open ', b('Worlds'), ', click ', b('⋯'), ' on the world’s card and choose ', b('Difficulty'), '. Pick a preset such as Casual or Hard, and under ', b('More options'), ' change combat, resources, raids and portals, or tick switches like ', b('No map'), ' or ', b('Fire hazard'), '.'],
-        ['To play a world with the ', b('Advanced Portals'), ' mod, turn on the switch on its card. Everyone who plays that world then needs the mod too.'],
+        ['To play a world with a mod, such as ', b('Advanced Portals'), ' or ', b('Seasonality'), ', turn on its switch on the world’s card. Everyone who plays that world then needs the mod too.'],
         ['A new world gets the same choices under ', b('New world'), '. Changes apply the next time the server starts the world.'],
       ],
     },

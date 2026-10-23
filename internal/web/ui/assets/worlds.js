@@ -115,7 +115,7 @@ function modRows(w, busy) {
         on.includes(m.id)
           ? h('div', { class: 'help' }, 'On. Everyone who plays this world needs it too. ',
             h('button', { class: 'link-button', type: 'button', 'data-action': 'world-mod-help', 'data-mod': m.id }, 'Player instructions'))
-          : h('div', { class: 'help' }, 'Portals that let metal through.')),
+          : h('div', { class: 'help' }, m.short)),
       toggle({ 'data-action': 'world-mod', 'data-name': w.name, 'data-mod': m.id, checked, disabled: busy, 'aria-label': `${m.name} mod for ${w.name}` }));
   });
 }
