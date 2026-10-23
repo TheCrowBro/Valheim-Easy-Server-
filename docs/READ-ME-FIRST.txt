@@ -45,6 +45,22 @@ server, join it from Valheim, stop it, switch worlds and let the computer
 rest.
 
 
+THE JOIN CODE IN DISCORD
+------------------------
+The join code changes each time the server starts. The app can post it in
+a Discord channel for you: in Settings, under Discord, turn on "Post the
+join code in Discord" and paste the channel's webhook link. To get it:
+  1. In Discord, click the gear next to the channel's name (Edit Channel).
+  2. Open Integrations and click Create Webhook (or Webhooks, then New
+     Webhook).
+  3. Click the new webhook, name it (for example Valheim) and click
+     Copy Webhook URL.
+  4. Paste it in Settings, click "Send a test", look in the channel and
+     save.
+You can also have it post the password (hidden as a spoiler: only for a
+channel that's just for your friends) and say when the server stops.
+
+
 MODS
 ----
 Each world's card on the Worlds page has switches for two mods:

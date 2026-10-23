@@ -142,6 +142,26 @@ func TestLoadMovesModsToTheSelectedWorld(t *testing.T) {
 	if !reflect.DeepEqual(s.WorldMods(), []string{"advancedportals"}) {
 		t.Fatalf("WorldMods = %v", s.WorldMods())
 	}
+	if s.Discord || !s.DiscordStopped {
+		t.Fatalf("an older file should get the Discord defaults: %+v", s)
+	}
+}
+
+func TestDiscordSettings(t *testing.T) {
+	s := Defaults()
+	s.DiscordWebhook = "not a link" // kept while posting is off
+	if errs := s.Validate(); errs != nil {
+		t.Fatalf("off: %v", errs)
+	}
+	s.Discord = true
+	if errs := s.Validate(); errs["discordWebhook"] == "" {
+		t.Fatalf("on with a bad link: %v", errs)
+	}
+	s.DiscordWebhook = "  https://discord.com/api/webhooks/1/abc  "
+	s.Normalize()
+	if errs := s.Validate(); errs != nil || s.DiscordWebhook != "https://discord.com/api/webhooks/1/abc" {
+		t.Fatalf("on with a good link: %v %q", errs, s.DiscordWebhook)
+	}
 }
 
 func TestLoadSaveRoundTrip(t *testing.T) {

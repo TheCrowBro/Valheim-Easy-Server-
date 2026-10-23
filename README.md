@@ -12,6 +12,7 @@ Run a Valheim dedicated server on a spare Windows PC, such as an old Mac Pro run
 - **Several worlds.** Switch worlds with one click, create new ones (with Valheim's difficulty presets and world modifiers, Fire hazard included), rename old ones, and delete worlds. Deleted worlds keep a backup.
 - **Add a world by dropping it in.** Drop a world onto the app (a Valheim 1.0 world folder, an older `.fwl` + `.db` pair, or a zip of either) and it goes into the server's worlds folder by itself. The app only asks when the server already has a world with that name: replace it (keeping a backup) or keep both. Replacing the world that's running restarts the server with the new copy. Any world can be downloaded as a zip, and "Import from this PC" copies worlds from the Valheim game installed on the server computer.
 - **Mods per world.** Each world's card has switches for two mods: RandyKnapp's Advanced Portals (portals that let metal through) and RustyMods' Seasonality (winter, spring, summer and fall). The app downloads them with what they need from Thunderstore when that world starts and keeps them up to date; worlds without mods run plain Valheim. A pop-up tells players which mod they need and where to download it.
+- **Join code in Discord.** Each time the server is online, it can post the join code in your Discord channel, and say when the server stops.
 - **Backups.** Valheim's own automatic backups and the app's backups are listed together, and each one can be restored or downloaded. The app makes a backup before anything is replaced, restored over or deleted.
 - **Hibernate or sleep, and wake with Wake-on-LAN.** Saves the world, stops the server and hibernates the computer (or puts it to sleep). Wake it from an IP KVM's Wake-on-LAN, or with the power button, and the server starts again. It can also rest on its own when nobody has played for a while.
 - **Stats.** CPU, memory, GPU and network use for the Valheim server and the whole computer, over 15 minutes to 24 hours. A breakdown by number of players estimates what each extra player costs.
@@ -52,6 +53,31 @@ The **How friends join** card on the Home page has everything:
 - **Crossplay off (Steam only).** Friends join by address. Friends outside your home need **UDP ports 2456–2457 forwarded** on your router to the server computer.
 
 Everyone needs the same Valheim version as the server. The app updates the server before each start, so friends just need to update their game.
+
+## Posting the join code in Discord
+
+The join code changes every time the server starts, so the app can post it in a Discord channel for you. In **Settings → Discord**, turn on **Post the join code in Discord** and paste the channel's webhook link. A webhook lets the app post in that one channel, with no bot to set up:
+
+1. In Discord, click the gear next to the channel's name (**Edit Channel**).
+2. Open **Integrations** and click **Create Webhook** (or **Webhooks**, then **New Webhook**).
+3. Click the new webhook, name it (for example "Valheim") and click **Copy Webhook URL**.
+4. Paste it in Settings, click **Send a test**, look in the channel, and save.
+
+Only people who manage the Discord server see Integrations; anyone else can ask the server's owner for the link. Through an IP KVM, use the KVM's paste feature, or open Discord in a browser on the server computer and copy the link there.
+
+Each time the server is online, the channel gets a message like this:
+
+> 🟢 **Valheim with Friends** is online<br>
+> World: Midgard<br>
+> Join code: **482913**<br>
+> Mods: [Advanced Portals](https://thunderstore.io/c/valheim/p/RandyKnapp/AdvancedPortals/) 1.2.0<br>
+> <sub>In Valheim, go to Join Game and join by code. Install the mod first with the r2modman or Gale mod manager.</sub>
+
+- **Include the password** adds the password, hidden as a spoiler until it's clicked. Only turn it on if the channel is just for your friends.
+- **Also post when the server stops** (on by default) says when the server stops, restarts, crashes or the computer goes to rest, so nobody tries a code that no longer works.
+- The **How friends join** card shows when the code was posted, or why it couldn't be. If Discord can't be reached, the app tries again for a couple of minutes.
+- Turning it on while the server is online posts the code straight away. If the app is closed and opened again while the server runs, the code isn't posted twice.
+- With Crossplay off, the message has the server's internet address instead of a join code. Nobody gets pinged by the message.
 
 ## Looking after the server through an IP KVM
 
@@ -134,6 +160,7 @@ The dedicated server runs without graphics, so GPU usage stays low; that's norma
 | Windows Security blocks or removes the app | Antivirus tools sometimes raise a false alarm for new programs that aren't signed. Allow it under *Windows Security → Virus & threat protection → Protection history*. |
 | Shutting down or restarting Windows | Stop the server first (or use Hibernate), so the world is saved. Windows doesn't give the server time to save when it shuts down. |
 | Wake-on-LAN doesn't wake the computer | Check that **Settings → Resting and waking up** says the network adapter may wake the computer, that the KVM uses the MAC address shown there, and that the computer is on a cable, not Wi-Fi. If it still won't wake from hibernation, choose **Sleep**, and restart the computer once. |
+| The join code doesn't appear in Discord | The **How friends join** card says why. In **Settings → Discord**, click **Send a test**. If Discord says the link doesn't work, the webhook was deleted: make a new one and paste its link. |
 | Mods (BepInEx) | Install them into the server folder (**Settings → Folders → Open**); the app starts the server the same way. Use **Repair server files** to undo. |
 
 The app's own log is in `logs\app.log` inside its folder, and the server's logs are next to it.
@@ -147,6 +174,7 @@ The app's own log is in `logs\app.log` inside its folder, and the server's logs 
 - installs and updates the server with Valve's SteamCMD (`app_update 896660`);
 - understands both Valheim world formats: 1.0 world folders (`_main.N.fwl2`, `.db2`, `.chunk` files) and the older `.fwl` + `.db` pairs;
 - serves the control panel from inside the app to this computer only (127.0.0.1) and opens it in a Microsoft Edge app window. It turns away requests that other websites open in a browser could make: it checks the address the browser used, the browser's own "which site is asking" header, and an anti-forgery header on every change;
+- posts in Discord, when that's turned on, by sending each message to the channel's webhook link;
 - reads CPU, GPU, memory and network usage from Windows' performance counters, the same source Task Manager uses;
 - hibernates with `shutdown /h` or sleeps through Windows' own sleep call, and sets up Wake-on-LAN with `powercfg /deviceenablewake` and the network adapter's power settings (magic packet on, pattern wake off).
 

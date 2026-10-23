@@ -477,6 +477,23 @@ func (m *Manager) onExit(run *serverRun, code int) {
 	}
 	m.lastExit = exit
 	runtimePath := m.dataFile("runtime.json")
+	why := stopStopped
+	job := m.job
+	switch {
+	case !expected && autoRestart:
+		why = stopCrashRestart
+	case !expected:
+		why = stopCrash
+	case job != nil && job.Finished == nil && job.Kind == "restart":
+		why = stopRestart
+	case job != nil && job.Finished == nil && job.Kind == "hibernate":
+		why = stopRest
+	}
+	// Queued before unlocking, so anyone who sees the server stopped (and
+	// closes the app) knows the message is waiting to go out.
+	if post, ok := m.stoppedPostLocked(run, why); ok {
+		m.queueDiscord(post)
+	}
 	m.mu.Unlock()
 
 	run.proc.Close()
@@ -555,7 +572,13 @@ func (m *Manager) tail(ctx context.Context, run *serverRun) {
 						m.notePlayerLocked(logparse.Activity{Kind: "join", Time: p.Since, Name: p.Name, PlatformID: p.PlatformID}, time.Time{})
 					}
 				}
+				// Post the join code if the app that started the server didn't.
+				post, announce := m.announceLocked(run)
 				m.mu.Unlock()
+				if announce {
+					m.queueDiscord(post)
+					m.saveRunInfo(run)
+				}
 				m.notify()
 			}
 		}
@@ -598,6 +621,7 @@ func (m *Manager) handleLine(run *serverRun, line string) {
 		run.ready = true
 		close(run.readyCh)
 	}
+	post, announce := m.announceLocked(run)
 	replaying := run.replaying
 	if !replaying {
 		for _, a := range acts {
@@ -610,6 +634,10 @@ func (m *Manager) handleLine(run *serverRun, line string) {
 	changed := before != m.stateLocked()
 	m.mu.Unlock()
 
+	if announce {
+		m.queueDiscord(post)
+		m.saveRunInfo(run)
+	}
 	if replaying {
 		return // don't repeat old news when taking over a running server
 	}

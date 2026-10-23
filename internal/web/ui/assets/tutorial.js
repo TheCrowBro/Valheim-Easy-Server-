@@ -92,7 +92,9 @@ function steps(st) {
         ...(crossplay
           ? [
             ['In Valheim, pick your character and go to ', b('Join Game'), '. Choose to join by code and type the ', b('join code'), ' from ', b('How friends join'), ' on the Home page, then the password.'],
-            ['The join code changes every time the server starts, so check it again after a restart.'],
+            st && st.discord
+              ? ['The join code changes every time the server starts. It’s posted in your Discord channel each time, so friends can find it there.']
+              : ['The join code changes every time the server starts, so check it again after a restart.'],
           ]
           : [
             ['In Valheim, pick your character and go to ', b('Join Game'), '. Add the server by the address from ', b('How friends join'), ' on the Home page, then enter the password.'],

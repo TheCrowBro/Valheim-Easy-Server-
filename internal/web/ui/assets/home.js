@@ -13,7 +13,7 @@ export const FEED_STYLE = {
   bad_version: ['alert', 'warn'], load_failed: ['alert', 'bad'], bad_password_config: ['key', 'bad'],
   hibernate: ['moon', 'accent'], wake: ['sun', 'accent'], backup: ['archive', 'accent'], restore: ['archive', 'accent'],
   import: ['upload', 'accent'], delete: ['trash', ''], world: ['globe', 'accent'], update: ['refresh', 'accent'],
-  warning: ['alert', 'warn'], starting: ['play', ''], info: ['info', ''],
+  warning: ['alert', 'warn'], starting: ['play', ''], info: ['info', ''], discord: ['message', 'accent'],
 };
 
 function heroTitle(st) {
@@ -147,12 +147,27 @@ function joinCard(app) {
       h('li', null, 'In Valheim go to ', h('b', null, 'Join Game'), ', add the server by its address and enter the password.'),
       h('li', null, 'Friends outside your home need UDP ports ', h('b', null, `${j.port}–${j.port + 1}`), ' forwarded on your router to this computer. Or turn on Crossplay in Settings to get a join code that works without port forwarding.')));
   }
+  body.push(discordLine(st));
   const mods = st.mods || [];
   if (mods.length) body.unshift(modsNotice(mods));
   return h('section', { class: 'card', 'aria-label': 'How to join' },
     h('div', { class: 'card-head' }, h('h2', null, 'How friends join'),
       h('span', { class: 'badge' }, j.crossplay ? 'Crossplay on' : 'Steam only')),
     body);
+}
+
+// discordLine says whether the join code made it to the Discord channel.
+function discordLine(st) {
+  const d = st.discord;
+  if (!d || st.state !== 'online') return null;
+  if (d.error) {
+    return h('div', { class: 'callout warn discord-line' }, icon('alert'), h('div', { class: 'body small' },
+      h('p', null, h('strong', null, 'Couldn’t post in Discord. '), d.error),
+      h('div', { class: 'actions' }, h('button', { class: 'btn btn-sm', 'data-action': 'show-settings' }, 'Open settings'))));
+  }
+  const text = d.posted ? `Posted in Discord at ${clock(d.posted)}.`
+    : st.join.crossplay && !st.join.code ? 'The join code is posted in Discord when it’s ready.' : 'Posting in Discord…';
+  return h('p', { class: 'small muted discord-line' }, icon(d.posted ? 'check' : 'message'), text);
 }
 
 // modsNotice says the world needs mods; its button opens the pop-up with

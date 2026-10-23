@@ -52,6 +52,7 @@ type Options struct {
 	SleepStatus     func() (bool, string)
 	NoPublicIP      bool   // don't look up the public IP address
 	ModsURL         string // where mods are downloaded from; Thunderstore when empty
+	DiscordURL      string // where Discord webhook links are sent instead of Discord, for tests
 	SampleInterval  time.Duration
 	RestartDelay    time.Duration // wait before restarting after a crash
 }
@@ -74,6 +75,9 @@ type Manager struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	discordQ       chan discordPost // messages for the Discord channel
+	discordPending atomic.Int32     // queued or being posted
 
 	mu             sync.Mutex
 	settings       config.Settings
@@ -131,6 +135,8 @@ type serverRun struct {
 	cancelTail context.CancelFunc
 	cpuPrev    time.Duration
 	cpuPrevAt  time.Time
+	discordAt  time.Time // when the join code was posted in Discord
+	discordErr string    // why posting it didn't work
 }
 
 // runInfo is saved to runtime.json so the app can find a server that is
@@ -143,6 +149,9 @@ type runInfo struct {
 	World    string    `json:"world"`
 	ArgsKey  string    `json:"argsKey"`
 	Exe      string    `json:"exe"`
+	// Announced is the join code posted in Discord ("online" when there's
+	// no code), so it's posted once even if the app restarts.
+	Announced string `json:"announced,omitempty"`
 }
 
 // New loads settings and saved data. Call Start to begin.
@@ -167,6 +176,7 @@ func New(opt Options) (*Manager, error) {
 		history:  stats.NewHistory(int(24 * time.Hour / opt.SampleInterval)),
 		known:    map[string]*KnownPlayer{},
 		uploads:  map[string]*worlds.Upload{},
+		discordQ: make(chan discordPost, 16),
 	}
 	settingsPath := filepath.Join(opt.DataDir, "settings.json")
 	s, existed, err := config.Load(settingsPath)
@@ -230,6 +240,7 @@ func (m *Manager) Start() {
 	m.adoptRunning()
 	m.go_(m.sampleLoop)
 	m.go_(m.checksLoop)
+	m.go_(m.discordLoop)
 
 	m.mu.Lock()
 	autoStart := m.settings.StartWithApp && m.run == nil && m.installedLocked()
@@ -245,6 +256,7 @@ func (m *Manager) Start() {
 // Close stops background work and saves data. A running Valheim server
 // keeps running; the app finds it again next time.
 func (m *Manager) Close() {
+	m.flushDiscord(5 * time.Second) // e.g. that the server stopped
 	if m.cancel != nil {
 		m.cancel()
 	}

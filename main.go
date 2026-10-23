@@ -41,6 +41,7 @@ func main() {
 	noWindow := flag.Bool("no-window", false, "don't open the control panel window")
 	panelPort := flag.Int("port", web.DefaultPort, "port for the control panel (it only listens on this computer)")
 	devServer := flag.String("dev-fake-server", "", "development only: install this program instead of downloading the real server")
+	devDiscord := flag.String("dev-fake-discord", "", "development only: send Discord messages to this address instead of Discord")
 	flag.Parse()
 
 	exe, _ := os.Executable()
@@ -68,7 +69,7 @@ func main() {
 		return
 	}
 
-	opt := manager.Options{DataDir: dataDir, AppExe: exe, Logger: logger}
+	opt := manager.Options{DataDir: dataDir, AppExe: exe, Logger: logger, DiscordURL: *devDiscord}
 	if *devServer != "" {
 		src, _ := filepath.Abs(*devServer)
 		opt.NewInstaller = func(p config.Paths) steamcmd.Installer {

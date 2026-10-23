@@ -64,6 +64,7 @@ func (m *Manager) Hibernate(reason string) error {
 		j.step("Going to rest… "+wakeHint, -1)
 		m.saveData()
 		time.Sleep(4 * time.Second) // let open control panels show the message
+		m.flushDiscord(15 * time.Second)
 		rest := m.opt.Hibernate
 		if sleep {
 			rest = m.opt.Sleep

@@ -25,6 +25,7 @@ type Status struct {
 	Players      []PlayerView          `json:"players"`
 	Join         JoinInfo              `json:"join"`
 	Mods         []ModInfo             `json:"mods,omitempty"` // the mods players need
+	Discord      *DiscordInfo          `json:"discord,omitempty"`
 	Version      string                `json:"version,omitempty"`
 	Build        string                `json:"build,omitempty"`
 	BuildDate    *time.Time            `json:"buildDate,omitempty"`
@@ -160,10 +161,20 @@ func (m *Manager) Status() Status {
 		}
 		st.Join.Code = r.tracker.JoinCode
 		st.Join.PublicAddr = r.tracker.PublicAddr
+		if s.Discord {
+			st.Discord = &DiscordInfo{Error: r.discordErr}
+			if !r.discordAt.IsZero() {
+				at := r.discordAt
+				st.Discord.Posted = &at
+			}
+		}
 		st.NeedsRestart = r.info.ArgsKey != "" && r.info.ArgsKey != argsKey(s, m.paths.Save)
 		if r.replaying {
 			st.Warnings = append(st.Warnings, "Catching up with the server log…")
 		}
+	}
+	if s.Discord && st.Discord == nil {
+		st.Discord = &DiscordInfo{}
 	}
 	if st.Join.PublicAddr == "" && m.net.public != "" {
 		st.Join.PublicAddr = net.JoinHostPort(m.net.public, strconv.Itoa(s.Port))

@@ -18,6 +18,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"valheim-easy-server/internal/discord"
 	"valheim-easy-server/internal/mods"
 )
 
@@ -45,6 +46,13 @@ type Settings struct {
 	// RestSleep keeps a little, which most network adapters need to wake
 	// the computer with Wake-on-LAN.
 	RestMode string `json:"restMode"`
+
+	// Discord: post the join code in a Discord channel, through the
+	// channel's webhook link, each time the server is online.
+	Discord         bool   `json:"discord"`
+	DiscordWebhook  string `json:"discordWebhook,omitempty"`
+	DiscordPassword bool   `json:"discordPassword"` // put the password in the message too
+	DiscordStopped  bool   `json:"discordStopped"`  // also say when the server stops
 
 	// WorldOptions holds difficulty settings per world name.
 	WorldOptions map[string]WorldOptions `json:"worldOptions,omitempty"`
@@ -123,6 +131,7 @@ func Defaults() Settings {
 		StartAfterWake:      true,
 		IdleMinutes:         60,
 		RestMode:            RestHibernate,
+		DiscordStopped:      true,
 	}
 }
 
@@ -225,6 +234,7 @@ func (s *Settings) Normalize() {
 	s.ServerDir = strings.TrimSpace(s.ServerDir)
 	s.SaveDir = strings.TrimSpace(s.SaveDir)
 	s.ExtraArgs = strings.TrimSpace(s.ExtraArgs)
+	s.DiscordWebhook = strings.TrimSpace(s.DiscordWebhook)
 	for name, o := range s.WorldOptions {
 		if o.IsZero() {
 			delete(s.WorldOptions, name)
@@ -357,6 +367,11 @@ func (s Settings) Validate() FieldErrors {
 	}
 	if s.RestMode != RestHibernate && s.RestMode != RestSleep {
 		errs["restMode"] = "Choose hibernate or sleep."
+	}
+	if s.Discord {
+		if msg := discord.Problem(s.DiscordWebhook); msg != "" {
+			errs["discordWebhook"] = msg
+		}
 	}
 	if len(s.ExtraArgs) > 1000 {
 		errs["extraArgs"] = "Extra arguments are too long."

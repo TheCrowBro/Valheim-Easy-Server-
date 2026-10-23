@@ -61,6 +61,7 @@ func (s *Server) routes() http.Handler {
 
 	a("GET /api/settings", s.getSettings)
 	a("POST /api/settings", s.saveSettings)
+	a("POST /api/discord/test", s.testDiscord)
 	a("GET /api/lists", s.getLists)
 	a("POST /api/lists", s.saveList)
 	a("GET /api/players", s.players)
@@ -459,6 +460,22 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	v.LaunchOnLogin, _ = platform.LaunchOnLogin()
 	writeJSON(w, http.StatusOK, v)
+}
+
+// testDiscord posts a test message with the webhook link from the form.
+func (s *Server) testDiscord(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Webhook string `json:"webhook"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		fail(w, err)
+		return
+	}
+	if err := s.m.TestDiscord(body.Webhook); err != nil {
+		fail(w, err)
+		return
+	}
+	ok(w)
 }
 
 func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {

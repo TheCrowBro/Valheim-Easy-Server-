@@ -38,6 +38,14 @@ func (m *Manager) UpdateSettings(in config.Settings) error {
 	if err := m.saveSettingsLocked(next); err != nil {
 		return err
 	}
+	// Turned on, or moved to another channel: post the join code there now.
+	if run := m.run; run != nil && next.Discord && (!cur.Discord || next.DiscordWebhook != cur.DiscordWebhook) {
+		run.info.Announced = ""
+		if post, ok := m.announceLocked(run); ok {
+			m.queueDiscord(post)
+			go m.saveRunInfo(run)
+		}
+	}
 	return nil
 }
 

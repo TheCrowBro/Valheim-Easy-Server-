@@ -7,6 +7,7 @@ let view = null;    // last loaded settings response
 let draft = null;   // edited copy of view.settings
 let errors = {};
 let saving = false;
+let testing = false;
 let appRef = null;
 
 async function load() {
@@ -58,6 +59,33 @@ function serverSection() {
         h('div', { style: { marginTop: '12px', maxWidth: '260px' } },
           fieldFor('port', 'Game port', input('port', { type: 'number', min: 1024, max: 65534 }),
             'Valheim uses this port and the next one (UDP). 2456 is normal; only change it if something else uses it.')))));
+}
+
+function discordSection() {
+  const link = (draft.discordWebhook || '').trim();
+  return h('section', { class: 'card' },
+    h('div', { class: 'card-head' }, h('h2', null, 'Discord')),
+    switchRow('discord', 'Post the join code in Discord',
+      'Each time the server is online, its join code is posted in a Discord channel, so friends can join without asking for it.'),
+    draft.discord ? h('div', { class: 'form discord-form' },
+      fieldFor('discordWebhook', 'The channel’s webhook link',
+        h('div', { class: 'input-group' },
+          input('discordWebhook', { placeholder: 'https://discord.com/api/webhooks/…', spellcheck: 'false', autocomplete: 'off' }),
+          h('button', { class: 'btn', type: 'button', 'data-action': 'discord-test', disabled: testing || !link },
+            icon('send'), testing ? 'Sending…' : 'Send a test'))),
+      h('details', { class: 'where', open: !link },
+        h('summary', null, 'How to get the webhook link'),
+        h('ol', { class: 'steps' },
+          h('li', null, 'In Discord, click the gear next to the channel’s name (', h('b', null, 'Edit Channel'), ').'),
+          h('li', null, 'Open ', h('b', null, 'Integrations'), ' and click ', h('b', null, 'Create Webhook'), ' (or ', h('b', null, 'Webhooks'), ', then ', h('b', null, 'New Webhook'), ').'),
+          h('li', null, 'Click the new webhook, name it (for example “Valheim”) and click ', h('b', null, 'Copy Webhook URL'), '.'),
+          h('li', null, 'Paste it above, click ', h('b', null, 'Send a test'), ' and look in the channel. Then save.')),
+        h('p', { class: 'small muted' },
+          'Only people who manage the Discord server see Integrations: if you don’t, ask its owner for the link. Through the IP KVM, use its paste feature, or open Discord in a browser on this computer and copy the link there.')),
+      switchRow('discordPassword', 'Include the password',
+        'Hidden as a spoiler until it’s clicked. Only turn this on if the channel is just for your friends.'),
+      switchRow('discordStopped', 'Also post when the server stops',
+        'So nobody tries a join code that no longer works.')) : null);
 }
 
 function automationSection() {
@@ -178,6 +206,7 @@ export default {
     const changed = dirty();
     return h('div', { class: 'stack' },
       serverSection(),
+      discordSection(),
       automationSection(),
       restSection(app),
       backupSection(),
@@ -197,14 +226,35 @@ export default {
       saving = true;
       app.render();
       try {
+        const was = view.settings;
+        const discordNew = draft.discord && (!was.discord || (draft.discordWebhook || '').trim() !== (was.discordWebhook || ''));
         await api('/api/settings', { method: 'POST', body: draft });
-        toast(app.status && app.status.state === 'online' ? 'Saved. Restart the server to use the new settings.' : 'Settings saved.', 'good');
+        const st = await api('/api/status').catch(() => null);
+        const online = st && st.state === 'online';
+        toast(online && st.needsRestart ? 'Saved. Restart the server to use the new settings.'
+          : online && discordNew ? 'Saved. The join code is being posted in Discord.' : 'Settings saved.', 'good');
         await load();
       } catch (e) {
         errors = (e.data && e.data.fields) || {};
         toast(e.message, 'bad', 8000);
       } finally {
         saving = false;
+        app.render();
+      }
+    };
+    A['discord-test'] = async () => {
+      testing = true;
+      app.render();
+      try {
+        await api('/api/discord/test', { method: 'POST', body: { webhook: draft.discordWebhook || '' } });
+        delete errors.discordWebhook;
+        toast('Test message sent. Look in the Discord channel.', 'good');
+      } catch (e) {
+        const fields = (e.data && e.data.fields) || {};
+        Object.assign(errors, fields);
+        toast(fields.discordWebhook || e.message, 'bad', 10000);
+      } finally {
+        testing = false;
         app.render();
       }
     };

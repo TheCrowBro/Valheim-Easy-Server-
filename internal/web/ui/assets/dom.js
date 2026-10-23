@@ -111,6 +111,8 @@ const ICONS = {
   arrowLeft: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
   pointer: '<path d="M4 3l7 17 2.5-7.5L21 10z"/>',
   chevronDown: '<polyline points="6 9 12 15 18 9"/>',
+  send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+  message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
 };
 
 const tpl = document.createElement('template');
