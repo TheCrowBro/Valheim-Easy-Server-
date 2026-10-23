@@ -58,8 +58,9 @@ jobs:
           $p = Start-Process -FilePath dist\ValheimEasyServer.exe -ArgumentList "--no-window", "--data", $data, "--port", "18456" -PassThru
           Start-Sleep -Seconds 6
           try {
-            $session = Invoke-RestMethod http://127.0.0.1:18456/api/session
-            Write-Host "Session: $($session | ConvertTo-Json -Compress)"
+            $status = Invoke-RestMethod http://127.0.0.1:18456/api/status
+            Write-Host "Server state: $($status.state)"
+            if ($status.state -ne "not_installed") { throw "Unexpected state $($status.state)." }
             $page = (Invoke-WebRequest http://127.0.0.1:18456/ -UseBasicParsing).Content
             if ($page -notmatch "Valheim Easy Server") { throw "The control panel page didn't load." }
             if ($p.HasExited) { throw "The app exited." }

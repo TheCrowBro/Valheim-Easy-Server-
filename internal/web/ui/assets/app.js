@@ -1,25 +1,24 @@
-// Valheim Easy Server control panel: app shell, login, live status and the
-// actions every page shares.
+// Valheim Easy Server control panel: app shell, live status and the actions
+// every page shares.
 
-import { h, morph, icon, api, onUnauthorized, toast, confirmDialog, copyText, dur, ago } from './dom.js';
+import { h, morph, icon, api, toast, confirmDialog, copyText, dur, ago } from './dom.js';
 import home from './home.js';
 import worlds from './worlds.js';
 import players from './players.js';
 import stats from './stats.js';
 import settings from './settings.js';
 import logPage from './log.js';
+import { initUploads, uploadStatus, ownsJob } from './upload.js';
 
 const PAGES = [home, worlds, players, stats, settings, logPage];
 
 export const app = {
-  session: null,
   status: null,
   offline: false,
   page: home,
   actions: {},
   lastJob: null,
   dismissed: new Set(JSON.parse(sessionStorage.getItem('ves-dismissed') || '[]')),
-  get local() { return !!(this.session && this.session.local); },
   render,
   poll,
   go,
@@ -28,56 +27,14 @@ export const app = {
 const root = document.getElementById('app');
 let pollTimer = null;
 
-// ---------- boot & login ----------
-onUnauthorized(() => { if (app.session && app.session.authenticated) location.reload(); });
-
-async function boot() {
-  try {
-    app.session = await api('/api/session');
-  } catch (e) {
-    root.className = '';
-    root.replaceChildren(h('div', { class: 'boot' }, h('img', { src: '/assets/logo.svg', width: 56, height: 56, alt: '' }), h('p', null, e.message)));
-    setTimeout(boot, 5000);
-    return;
-  }
+// ---------- boot ----------
+function boot() {
   root.className = '';
-  if (!app.session.authenticated) return showLogin();
+  initUploads(app);
   window.addEventListener('hashchange', route);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
   route();
   poll();
-}
-
-function showLogin() {
-  const pw = h('input', { class: 'input', type: 'password', id: 'pw', autocomplete: 'current-password', required: true });
-  const err = h('div', { class: 'error', role: 'alert' });
-  const btn = h('button', { class: 'btn btn-primary btn-lg', type: 'submit', style: { width: '100%' } }, icon('login'), 'Log in');
-  const form = h('form', { class: 'form' },
-    h('div', { class: 'field' }, h('label', { for: 'pw' }, 'Control panel password'), pw, err),
-    btn);
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    btn.disabled = true;
-    err.textContent = '';
-    try {
-      await api('/api/login', { method: 'POST', body: { password: pw.value } });
-      location.reload();
-    } catch (ex) {
-      err.textContent = ex.message;
-      pw.select();
-    } finally {
-      btn.disabled = false;
-    }
-  };
-  root.replaceChildren(h('div', { class: 'login' },
-    h('div', { class: 'login-card' },
-      h('div', { class: 'brand' }, h('img', { src: '/assets/logo.svg', alt: '' })),
-      h('h1', null, 'Valheim Easy Server'),
-      h('p', null, 'Enter the password the server owner gave you.'),
-      form,
-      app.session.onServerPC ? h('p', { class: 'small', style: { marginTop: '18px', marginBottom: 0 } },
-        'On the server computer itself? Click the shield icon next to the clock, or start ValheimEasyServer.exe again. That opens the control panel without a password.') : null)));
-  pw.focus();
 }
 
 // ---------- routing ----------
@@ -105,9 +62,8 @@ async function poll() {
     const wasOffline = app.offline;
     app.offline = false;
     onStatus(st);
-    if (wasOffline) toast('Connected to the server computer again.', 'good');
-  } catch (e) {
-    if (e.status === 401) return;
+    if (wasOffline) toast('Connected to the app again.', 'good');
+  } catch {
     app.offline = true;
     render();
   }
@@ -123,10 +79,13 @@ function onStatus(st) {
   const finished = job && job.finished && job.id > app.lastJob;
   if (finished) {
     app.lastJob = job.id;
-    if (job.error) toast(job.error, 'bad', 10000);
-    else toast(job.result || `${job.title}: done.`, 'good');
+    if (!(ownsJob(job.id) && app.page.id === 'worlds')) { // there, the Add a world section shows it
+      if (job.error) toast(job.error, 'bad', 10000);
+      else toast(job.result || `${job.title}: done.`, 'good');
+    }
   }
   app.status = st;
+  uploadStatus(st);
   render();
   if (finished && app.page.onJobDone) app.page.onJobDone(app, job);
 }
@@ -157,8 +116,7 @@ function sidebar() {
         icon(p.icon), p.title,
         p.id === 'players' && players ? h('span', { class: 'count', 'aria-label': `${players} online` }, players) : null))),
     h('div', { class: 'sidebar-foot' },
-      st && st.machine ? h('div', null, 'Server computer: ', st.machine.hostname) : null,
-      !app.local ? h('button', { class: 'btn btn-ghost btn-sm', 'data-action': 'logout' }, icon('logout'), 'Log out') : null));
+      st && st.machine ? h('div', null, 'Server computer: ', st.machine.hostname) : null));
 }
 
 function topbar() {
@@ -177,14 +135,13 @@ function banners() {
   const out = [];
   if (app.offline) {
     out.push(h('div', { class: 'offline-banner', role: 'alert' }, icon('alert'),
-      h('div', null, h('b', null, "Can't reach the server computer. "),
-        'It may be hibernating, turned off, or offline. This page reconnects by itself.')));
+      h('div', null, h('b', null, 'Lost contact with the app. '),
+        'If it was closed, start ValheimEasyServer.exe again. This page reconnects by itself.')));
   }
   return out;
 }
 
 export function render(force) {
-  if (!app.session || !app.session.authenticated) return;
   const tree = h('div', { class: 'shell' },
     sidebar(),
     h('main', { class: 'main', id: 'main' },
@@ -257,13 +214,12 @@ A.hibernate = async () => {
       ? 'The world is saved and the server stops first. Then the computer goes into hibernation, using almost no power.'
       : 'The computer goes into hibernation, using almost no power.'),
     warn ? h('p', null, h('strong', null, warn)) : null,
-    h('p', null, app.local ? 'To wake it up, press the power button on the computer.'
-      : h('strong', null, 'Nobody can wake it up from here: someone has to press the power button on the server computer.')));
-  if (!await confirmDialog({ title: 'Hibernate the server computer?', message: msg, confirm: 'Hibernate', icon: 'moon' })) return;
+    h('p', null, h('strong', null, 'To wake it up, someone has to press the power button on the computer.')));
+  if (!await confirmDialog({ title: 'Hibernate this computer?', message: msg, confirm: 'Hibernate', icon: 'moon' })) return;
   run('/api/power/hibernate');
 };
 A['keep-awake'] = () => run('/api/power/keep-awake', null, 'Automatic hibernation postponed.');
-A['enable-hibernate'] = () => run('/api/power/enable-hibernate', null, 'Windows will ask for permission on the server computer. Click Yes there.');
+A['enable-hibernate'] = () => run('/api/power/enable-hibernate', null, 'Windows will ask for permission. Click Yes.');
 A['fix-firewall'] = () => run('/api/system/firewall', null, 'Windows will ask for permission. Click Yes, then wait a few seconds.');
 A['open-folder'] = (d) => run('/api/system/open-folder', { which: d.which });
 A.copy = (d) => copyText(d.text, d.label || 'Copied');
@@ -275,10 +231,6 @@ A['dismiss-job'] = (d) => {
 };
 A['show-log'] = () => go('log');
 A['show-settings'] = () => go('settings');
-A.logout = async () => {
-  await api('/api/logout', { method: 'POST' }).catch(() => {});
-  location.reload();
-};
 A.reveal = (d, el) => {
   const target = document.getElementById(d.target);
   if (!target) return;

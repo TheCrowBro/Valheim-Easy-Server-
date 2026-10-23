@@ -1,20 +1,18 @@
-// Settings: one form for the server, automation and backups, plus the
-// control panel access and maintenance sections.
+// Settings: one form for the server, automation, backups and folders, plus
+// maintenance.
 
-import { h, icon, api, toast, confirmDialog, field, toggle } from './dom.js';
+import { h, icon, api, toast, confirmDialog, toggle } from './dom.js';
 
 let view = null;    // last loaded settings response
 let draft = null;   // edited copy of view.settings
 let errors = {};
 let saving = false;
-let panel = null;   // draft of panel settings
 let appRef = null;
 
 async function load() {
   try {
     view = await api('/api/settings');
     draft = structuredClone(view.settings);
-    panel = { remote: view.settings.panel.remote, port: view.settings.panel.port, password: '' };
     errors = {};
   } catch (e) {
     toast(e.message, 'bad');
@@ -62,8 +60,7 @@ function serverSection() {
             'Valheim uses this port and the next one (UDP). 2456 is normal; only change it if something else uses it.')))));
 }
 
-function automationSection(app) {
-  const local = app.local;
+function automationSection() {
   return h('section', { class: 'card' },
     h('div', { class: 'card-head' }, h('h2', null, 'Automatic')),
     switchRow('updateOnStart', 'Update the server before it starts',
@@ -79,8 +76,8 @@ function automationSection(app) {
     }),
     h('div', { class: 'toggle-row' },
       h('div', { class: 'grow' }, h('div', { class: 'title' }, 'Start this app when Windows starts'),
-        h('div', { class: 'help' }, local ? 'Opens quietly in the background (look for the shield in the taskbar corner).' : 'Can only be changed on the server computer.')),
-      toggle({ checked: !!view.launchOnLogin, disabled: !local, 'data-action': 'settings-login', 'aria-label': 'Start with Windows' })));
+        h('div', { class: 'help' }, 'Opens quietly in the background (look for the shield in the taskbar corner).')),
+      toggle({ checked: !!view.launchOnLogin, 'data-action': 'settings-login', 'aria-label': 'Start with Windows' })));
 }
 
 function backupSection() {
@@ -95,42 +92,7 @@ function backupSection() {
       fieldFor('backupLongMinutes', 'Then a backup every', h('div', { class: 'input-group' }, num('backupLongMinutes', { min: 30, max: 10080 }), h('span', { class: 'muted', style: { alignSelf: 'center' } }, 'minutes')))));
 }
 
-function panelSection(app) {
-  if (!view.local) {
-    return h('section', { class: 'card' },
-      h('div', { class: 'card-head' }, h('h2', null, 'Control panel access')),
-      h('p', { class: 'text-2' }, 'You’re using the control panel from another device. Access settings can only be changed on the server computer.'));
-  }
-  const st = app.status;
-  const port = view.panelPort;
-  const addrs = st ? (st.join.lanAddrs || []).map((a) => a.replace(/:\d+$/, '')) : [];
-  const links = addrs.map((ip) => ({ url: `http://${ip}:${port}`, tailscale: ip.startsWith('100.') }));
-  const pw = h('input', { class: 'input', type: 'password', id: 'panel-pw', 'data-panel': 'password', value: panel.password, autocomplete: 'new-password',
-    placeholder: view.panelPasswordSet ? 'Leave empty to keep the current password' : 'At least 6 characters' });
-  return h('section', { class: 'card' },
-    h('div', { class: 'card-head' }, h('h2', null, 'Control panel access')),
-    h('div', { class: 'toggle-row' },
-      h('div', { class: 'grow' }, h('div', { class: 'title' }, 'Let friends use this control panel'),
-        h('div', { class: 'help' }, 'They open it in a browser on their own phone or computer and log in with a password. They can do everything except change these access settings and folders.')),
-      toggle({ checked: panel.remote, 'data-panel': 'remote', 'aria-label': 'Let friends use this control panel' })),
-    h('div', { class: 'field-row', style: { marginTop: '8px' } },
-      field(view.panelPasswordSet ? 'Change the control panel password' : 'Control panel password', pw,
-        view.panelPasswordSet ? 'A password is set. Changing it logs everyone else out.' : 'Different from the game password: this one controls the server.'),
-      field('Port', h('input', { class: 'input', type: 'number', min: 1024, max: 65535, 'data-panel': 'port', value: panel.port }), 'The address friends open ends in this number.')),
-    h('div', { class: 'row', style: { marginTop: '14px' } },
-      h('button', { class: 'btn btn-primary', 'data-action': 'settings-panel' }, icon('save'), 'Save access settings')),
-    view.settings.panel.remote && links.length ? h('div', { class: 'callout info', style: { marginTop: '16px' } }, icon('link'),
-      h('div', { class: 'body' },
-        h('p', null, h('strong', null, 'Send friends one of these links:')),
-        links.map((l) => h('p', { class: 'row', style: { gap: '6px' } }, h('span', { class: 'mono' }, l.url),
-          l.tailscale ? h('span', { class: 'badge' }, 'Tailscale') : h('span', { class: 'badge' }, 'Same network'),
-          h('button', { class: 'btn btn-ghost btn-icon btn-sm', 'data-action': 'copy', 'data-text': l.url, 'data-label': 'Link copied', 'aria-label': 'Copy link' }, icon('copy')))),
-        h('p', { class: 'small text-2', style: { marginTop: '6px' } },
-          'Links marked “Same network” only work for people on your Wi-Fi. For friends elsewhere, install the free Tailscale app on this computer and their devices, or forward the port on your router.'))) : null);
-}
-
 function foldersSection() {
-  if (!view.local) return null;
   const p = view.paths || {};
   const openBtn = (which) => h('button', { class: 'btn', type: 'button', 'data-action': 'open-folder', 'data-which': which }, icon('folder'), 'Open');
   return h('section', { class: 'card' },
@@ -159,12 +121,13 @@ function maintenanceSection(app) {
         h('button', { class: 'btn', 'data-action': 'install', disabled: running || busy }, icon('refresh'), 'Update the server now'),
         h('button', { class: 'btn', 'data-action': 'repair', disabled: running || busy }, icon('wrench'), 'Repair server files'),
         running ? h('span', { class: 'small muted' }, 'Stop the server to update or repair it.') : null),
-      view.local ? h('div', { class: 'row' },
+      h('div', { class: 'row' },
         h('button', { class: 'btn', 'data-action': 'fix-firewall' }, icon('shieldCheck'), 'Allow through Windows Firewall'),
-        st && !st.hibernate.available ? h('button', { class: 'btn', 'data-action': 'enable-hibernate' }, icon('moon'), 'Turn on hibernation') : null) : null,
-      view.local ? h('div', { class: 'row', style: { paddingTop: '12px', borderTop: '1px solid var(--line)' } },
+        st && !st.hibernate.available ? h('button', { class: 'btn', 'data-action': 'enable-hibernate' }, icon('moon'), 'Turn on hibernation') : null),
+      h('div', { class: 'row', style: { paddingTop: '12px', borderTop: '1px solid var(--line)' } },
         h('button', { class: 'btn', 'data-action': 'settings-quit', 'data-stop': '0' }, icon('x'), 'Close the app (server keeps running)'),
-        running ? h('button', { class: 'btn btn-danger', 'data-action': 'settings-quit', 'data-stop': '1' }, icon('power'), 'Stop the server and close the app') : null) : null));
+        running ? h('button', { class: 'btn btn-danger', 'data-action': 'settings-quit', 'data-stop': '1' }, icon('power'), 'Stop the server and close the app') : null),
+      h('p', { class: 'small muted' }, `Valheim Easy Server ${view.version}`)));
 }
 
 export default {
@@ -177,9 +140,8 @@ export default {
     const changed = dirty();
     return h('div', { class: 'stack' },
       serverSection(),
-      automationSection(app),
+      automationSection(),
       backupSection(),
-      panelSection(app),
       foldersSection(),
       maintenanceSection(app),
       changed ? h('div', { class: 'savebar', role: 'region', 'aria-label': 'Unsaved changes' },
@@ -225,21 +187,6 @@ export default {
         toast(e.message, 'bad');
       }
     };
-    A['settings-panel'] = async () => {
-      const body = { remote: panel.remote, port: Number(panel.port), password: panel.password };
-      try {
-        const res = await api('/api/panel', { method: 'POST', body });
-        panel.password = '';
-        toast(body.remote ? 'Friends can now use the control panel.' : 'Saved. Only this computer can use the control panel.', 'good');
-        if (res.port && res.port !== Number(location.port)) {
-          location.href = `${location.protocol}//${location.hostname}:${res.port}/#/settings`;
-          return;
-        }
-        await load();
-      } catch (e) {
-        toast(e.message, 'bad', 9000);
-      }
-    };
     A['settings-quit'] = async (d) => {
       const stop = d.stop === '1';
       const ok = await confirmDialog({
@@ -277,9 +224,6 @@ function onInput(e) {
     else draft[k] = el.value;
     delete errors[k];
     appRef.render();
-  } else if (el.dataset.panel) {
-    const k = el.dataset.panel;
-    panel[k] = el.type === 'checkbox' ? el.checked : el.value;
   }
 }
 

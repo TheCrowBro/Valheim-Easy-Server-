@@ -3,12 +3,14 @@
 package platform
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
@@ -123,34 +125,27 @@ func SetLaunchOnLogin(on bool, exe string, args string) error {
 	return k.SetStringValue(runValue, fmt.Sprintf(`"%s" %s`, exe, args))
 }
 
-const (
-	fwGameRule  = "Valheim Easy Server - game"
-	fwPanelRule = "Valheim Easy Server - control panel"
-)
+const fwGameRule = "Valheim Easy Server - game"
 
-// FirewallReady reports whether this app's firewall rules exist.
+// FirewallReady reports whether the game server's firewall rule exists.
 func FirewallReady() bool {
-	for _, name := range []string{fwGameRule, fwPanelRule} {
-		cmd := exec.Command(system32("netsh.exe"), "advfirewall", "firewall", "show", "rule", "name="+name)
-		cmd.SysProcAttr = HiddenProcAttr()
-		if err := cmd.Run(); err != nil {
-			return false
-		}
-	}
-	return true
+	cmd := exec.Command(system32("netsh.exe"), "advfirewall", "firewall", "show", "rule", "name="+fwGameRule)
+	cmd.SysProcAttr = HiddenProcAttr()
+	return cmd.Run() == nil
 }
 
-// FixFirewall allows the game server and the control panel through Windows
-// Firewall. It first removes any "block" rules Windows created when its
-// firewall pop-up was dismissed. Windows asks for admin permission on the
-// server computer's screen; this returns before that is answered.
+// FixFirewall allows the game server through Windows Firewall. It first
+// removes any "block" rules Windows created when its firewall pop-up was
+// dismissed. The control panel only listens on this computer, so the app
+// itself needs no rule; any left by older versions are removed. Windows
+// asks for admin permission on the screen; this returns before that is
+// answered.
 func FixFirewall(serverExe, appExe, scriptDir string) error {
 	lines := []string{
 		"@echo off",
 		fmt.Sprintf(`netsh advfirewall firewall delete rule name=all program="%s"`, serverExe),
 		fmt.Sprintf(`netsh advfirewall firewall add rule name="%s" dir=in action=allow program="%s" enable=yes profile=any`, fwGameRule, serverExe),
 		fmt.Sprintf(`netsh advfirewall firewall delete rule name=all program="%s"`, appExe),
-		fmt.Sprintf(`netsh advfirewall firewall add rule name="%s" dir=in action=allow program="%s" enable=yes profile=any`, fwPanelRule, appExe),
 	}
 	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
 		return err
@@ -220,4 +215,43 @@ func Confirm(title, msg string) bool {
 	m, _ := windows.UTF16PtrFromString(msg)
 	ret, _ := windows.MessageBox(0, m, t, windows.MB_YESNO|windows.MB_ICONQUESTION|windows.MB_SETFOREGROUND)
 	return ret == 6 // IDYES
+}
+
+var (
+	iphlpapi                = windows.NewLazySystemDLL("iphlpapi.dll")
+	procGetExtendedUdpTable = iphlpapi.NewProc("GetExtendedUdpTable")
+)
+
+// UDPPortInUse reports whether any program has this UDP port open. It reads
+// Windows' table of open ports instead of trying the port, which would make
+// Windows Firewall ask about this app.
+func UDPPortInUse(port int) bool {
+	for _, family := range []struct {
+		af      uintptr
+		rowSize int
+		portOff int
+	}{{2, 12, 4}, {23, 28, 20}} { // IPv4 rows, IPv6 rows (MIB_UDP[6]ROW_OWNER_PID)
+		var size uint32
+		procGetExtendedUdpTable.Call(0, uintptr(unsafe.Pointer(&size)), 0, family.af, 1, 0)
+		if size == 0 {
+			continue
+		}
+		buf := make([]byte, size+1024)
+		size = uint32(len(buf))
+		if r, _, _ := procGetExtendedUdpTable.Call(uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&size)), 0, family.af, 1, 0); r != 0 {
+			continue
+		}
+		n := int(binary.LittleEndian.Uint32(buf[0:4]))
+		for i := 0; i < n; i++ {
+			off := 4 + i*family.rowSize + family.portOff
+			if off+4 > len(buf) {
+				break
+			}
+			p := binary.LittleEndian.Uint32(buf[off : off+4])
+			if int((p&0xff)<<8|(p>>8)&0xff) == port { // stored in network byte order
+				return true
+			}
+		}
+	}
+	return false
 }

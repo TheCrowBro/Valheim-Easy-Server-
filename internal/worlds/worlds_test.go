@@ -27,7 +27,14 @@ func meta(name, seed string) []byte {
 // makeFolderWorld writes a Valheim 1.0 style world folder.
 func makeFolderWorld(t *testing.T, dir, name, seed string) {
 	t.Helper()
-	w := filepath.Join(dir, name)
+	makeFolderWorldAs(t, dir, name, name, seed)
+}
+
+// makeFolderWorldAs writes a world folder whose files say it is called
+// name, like Valheim's backup copies.
+func makeFolderWorldAs(t *testing.T, dir, folder, name, seed string) {
+	t.Helper()
+	w := filepath.Join(dir, folder)
 	writeFile(t, filepath.Join(w, "_main.1.fwl2"), meta(name, seed))
 	writeFile(t, filepath.Join(w, "_main.1.db2"), bytes.Repeat([]byte{1}, 1000))
 	writeFile(t, filepath.Join(w, "_main.1.chunks"), []byte("index"))
@@ -331,8 +338,8 @@ func TestUploadZipAndImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(done, ",") != "Midgard,Old Times" {
-		t.Fatalf("imported = %v", done)
+	if len(done) != 2 || done[0] != (Placed{"Midgard", true}) || done[1] != (Placed{"Old Times", false}) {
+		t.Fatalf("imported = %+v", done)
 	}
 	mid, _ := l.Get("Midgard")
 	if mid.Seed != "Uploaded" {
@@ -401,5 +408,106 @@ func TestLocalCandidates(t *testing.T) {
 	// Copying must leave the game's own saves in place.
 	if _, err := os.Stat(filepath.Join(src[0].Dir, "MyGame", "_main.1.fwl2")); err != nil {
 		t.Fatal("source world was moved instead of copied")
+	}
+}
+
+func TestOneCopyPerWorld(t *testing.T) {
+	l := newLib(t)
+	u, err := l.NewUpload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer u.Remove()
+	// Someone uploads their whole worlds_local folder: the world, Valheim's
+	// backups of it, an old-format copy, and a world that only has backups.
+	makeFolderWorld(t, u.Content, "Midgard", "Main")
+	makeFolderWorldAs(t, u.Content, "Midgard_backup_auto-20240101120000", "Midgard", "Backup1")
+	makeFolderWorldAs(t, u.Content, "Midgard_backup_auto-20240202120000", "Midgard", "Backup2")
+	makeClassicWorld(t, u.Content, "Midgard", "Midgard", "Classic")
+	makeFolderWorldAs(t, u.Content, "Solo_backup_auto-20240101120000", "Solo", "Older")
+	makeFolderWorldAs(t, u.Content, "Solo_backup_auto-20240301120000", "Solo", "Newer")
+	for _, f := range []string{"_main.1.fwl2", "_main.1.db2", "_main.1.chunks", "_main.1.ok", "00_00__0_1.chunk"} {
+		old := time.Now().Add(-48 * time.Hour)
+		os.Chtimes(filepath.Join(u.Content, "Solo_backup_auto-20240101120000", f), old, old)
+	}
+	cands := u.Scan(l)
+	kept := map[string]string{}
+	for _, c := range cands {
+		if !c.Superseded {
+			if _, dup := kept[c.Name]; dup {
+				t.Fatalf("two copies of %s kept: %+v", c.Name, cands)
+			}
+			kept[c.Name] = c.Seed
+		}
+	}
+	if len(cands) != 6 || kept["Midgard"] != "Main" || kept["Solo"] != "Newer" {
+		t.Fatalf("kept %v from %+v", kept, cands)
+	}
+	var choices []Choice
+	for _, c := range cands {
+		action := "import"
+		if c.Superseded {
+			action = "skip"
+		}
+		choices = append(choices, Choice{ID: c.ID, Action: action})
+	}
+	if _, err := l.Import(cands, choices, func(string) bool { return false }, true); err != nil {
+		t.Fatal(err)
+	}
+	if w, err := l.Get("Solo"); err != nil || w.Seed != "Newer" {
+		t.Fatalf("Solo = %+v, %v", w, err)
+	}
+}
+
+func TestNameClashDetails(t *testing.T) {
+	l := newLib(t)
+	makeClassicWorld(t, l.Worlds, "Old", "Old", "Server")
+	makeClassicWorld(t, l.Worlds, "Old 2", "Old 2", "Server")
+	makeFolderWorld(t, l.Worlds, "Midgard", "Server")
+	u, _ := l.NewUpload()
+	defer u.Remove()
+	makeClassicWorld(t, u.Content, "Old", "Old", "Mine")
+	makeFolderWorld(t, u.Content, "Midgard", "Mine")
+	byName := map[string]Candidate{}
+	for _, c := range u.Scan(l) {
+		byName[c.Name] = c
+	}
+	old, mid := byName["Old"], byName["Midgard"]
+	if !old.Exists || old.FreeName != "Old 3" || old.ServerModified.IsZero() || old.ServerSize == 0 {
+		t.Fatalf("classic clash = %+v", old)
+	}
+	if !mid.Exists || mid.FreeName != "" || mid.ServerModified.IsZero() {
+		t.Fatalf("1.0 clash = %+v", mid)
+	}
+	// Keeping both: the upload goes in under the free name.
+	done, err := l.Import(u.Candidates, []Choice{{ID: old.ID, Action: "import", Name: old.FreeName}, {ID: mid.ID, Action: "skip"}},
+		func(string) bool { return false }, true)
+	if err != nil || len(done) != 1 || done[0].Name != "Old 3" {
+		t.Fatalf("keep both = %+v, %v", done, err)
+	}
+	if w, _ := l.Get("Old"); w.Seed != "Server" {
+		t.Fatal("the server's copy was changed")
+	}
+}
+
+func TestFailedReplacePutsOldCopyBack(t *testing.T) {
+	l := newLib(t)
+	makeFolderWorld(t, l.Worlds, "Midgard", "Server")
+	u, _ := l.NewUpload()
+	defer u.Remove()
+	makeFolderWorld(t, u.Content, "Midgard", "Upload")
+	cands := u.Scan(l)
+	// The uploaded files vanish before they can be placed.
+	os.RemoveAll(filepath.Join(u.Content, "Midgard"))
+	_, err := l.Import(cands, []Choice{{ID: cands[0].ID, Action: "replace"}}, func(string) bool { return false }, true)
+	if err == nil || !strings.Contains(err.Error(), "left as it was") {
+		t.Fatalf("err = %v", err)
+	}
+	w, err := l.Get("Midgard")
+	if err != nil || w.Seed != "Server" {
+		t.Fatalf("Midgard after failed replace = %+v, %v", w, err)
+	}
+	if _, err := os.Stat(filepath.Join(l.Worlds, "Midgard", "00_00__0_1.chunk")); err != nil {
+		t.Fatal("old copy not fully restored")
 	}
 }

@@ -3,6 +3,7 @@
 package platform
 
 import (
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -189,5 +190,20 @@ func TestParseEngineInstance(t *testing.T) {
 	}, []string{"AMD FirePro D500", "AMD FirePro D500"})
 	if len(gpus) != 2 || gpus[0].Percent != 50 || gpus[1].Percent != 5 || index["0x0_0xB"] != 1 || gpus[0].Name != "AMD FirePro D500" {
 		t.Fatalf("gpus = %+v %v", gpus, index)
+	}
+}
+
+func TestUDPPortInUse(t *testing.T) {
+	c, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := c.LocalAddr().(*net.UDPAddr).Port
+	if !UDPPortInUse(port) {
+		t.Fatalf("port %d is open but reported free", port)
+	}
+	c.Close()
+	if UDPPortInUse(port) {
+		t.Fatalf("port %d reported in use after closing", port)
 	}
 }

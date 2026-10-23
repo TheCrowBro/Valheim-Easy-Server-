@@ -1,7 +1,7 @@
 // Players: who's online, everyone who has played, and the admin / banned /
 // allowed lists.
 
-import { h, icon, api, toast, confirmDialog, dur, ago, initials } from './dom.js';
+import { h, icon, api, toast, confirmDialog, dur, ago, clock, initials } from './dom.js';
 
 let known = null;
 let lists = null;
@@ -46,7 +46,7 @@ function onlineCard(app) {
     st.players.length ? h('div', { class: 'list' }, st.players.map((p) => h('div', { class: 'list-row', 'data-key': p.name },
       h('div', { class: 'avatar' }, initials(p.name)),
       h('div', { class: 'grow' }, h('div', { class: 'name' }, p.name),
-        h('div', { class: 'sub' }, `Joined ${ago(p.since)} · playing for ${dur((Date.now() - new Date(p.since)) / 1000)}`))))) :
+        h('div', { class: 'sub' }, `Joined at ${clock(p.since)} · playing for ${dur((Date.now() - new Date(p.since)) / 1000)}`))))) :
       h('div', { class: 'empty' }, icon('users'), st.state === 'online' ? 'Nobody’s playing right now.' : 'The server is offline.'));
 }
 
@@ -70,7 +70,7 @@ function knownCard(app) {
             h('b', null, p.name), admin ? h('span', { class: 'badge accent' }, 'Admin') : null, banned ? h('span', { class: 'badge bad' }, 'Banned') : null)),
           h('td', null, p.platformId ? h('span', { class: 'copyable' }, h('span', { class: 'mono small' }, p.platformId),
             h('button', { class: 'btn btn-ghost btn-icon btn-sm', 'data-action': 'copy', 'data-text': p.platformId, 'data-label': 'Player ID copied', 'aria-label': 'Copy player ID' }, icon('copy'))) : h('span', { class: 'muted' }, 'unknown')),
-          h('td', null, ago(p.lastSeen)),
+          h('td', null, app.status && app.status.players.some((x) => x.name === p.name) ? h('span', { class: 'badge good' }, 'Playing now') : ago(p.lastSeen)),
           h('td', { class: 'num' }, playedSeconds(app, p) >= 60 ? dur(playedSeconds(app, p)) : '–'),
           h('td', { class: 'num' }, p.sessions || 0),
           h('td', null, h('div', { class: 'row', style: { flexWrap: 'nowrap', justifyContent: 'flex-end' } },

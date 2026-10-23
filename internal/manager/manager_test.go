@@ -15,6 +15,7 @@ import (
 
 	"valheim-easy-server/internal/config"
 	"valheim-easy-server/internal/steamcmd"
+	"valheim-easy-server/internal/worlds"
 )
 
 var fakeServer string
@@ -77,7 +78,7 @@ func setup(t *testing.T) *testEnv {
 	s.Port = 20000 + rand.Intn(20000)
 	s.SaveIntervalMinutes = 1
 	s.UpdateOnStart = false
-	if err := env.m.UpdateSettings(s, true); err != nil {
+	if err := env.m.UpdateSettings(s); err != nil {
 		t.Fatal(err)
 	}
 	env.m.Start()
@@ -182,7 +183,7 @@ func TestLifecycleWithFakeServer(t *testing.T) {
 	// Settings changes while running should ask for a restart.
 	s := m.Settings()
 	s.ServerName = "Renamed Server"
-	if err := m.UpdateSettings(s, false); err != nil {
+	if err := m.UpdateSettings(s); err != nil {
 		t.Fatal(err)
 	}
 	if !m.Status().NeedsRestart {
@@ -249,6 +250,7 @@ func TestCrashRestartsAutomatically(t *testing.T) {
 }
 
 func TestTakesOverRunningServer(t *testing.T) {
+	t.Setenv("FAKE_VALHEIM_SCRIPT", "join:Gunnar@2")
 	env := setup(t)
 	m := env.m
 	install(t, m)
@@ -257,7 +259,8 @@ func TestTakesOverRunningServer(t *testing.T) {
 	}
 	waitFor(t, "server online", 20*time.Second, func() bool { return m.Status().State == StateOnline })
 	pid := m.run.proc.PID()
-	m.Close() // the app closes; the server keeps running
+	m.Close()                   // the app closes; the server keeps running
+	time.Sleep(3 * time.Second) // Gunnar joins while the app is closed
 
 	m2 := newTestManager(t, env.data, env)
 	m2.Start()
@@ -269,6 +272,14 @@ func TestTakesOverRunningServer(t *testing.T) {
 	if !hasActivity(m2, "info", "") {
 		t.Fatal("no activity about taking over")
 	}
+	waitFor(t, "the player who joined meanwhile to be remembered", 10*time.Second, func() bool {
+		for _, p := range m2.KnownPlayers() {
+			if p.Name == "Gunnar" && p.PlatformID != "" {
+				return true
+			}
+		}
+		return false
+	})
 	if err := m2.StopServer(); err != nil {
 		t.Fatal(err)
 	}
@@ -327,5 +338,99 @@ func TestWorldSwitchAndCreate(t *testing.T) {
 	}
 	if err := m.DeleteWorld("Second World"); err == nil {
 		t.Fatal("deleting the selected world should be refused")
+	}
+}
+
+func TestReplaceRunningWorld(t *testing.T) {
+	env := setup(t)
+	m := env.m
+	install(t, m)
+	if err := m.StartServer(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "server online", 30*time.Second, func() bool { return m.Status().State == StateOnline })
+	waitJob(t, m, currentJobID(m))
+
+	// A friend brings their own copy of the world the server is playing.
+	u, err := m.NewUpload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(u.Content, "Midgard")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "_main.7.fwl2"), worlds.BuildMeta(worlds.Meta{Version: 37, Name: "Midgard", SeedName: "FromFriend", Seed: 5, UID: 6}, true), 0o644)
+	os.WriteFile(filepath.Join(dir, "_main.7.db2"), []byte("friend's world"), 0o644)
+	os.WriteFile(filepath.Join(dir, "00_00__0_7.chunk"), []byte("chunk"), 0o644)
+	cands, err := m.FinishUpload(u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cands) != 1 || !cands[0].Exists || !cands[0].InUse {
+		t.Fatalf("candidates = %+v", cands)
+	}
+	id, err := m.ImportUpload(u.ID, []worlds.Choice{{ID: cands[0].ID, Action: "replace"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := waitJob(t, m, id)
+	if job.Error != "" || !strings.Contains(job.Result, "restarted") {
+		t.Fatalf("job = %+v", job)
+	}
+	st := m.Status()
+	if st.State != StateOnline || st.RunningWorld != "Midgard" {
+		t.Fatalf("after replacing: state=%s world=%q", st.State, st.RunningWorld)
+	}
+	w, err := m.library().Get("Midgard")
+	if err != nil || w.Seed != "FromFriend" {
+		t.Fatalf("Midgard = %+v, %v", w, err)
+	}
+	kept := false
+	for _, b := range w.Backups {
+		if b.Kind == worlds.KindApp && strings.Contains(b.Label, "replac") {
+			kept = true
+		}
+	}
+	if !kept {
+		t.Fatalf("no backup of the replaced world: %+v", w.Backups)
+	}
+	if _, err := m.Upload(u.ID); err == nil {
+		t.Fatal("the upload should be cleaned up")
+	}
+}
+
+func TestFirstWorldAddedIsPlayed(t *testing.T) {
+	env := setup(t)
+	m := env.m
+	add := func(name string) *Job {
+		t.Helper()
+		u, err := m.NewUpload()
+		if err != nil {
+			t.Fatal(err)
+		}
+		dir := filepath.Join(u.Content, name)
+		os.MkdirAll(dir, 0o755)
+		os.WriteFile(filepath.Join(dir, "_main.1.fwl2"), worlds.BuildMeta(worlds.Meta{Version: 37, Name: name, SeedName: "S", Seed: 1, UID: 2}, true), 0o644)
+		os.WriteFile(filepath.Join(dir, "_main.1.db2"), []byte("db"), 0o644)
+		cands, err := m.FinishUpload(u.ID)
+		if err != nil || len(cands) != 1 || cands[0].Exists {
+			t.Fatalf("scan %s: %+v %v", name, cands, err)
+		}
+		id, err := m.ImportUpload(u.ID, []worlds.Choice{{ID: cands[0].ID, Action: "import"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return waitJob(t, m, id)
+	}
+	if job := add("Our World"); job.Error != "" || !strings.Contains(job.Result, "now the world the server plays") {
+		t.Fatalf("first world: %+v", job)
+	}
+	if got := m.Settings().World; got != "Our World" {
+		t.Fatalf("selected = %q", got)
+	}
+	if job := add("Another"); job.Error != "" || strings.Contains(job.Result, "plays") {
+		t.Fatalf("second world: %+v", job)
+	}
+	if got := m.Settings().World; got != "Our World" {
+		t.Fatalf("a second world changed the selection to %q", got)
 	}
 }

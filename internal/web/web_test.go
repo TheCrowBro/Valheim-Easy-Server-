@@ -6,11 +6,13 @@ import (
 	"io"
 	"log"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
 	"strings"
 	"testing"
+	"time"
 
 	"valheim-easy-server/internal/manager"
 	"valheim-easy-server/internal/worlds"
@@ -34,69 +36,76 @@ func newTestServer(t *testing.T) *testServer {
 	}
 	m.Start()
 	t.Cleanup(m.Close)
-	return &testServer{t: t, s: New(Options{Manager: m, Logger: logger, DataDir: dir, Version: "test"}), m: m, dir: dir}
+	return &testServer{t: t, s: New(Options{Manager: m, Logger: logger, Version: "test"}), m: m, dir: dir}
 }
 
-// do sends a request from addr ("127.0.0.1" is this computer).
-func (ts *testServer) do(method, path, addr string, cookie *http.Cookie, body io.Reader, headers map[string]string) *httptest.ResponseRecorder {
+// do sends a request from addr ("127.0.0.1" is this computer) to the panel
+// at 127.0.0.1:8456, unless headers give another Host.
+func (ts *testServer) do(method, path, addr string, body io.Reader, headers map[string]string) *httptest.ResponseRecorder {
 	ts.t.Helper()
 	req := httptest.NewRequest(method, path, body)
-	req.RemoteAddr = addr + ":50000"
-	if cookie != nil {
-		req.AddCookie(cookie)
-	}
+	req.RemoteAddr = net.JoinHostPort(addr, "50000")
+	req.Host = "127.0.0.1:8456"
 	for k, v := range headers {
-		req.Header.Set(k, v)
+		if k == "Host" {
+			req.Host = v
+		} else {
+			req.Header.Set(k, v)
+		}
 	}
 	rec := httptest.NewRecorder()
 	ts.s.ServeHTTP(rec, req)
 	return rec
 }
 
-func sessionCookie(rec *httptest.ResponseRecorder) *http.Cookie {
-	for _, c := range rec.Result().Cookies() {
-		if c.Name == cookieName && c.Value != "" {
-			return c
-		}
-	}
-	return nil
-}
-
 var csrf = map[string]string{"X-VES": "1"}
 
-func TestLocalTokenLogin(t *testing.T) {
+func TestOnlyThisComputer(t *testing.T) {
 	ts := newTestServer(t)
-	if rec := ts.do("GET", "/api/status", "127.0.0.1", nil, nil, nil); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status without login = %d", rec.Code)
+	for _, c := range []struct {
+		addr, host string
+		want       int
+	}{
+		{"127.0.0.1", "127.0.0.1:8456", http.StatusOK},
+		{"127.0.0.1", "localhost:8456", http.StatusOK},
+		{"::1", "[::1]:8456", http.StatusOK},
+		{"192.0.2.10", "127.0.0.1:8456", http.StatusForbidden},   // another device
+		{"127.0.0.1", "evil.example:8456", http.StatusForbidden}, // a website pointing its name at this computer
+		{"127.0.0.1", "192.168.1.20:8456", http.StatusForbidden}, // not addressed as this computer
+	} {
+		for _, path := range []string{"/api/status", "/"} {
+			if rec := ts.do("GET", path, c.addr, nil, map[string]string{"Host": c.host}); rec.Code != c.want {
+				t.Errorf("GET %s from %s as %s = %d, want %d", path, c.addr, c.host, rec.Code, c.want)
+			}
+		}
 	}
-	if rec := ts.do("GET", "/?token=wrong", "127.0.0.1", nil, nil, nil); sessionCookie(rec) != nil {
-		t.Fatal("a wrong token logged in")
+}
+
+func TestBlocksOtherSites(t *testing.T) {
+	ts := newTestServer(t)
+	// Other sites can't read the API or start downloads…
+	if rec := ts.do("GET", "/api/status", "127.0.0.1", nil, map[string]string{"Sec-Fetch-Site": "cross-site"}); rec.Code != http.StatusForbidden {
+		t.Fatalf("cross-site status = %d", rec.Code)
 	}
-	// The token only works from this computer.
-	if rec := ts.do("GET", "/?token="+ts.s.Token(), "192.0.2.10", nil, nil, nil); sessionCookie(rec) != nil {
-		t.Fatal("the app token worked from another device")
+	if rec := ts.do("GET", "/api/worlds/download?name=Midgard", "127.0.0.1", nil, map[string]string{"Sec-Fetch-Site": "same-site"}); rec.Code != http.StatusForbidden {
+		t.Fatalf("same-site download = %d", rec.Code)
 	}
-	rec := ts.do("GET", "/?token="+ts.s.Token(), "127.0.0.1", nil, nil, nil)
-	c := sessionCookie(rec)
-	if rec.Code != http.StatusFound || c == nil || !c.HttpOnly || c.SameSite != http.SameSiteStrictMode {
-		t.Fatalf("token login: code %d cookie %+v", rec.Code, c)
+	// …but a link to the panel itself still opens it.
+	if rec := ts.do("GET", "/", "127.0.0.1", nil, map[string]string{"Sec-Fetch-Site": "cross-site"}); rec.Code != http.StatusOK {
+		t.Fatalf("cross-site link to the page = %d", rec.Code)
 	}
-	if rec := ts.do("GET", "/api/status", "127.0.0.1", c, nil, nil); rec.Code != http.StatusOK {
-		t.Fatalf("status = %d", rec.Code)
-	}
-	// A copied local cookie is no good from another device.
-	if rec := ts.do("GET", "/api/status", "192.0.2.10", c, nil, nil); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("local cookie from another device = %d", rec.Code)
+	if rec := ts.do("GET", "/api/status", "127.0.0.1", nil, map[string]string{"Sec-Fetch-Site": "same-origin"}); rec.Code != http.StatusOK {
+		t.Fatalf("the panel's own request = %d", rec.Code)
 	}
 	// Actions need the anti-forgery header…
-	if rec := ts.do("POST", "/api/server/start", "127.0.0.1", c, nil, nil); rec.Code != http.StatusForbidden {
+	if rec := ts.do("POST", "/api/server/start", "127.0.0.1", nil, nil); rec.Code != http.StatusForbidden {
 		t.Fatalf("POST without header = %d", rec.Code)
 	}
 	// …and a matching origin when the browser sends one.
-	if rec := ts.do("POST", "/api/server/start", "127.0.0.1", c, nil, map[string]string{"X-VES": "1", "Origin": "http://evil.example"}); rec.Code != http.StatusForbidden {
+	if rec := ts.do("POST", "/api/server/start", "127.0.0.1", nil, map[string]string{"X-VES": "1", "Origin": "http://evil.example"}); rec.Code != http.StatusForbidden {
 		t.Fatalf("POST from another site = %d", rec.Code)
 	}
-	rec = ts.do("POST", "/api/server/start", "127.0.0.1", c, nil, csrf)
+	rec := ts.do("POST", "/api/server/start", "127.0.0.1", nil, map[string]string{"X-VES": "1", "Origin": "http://127.0.0.1:8456"})
 	var body map[string]any
 	json.NewDecoder(rec.Body).Decode(&body)
 	if rec.Code != http.StatusBadRequest || body["action"] != "install" {
@@ -104,58 +113,9 @@ func TestLocalTokenLogin(t *testing.T) {
 	}
 }
 
-func TestRemoteLoginAndLimits(t *testing.T) {
-	ts := newTestServer(t)
-	login := func(pw, addr string) *httptest.ResponseRecorder {
-		return ts.do("POST", "/api/login", addr, nil, strings.NewReader(`{"password":"`+pw+`"}`), csrf)
-	}
-	if rec := login("anything", "192.0.2.20"); rec.Code != http.StatusForbidden {
-		t.Fatalf("login with remote access off = %d", rec.Code)
-	}
-	if _, err := ts.m.SetPanel(true, 8456, "correct horse"); err != nil {
-		t.Fatal(err)
-	}
-	if rec := login("nope", "192.0.2.20"); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong password = %d", rec.Code)
-	}
-	rec := login("correct horse", "192.0.2.20")
-	c := sessionCookie(rec)
-	if rec.Code != http.StatusOK || c == nil || c.MaxAge <= 0 {
-		t.Fatalf("login = %d cookie %+v", rec.Code, c)
-	}
-	if rec := ts.do("GET", "/api/status", "192.0.2.20", c, nil, nil); rec.Code != http.StatusOK {
-		t.Fatalf("friend status = %d", rec.Code)
-	}
-	// Friends can't use the server-computer-only actions…
-	if rec := ts.do("POST", "/api/system/firewall", "192.0.2.20", c, nil, csrf); rec.Code != http.StatusForbidden {
-		t.Fatalf("friend firewall = %d", rec.Code)
-	}
-	if rec := ts.do("POST", "/api/panel", "192.0.2.20", c, strings.NewReader(`{"remote":false,"port":8456}`), csrf); rec.Code != http.StatusForbidden {
-		t.Fatalf("friend changing access = %d", rec.Code)
-	}
-	// …and don't see folders or the stored password hash.
-	rec = ts.do("GET", "/api/settings", "192.0.2.20", c, nil, nil)
-	if strings.Contains(rec.Body.String(), "pbkdf2") || strings.Contains(rec.Body.String(), ts.dir) {
-		t.Fatalf("settings leak to friends: %s", rec.Body.String())
-	}
-	// Guessing is slowed down per address.
-	for i := 0; i < maxFailures; i++ {
-		login("guess", "192.0.2.30")
-	}
-	if rec := login("correct horse", "192.0.2.30"); rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("after many wrong passwords = %d", rec.Code)
-	}
-	// Changing the password logs friends out.
-	ts.s.sessions.removeRemote()
-	if rec := ts.do("GET", "/api/status", "192.0.2.20", c, nil, nil); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("after logout of friends = %d", rec.Code)
-	}
-}
-
 func TestUploadKeepsFolders(t *testing.T) {
 	ts := newTestServer(t)
-	c := sessionCookie(ts.do("GET", "/?token="+ts.s.Token(), "127.0.0.1", nil, nil, nil))
-	rec := ts.do("POST", "/api/uploads", "127.0.0.1", c, nil, csrf)
+	rec := ts.do("POST", "/api/uploads", "127.0.0.1", nil, csrf)
 	var up struct{ ID string }
 	json.NewDecoder(rec.Body).Decode(&up)
 	if up.ID == "" {
@@ -174,22 +134,39 @@ func TestUploadKeepsFolders(t *testing.T) {
 	add("Asgard/_main.1.db2", []byte("world data"))
 	add("Asgard/00_00__0_1.chunk", []byte("chunk"))
 	mw.Close()
-	rec = ts.do("POST", "/api/uploads/"+up.ID+"/files", "127.0.0.1", c, &buf,
+	rec = ts.do("POST", "/api/uploads/"+up.ID+"/files", "127.0.0.1", &buf,
 		map[string]string{"X-VES": "1", "Content-Type": mw.FormDataContentType()})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("upload = %d %s", rec.Code, rec.Body.String())
 	}
-	rec = ts.do("POST", "/api/uploads/"+up.ID+"/scan", "127.0.0.1", c, nil, csrf)
+	rec = ts.do("POST", "/api/uploads/"+up.ID+"/scan", "127.0.0.1", nil, csrf)
 	var scan struct{ Candidates []worlds.Candidate }
 	json.NewDecoder(rec.Body).Decode(&scan)
 	if len(scan.Candidates) != 1 || scan.Candidates[0].Name != "Asgard" || scan.Candidates[0].Format != worlds.FormatFolder {
 		t.Fatalf("scan = %d %+v", rec.Code, scan)
 	}
+	rec = ts.do("POST", "/api/uploads/"+up.ID+"/import", "127.0.0.1",
+		strings.NewReader(`{"choices":[{"id":"`+scan.Candidates[0].ID+`","action":"import"}]}`), csrf)
+	var imp struct{ Job int }
+	json.NewDecoder(rec.Body).Decode(&imp)
+	if rec.Code != http.StatusOK || imp.Job == 0 {
+		t.Fatalf("import = %d job %d", rec.Code, imp.Job)
+	}
+	placed := func() bool {
+		v, _ := ts.m.Worlds()
+		return len(v.Worlds) == 1 && v.Worlds[0].Name == "Asgard"
+	}
+	for i := 0; i < 100 && !placed(); i++ {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !placed() {
+		t.Fatal("the world wasn't put in the worlds folder")
+	}
 }
 
 func TestStaticAndHeaders(t *testing.T) {
 	ts := newTestServer(t)
-	rec := ts.do("GET", "/", "192.0.2.40", nil, nil, nil)
+	rec := ts.do("GET", "/", "127.0.0.1", nil, nil)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Valheim Easy Server") {
 		t.Fatalf("index = %d", rec.Code)
 	}
@@ -197,7 +174,7 @@ func TestStaticAndHeaders(t *testing.T) {
 		t.Fatalf("CSP = %q", csp)
 	}
 	for _, f := range []string{"/assets/app.js", "/assets/app.css", "/assets/logo.svg"} {
-		if rec := ts.do("GET", f, "192.0.2.40", nil, nil, nil); rec.Code != http.StatusOK {
+		if rec := ts.do("GET", f, "127.0.0.1", nil, nil); rec.Code != http.StatusOK {
 			t.Fatalf("%s = %d", f, rec.Code)
 		}
 	}

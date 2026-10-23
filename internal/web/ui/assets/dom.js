@@ -39,7 +39,10 @@ export function morph(from, to) {
     return from;
   }
   if (from.hasAttribute && from.hasAttribute('data-keep')) return from;
-  for (const { name } of [...from.attributes]) if (!to.hasAttribute(name)) from.removeAttribute(name);
+  for (const { name } of [...from.attributes]) {
+    if (name === 'open' && from.tagName === 'DETAILS') continue; // opened or closed by the user
+    if (!to.hasAttribute(name)) from.removeAttribute(name);
+  }
   for (const { name, value } of [...to.attributes]) if (from.getAttribute(name) !== value) from.setAttribute(name, value);
   if (from.tagName === 'INPUT' || from.tagName === 'TEXTAREA' || from.tagName === 'SELECT') {
     if (document.activeElement !== from && from.value !== to.value) from.value = to.value;
@@ -96,7 +99,6 @@ const ICONS = {
   shieldCheck: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
   ban: '<circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/>',
   key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>',
-  link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
   refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.8 9.8 0 0 1 6.7 2.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.8 9.8 0 0 1-6.7-2.7L3 16"/><path d="M8 16H3v5"/>',
   power: '<path d="M18.4 6.6a9 9 0 1 1-12.8 0"/><line x1="12" y1="2" x2="12" y2="12"/>',
   edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
@@ -123,9 +125,6 @@ export class ApiError extends Error {
   }
 }
 
-let unauthorizedHandler = () => {};
-export function onUnauthorized(fn) { unauthorizedHandler = fn; }
-
 export async function api(path, { method = 'GET', body } = {}) {
   const opts = { method, headers: {}, credentials: 'same-origin', cache: 'no-store' };
   if (method !== 'GET') opts.headers['X-VES'] = '1';
@@ -137,11 +136,7 @@ export async function api(path, { method = 'GET', body } = {}) {
   try {
     res = await fetch(path, opts);
   } catch {
-    throw new ApiError("Can't reach the server computer. It may be asleep, turned off or offline.", 0);
-  }
-  if (res.status === 401 && path !== '/api/login') {
-    unauthorizedHandler();
-    throw new ApiError('Please log in again.', 401);
+    throw new ApiError("Can't reach the app. If it was closed, start ValheimEasyServer.exe again.", 0);
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(data.error || `Request failed (${res.status})`, res.status, data);

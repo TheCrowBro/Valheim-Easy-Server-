@@ -4,6 +4,7 @@ package platform
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"runtime"
@@ -92,3 +93,13 @@ func parentDir(p string) string {
 
 // Confirm has no dialog outside Windows; it always says yes.
 func Confirm(title, msg string) bool { return true }
+
+// UDPPortInUse reports whether a UDP port is taken, by trying to open it.
+func UDPPortInUse(port int) bool {
+	c, err := net.ListenPacket("udp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return true
+	}
+	c.Close()
+	return false
+}

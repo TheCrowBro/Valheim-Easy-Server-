@@ -14,6 +14,7 @@ import (
 	"runtime/debug"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"valheim-easy-server/internal/config"
@@ -56,7 +57,7 @@ type Options struct {
 type Manager struct {
 	opt     Options
 	log     *log.Logger
-	lib     *worlds.Library
+	libPtr  atomic.Pointer[worlds.Library] // replaced when the folders change; see library
 	sys     *platform.SysSampler
 	awake   *platform.KeepAwake
 	machine platform.MachineInfo
@@ -117,6 +118,7 @@ type serverRun struct {
 	info       runInfo
 	tracker    logparse.Tracker
 	stopping   bool
+	forced     bool // ended with Force stop
 	ready      bool
 	replaying  bool          // reading an existing log after adopting a running server
 	done       chan struct{} // closed when the process has exited
@@ -177,7 +179,7 @@ func New(opt Options) (*Manager, error) {
 			return nil, fmt.Errorf("can't write to %s: %w", opt.DataDir, err)
 		}
 	}
-	m.lib = &worlds.Library{Worlds: m.paths.Worlds, Backups: m.paths.Backups, Staging: m.paths.Staging}
+	m.libPtr.Store(newLibrary(m.paths))
 	if opt.Installer == nil && opt.NewInstaller != nil {
 		opt.Installer = opt.NewInstaller(m.paths)
 		m.opt.Installer = opt.Installer
@@ -212,7 +214,7 @@ func (m *Manager) Start() {
 	m.ctx, m.cancel = context.WithCancel(context.Background())
 	m.sys = platform.NewSysSampler()
 	m.awake = platform.NewKeepAwake("Valheim server is running")
-	m.lib.CleanUploads(time.Hour)
+	m.library().CleanUploads(time.Hour)
 	m.adoptRunning()
 	m.go_(m.sampleLoop)
 	m.go_(m.checksLoop)

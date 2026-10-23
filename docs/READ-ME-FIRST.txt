@@ -2,7 +2,8 @@ VALHEIM EASY SERVER
 ===================
 
 Run your own Valheim server on this computer, with a simple control panel
-for you and your friends.
+right here on it. Friends who help look after the server use the same
+panel through an IP KVM or remote desktop.
 
 
 SETTING UP (once, on the server computer)
@@ -19,13 +20,15 @@ SETTING UP (once, on the server computer)
    and wait a few minutes. It downloads the free Valheim dedicated server
    from Steam (about 1 GB). You don't need to own Valheim on this computer.
 
-4. Click "Start server". When it says "Online", friends can join with the
+4. Already have a world? Open "Worlds" and drop it on "Add a world"
+   (see ADDING A WORLD below). Otherwise the server makes a new one.
+
+5. Click "Start server". When it says "Online", friends can join with the
    join code and password shown under "How friends join".
 
-5. Finish the checklist under "Setup on this computer" on the Home page:
+6. Finish the checklist under "Setup on this computer" on the Home page:
    - Allow it through Windows Firewall (click Yes when Windows asks)
    - Turn on hibernation
-   - Let friends use the control panel from their own phone or computer
    - Start this app with Windows
 
 Closing the window doesn't stop anything: the app stays next to the clock
@@ -33,21 +36,34 @@ Closing the window doesn't stop anything: the app stays next to the clock
 it for Start, Stop, Hibernate and Close.
 
 
-FOR FRIENDS
------------
-To play:   open Valheim, go to Join Game and enter the join code (or the
-           address) and the password from the control panel.
+ADDING A WORLD
+--------------
+1. On the PC where the world was played, press Windows + R, paste this and
+   press Enter:
+       %userprofile%\AppData\LocalLow\IronGate\Valheim\worlds_local
+   Each world is a folder there (older worlds are two files, Name.fwl and
+   Name.db).
 
-To control the server (if the owner allowed it): open the link the owner
-           gave you, for example http://192.168.1.20:8456, and log in with
-           the control panel password. You can start and stop the server,
-           switch worlds, upload worlds, see stats, and hibernate the computer.
+2. Bring it to the server computer: on a USB stick, or zip it and send it
+   through a chat or cloud drive, then download it there.
+
+3. In the control panel, open "Worlds" and drop the folder, the two files
+   or the zip onto "Add a world" (or click "Choose a world folder").
+   The app puts it in the right place by itself. It only asks if the
+   server already has a world with the same name, and it keeps a backup
+   of anything it replaces.
+
+
+TO PLAY
+-------
+Open Valheim, go to Join Game and enter the join code (or the address) and
+the password from the control panel.
 
 
 WAKING THE COMPUTER UP
 ----------------------
-After "Hibernate", press the power button on the server computer. If the
-server was running before, it starts again by itself.
+After "Hibernate", someone has to press the power button on the server
+computer. If the server was running before, it starts again by itself.
 
 
 MORE HELP

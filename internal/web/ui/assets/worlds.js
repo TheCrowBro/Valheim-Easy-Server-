@@ -1,7 +1,8 @@
-// Worlds: pick which world the server plays, create new ones, move worlds
-// in and out (upload/download), and manage backups.
+// Worlds: add worlds (the Add a world section), pick which world the server
+// plays, create new ones, download them, and manage backups.
 
 import { h, icon, api, toast, openModal, confirmDialog, fmtBytes, ago, dateTime, field } from './dom.js';
+import { uploadSection, recent } from './upload.js';
 
 let data = null;
 let loadedAt = 0;
@@ -72,7 +73,8 @@ function worldCard(app, w) {
     h('button', { role: 'menuitem', 'data-action': 'world-options', 'data-name': w.name }, icon('gauge'), 'Difficulty'),
     w.format === 'classic' ? h('button', { role: 'menuitem', 'data-action': 'world-rename', 'data-name': w.name }, icon('edit'), 'Rename') : null,
     h('button', { role: 'menuitem', class: 'danger', 'data-action': 'world-delete', 'data-name': w.name }, icon('trash'), 'Delete…')) : null;
-  return h('article', { class: `card world${selected ? ' selected' : ''}`, 'data-key': w.name },
+  const fresh = recent.names.includes(w.name) && Date.now() < recent.until;
+  return h('article', { class: `card world${selected ? ' selected' : ''}${fresh ? ' just-added' : ''}`, 'data-key': w.name, 'data-world': w.name },
     h('div', { class: 'row' },
       h('div', { class: 'world-name' }, w.name),
       h('span', { class: 'spacer' }),
@@ -126,17 +128,17 @@ export default {
     const exists = data.worlds.some((w) => w.name === data.selected);
     const busy = app.status && app.status.job && !app.status.job.finished;
     return h('div', null,
-      h('div', { class: 'row', style: { marginBottom: '16px' } },
+      uploadSection(app),
+      h('div', { class: 'row', style: { margin: '22px 0 16px' } },
         h('p', { class: 'text-2', style: { flex: '1 1 320px' } },
           'The server plays the ', h('b', null, 'selected'), ' world. Switching worlds restarts the server, and your other worlds stay safe here.'),
-        h('button', { class: 'btn btn-primary', 'data-action': 'world-new', disabled: busy }, icon('plus'), 'New world'),
-        h('button', { class: 'btn', 'data-action': 'world-upload', disabled: busy }, icon('upload'), 'Upload a world'),
-        app.local ? h('button', { class: 'btn', 'data-action': 'world-local', disabled: busy }, icon('folder'), 'Import from this PC') : null),
+        h('button', { class: 'btn', 'data-action': 'world-new', disabled: busy }, icon('plus'), 'New world'),
+        h('button', { class: 'btn', 'data-action': 'world-local', disabled: busy }, icon('folder'), 'Import from this PC')),
       h('div', { class: 'world-grid' },
         exists ? null : pendingCard(data.selected),
         data.worlds.map((w) => worldCard(app, w))),
       orphanSection(app),
-      app.local && data.folder ? h('p', { class: 'small muted', style: { marginTop: '18px' } },
+      data.folder ? h('p', { class: 'small muted', style: { marginTop: '18px' } },
         'Worlds are stored in ', h('span', { class: 'mono' }, data.folder), ' ',
         h('a', { href: '#', 'data-action': 'open-folder', 'data-which': 'worlds' }, 'Open folder')) : null);
   },
@@ -153,6 +155,15 @@ export default {
     openMenu = null;
   },
   onJobDone() { load(true); },
+  afterRender() {
+    // Show a world that was just added.
+    if (recent.scrolled || Date.now() > recent.until || !recent.names.length) return;
+    const card = [...document.querySelectorAll('[data-world]')].find((el) => el.dataset.world === recent.names[0]);
+    if (card) {
+      recent.scrolled = true;
+      card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  },
 };
 
 function closeMenus(e) {
@@ -237,7 +248,6 @@ function registerActions(app) {
   A['world-options'] = (d) => { openMenu = null; app.render(); optionsModal(app, d.name); };
   A['world-backups'] = (d) => { openMenu = null; app.render(); backupsModal(app, d.name); };
   A['world-new'] = () => newWorldModal(app);
-  A['world-upload'] = () => uploadModal(app);
   A['world-local'] = () => localImportModal(app);
 }
 
@@ -305,7 +315,7 @@ function newWorldModal(app) {
       h('label', { class: 'row', style: { gap: '8px', cursor: 'pointer', color: 'var(--text)' } }, now,
         running ? 'Restart the server and switch to it now' : 'Start the server with it now'),
       h('div', { class: 'callout info' }, icon('info'), h('div', { class: 'body small' },
-        'The server picks a random seed. Want a particular seed? Create the world in Valheim on your own PC, then use ', h('b', null, 'Upload a world'), '.')),
+        'The server picks a random seed. Want a particular seed? Create the world in Valheim on your own PC, then add it with ', h('b', null, 'Add a world'), ' at the top of this page.')),
     ],
     actions: [{ label: 'Cancel' }, {
       label: 'Create world', kind: 'primary', icon: 'plus', onClick: async () => {
@@ -363,21 +373,22 @@ function backupsModal(app, name) {
   });
 }
 
-// ---------- importing ----------
+// ---------- importing from this PC ----------
 function candidateRows(cands) {
+  // Worlds the server already has are skipped unless chosen.
   const state = cands.map((c) => ({
     c,
-    action: c.problem ? 'skip' : c.exists ? 'replace' : 'import',
-    name: c.name || '',
+    action: c.problem || c.superseded || c.exists ? 'skip' : 'import',
+    name: (c.exists && c.freeName) || c.name || '',
   }));
   const els = state.map((s) => {
     const c = s.c;
     const nameInput = h('input', { class: 'input', value: s.name, maxlength: 40, disabled: !c.renamable && !!c.name, placeholder: 'Name on the server' });
     nameInput.oninput = () => { s.name = nameInput.value; };
     const sel = h('select', { class: 'input', style: { maxWidth: '260px' } },
-      h('option', { value: c.exists ? 'replace' : 'import', selected: !c.problem }, c.exists ? 'Replace the world on the server' : 'Import'),
-      c.exists && c.renamable ? h('option', { value: 'import' }, 'Import with a different name') : null,
-      h('option', { value: 'skip', selected: !!c.problem }, 'Skip'));
+      c.problem ? null : h('option', { value: c.exists ? 'replace' : 'import', selected: s.action !== 'skip' }, c.exists ? 'Replace the world on the server' : 'Import'),
+      c.exists && c.renamable && !c.problem ? h('option', { value: 'import' }, 'Import with a different name') : null,
+      h('option', { value: 'skip', selected: s.action === 'skip' }, 'Skip'));
     sel.onchange = () => { s.action = sel.value; };
     return h('div', { class: 'cand' },
       h('div', { class: 'row' },
@@ -389,142 +400,18 @@ function candidateRows(cands) {
       c.source ? h('div', { class: 'small muted' }, 'From: ' + c.source) : null,
       c.seed ? h('div', { class: 'small' }, 'Seed: ', h('span', { class: 'mono' }, c.seed)) : null,
       c.note ? h('div', { class: 'small text-2' }, c.note) : null,
+      c.superseded ? h('div', { class: 'small text-2' }, 'Another copy of this world in the list is used instead, so this one is skipped.') : null,
       c.problem ? h('div', { class: 'small', style: { color: 'var(--bad-text)' } }, c.problem) : null,
-      c.exists ? h('div', { class: 'small text-2' }, 'Replacing keeps a backup of the current world first.') : null,
+      c.exists ? h('div', { class: 'small text-2' }, c.inUse
+        ? 'The server is playing this world right now: replacing it restarts the server. A backup of the current world is kept first.'
+        : 'Replacing keeps a backup of the current world first.') : null,
       h('div', { class: 'row' }, sel, c.renamable || !c.name ? nameInput : null));
   });
   return {
     el: els,
-    choices: () => state.map((s) => ({ id: s.c.id, action: s.action, name: s.name.trim() })),
+    // Replacing keeps the world's own name; the name box is for importing it as another world.
+    choices: () => state.map((s) => ({ id: s.c.id, action: s.action, name: s.action === 'replace' ? '' : s.name.trim() })),
   };
-}
-
-const WHERE_HELP = [
-  h('p', null, h('b', null, 'Where’s my world? '), 'On the PC where you played, press ', h('kbd', null, 'Windows'), ' + ', h('kbd', null, 'R'), ', paste this and press Enter:'),
-  h('p', { class: 'mono small', style: { background: 'var(--bg)', padding: '8px 10px', borderRadius: '8px', overflowWrap: 'anywhere' } },
-    '%userprofile%\\AppData\\LocalLow\\IronGate\\Valheim\\worlds_local'),
-  h('p', { class: 'small' }, 'In Valheim 1.0 each world is a folder there: upload the whole folder. Older worlds are two files, Name.fwl and Name.db: upload both. A zip of either works too. Worlds kept in Steam Cloud must first be moved to local saves in Valheim (Manage saves).'),
-];
-
-function uploadModal(app) {
-  let uploadId = null;
-  let done = false;
-  const status = h('div', { class: 'small text-2' });
-  const bar = h('i', { style: { width: '0%' } });
-  const progress = h('div', { class: 'progress', hidden: true }, bar);
-  const folderInput = h('input', { type: 'file', webkitdirectory: '', multiple: true, hidden: true });
-  const filesInput = h('input', { type: 'file', multiple: true, accept: '.zip,.fwl,.db,.fwl2,.db2', hidden: true });
-  const dz = h('div', { class: 'dropzone' },
-    icon('upload'),
-    h('p', { style: { color: 'var(--text)', marginTop: '6px' } }, 'Drop a world folder, its files, or a zip here'),
-    h('div', { class: 'row' },
-      h('button', { class: 'btn', type: 'button', onclick: () => folderInput.click() }, icon('folder'), 'Choose a world folder'),
-      h('button', { class: 'btn', type: 'button', onclick: () => filesInput.click() }, icon('upload'), 'Choose files or a zip')),
-    folderInput, filesInput);
-  const body = h('div', { class: 'stack', style: { gap: '14px' } }, dz, progress, status, ...WHERE_HELP);
-  const modal = openModal({
-    title: 'Upload a world',
-    wide: true,
-    body,
-    actions: [{ label: 'Cancel' }],
-    onClose: () => { if (uploadId && !done) api('/api/uploads/' + uploadId, { method: 'DELETE' }).catch(() => {}); },
-  });
-
-  const start = async (files) => {
-    if (!files.length) return;
-    dz.hidden = true;
-    progress.hidden = false;
-    const total = files.reduce((n, f) => n + f.file.size, 0);
-    status.textContent = `Uploading ${files.length} file${files.length === 1 ? '' : 's'} (${fmtBytes(total)})…`;
-    try {
-      uploadId = (await api('/api/uploads', { method: 'POST', body: {} })).id;
-      await sendFiles(uploadId, files, (sent) => { bar.style.width = Math.round((sent / Math.max(total, 1)) * 100) + '%'; });
-      status.textContent = 'Looking for worlds…';
-      progress.classList.add('indeterminate');
-      const res = await api(`/api/uploads/${uploadId}/scan`, { method: 'POST', body: {} });
-      progress.hidden = true;
-      showCandidates(res.candidates);
-    } catch (e) {
-      progress.hidden = true;
-      dz.hidden = false;
-      status.textContent = '';
-      toast(e.message, 'bad', 10000);
-      uploadId = null;
-    }
-  };
-
-  const showCandidates = (cands) => {
-    const rows = candidateRows(cands);
-    status.replaceChildren(h('p', { style: { color: 'var(--text)' } }, `Found ${cands.length} world${cands.length === 1 ? '' : 's'}:`));
-    body.replaceChildren(status, ...rows.el);
-    const go = h('button', { class: 'btn btn-primary', type: 'button' }, icon('check'), 'Import');
-    go.onclick = async () => {
-      go.disabled = true;
-      try {
-        await api(`/api/uploads/${uploadId}/import`, { method: 'POST', body: { choices: rows.choices() } });
-        done = true;
-        modal.close();
-        toast('Importing…', 'info');
-        app.poll();
-      } catch (e) {
-        toast(e.message, 'bad', 10000);
-      } finally {
-        go.disabled = false;
-      }
-    };
-    modal.foot.append(go);
-  };
-
-  folderInput.onchange = () => start([...folderInput.files].map((f) => ({ file: f, path: f.webkitRelativePath || f.name })));
-  filesInput.onchange = () => start([...filesInput.files].map((f) => ({ file: f, path: f.name })));
-  dz.ondragover = (e) => { e.preventDefault(); dz.classList.add('over'); };
-  dz.ondragleave = () => dz.classList.remove('over');
-  dz.ondrop = async (e) => {
-    e.preventDefault();
-    dz.classList.remove('over');
-    start(await droppedFiles(e.dataTransfer));
-  };
-}
-
-// droppedFiles walks dropped folders so their structure is kept.
-async function droppedFiles(dt) {
-  const out = [];
-  const entries = [...dt.items].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
-  if (!entries.length) return [...dt.files].map((f) => ({ file: f, path: f.name }));
-  const walk = async (entry, prefix) => {
-    if (entry.isFile) {
-      const file = await new Promise((res, rej) => entry.file(res, rej));
-      out.push({ file, path: prefix + file.name });
-    } else if (entry.isDirectory) {
-      const reader = entry.createReader();
-      let batch;
-      do {
-        batch = await new Promise((res, rej) => reader.readEntries(res, rej));
-        for (const child of batch) await walk(child, prefix + entry.name + '/');
-      } while (batch.length);
-    }
-  };
-  for (const entry of entries) await walk(entry, '');
-  return out;
-}
-
-function sendFiles(id, files, onProgress) {
-  return new Promise((resolve, reject) => {
-    const fd = new FormData();
-    for (const f of files) fd.append('file', f.file, encodeURIComponent(f.path).replace(/%2F/gi, '/'));
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', `/api/uploads/${id}/files`);
-    xhr.setRequestHeader('X-VES', '1');
-    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded); };
-    xhr.onload = () => {
-      let resp = {};
-      try { resp = JSON.parse(xhr.responseText); } catch { /* not JSON */ }
-      if (xhr.status >= 200 && xhr.status < 300) resolve(resp);
-      else reject(new Error(resp.error || `Upload failed (${xhr.status})`));
-    };
-    xhr.onerror = () => reject(new Error('The upload was interrupted. Check the connection and try again.'));
-    xhr.send(fd);
-  });
 }
 
 async function localImportModal(app) {
@@ -538,7 +425,7 @@ async function localImportModal(app) {
     return openModal({
       title: 'Import from this PC',
       body: [h('p', null, 'No Valheim worlds were found in this computer’s game saves.'),
-        h('p', { class: 'small' }, 'This looks in the folders Valheim uses on this computer (and Steam Cloud saves). To bring a world from another PC, use Upload a world.')],
+        h('p', { class: 'small' }, 'This looks in the folders Valheim uses on this computer (and Steam Cloud saves). To bring a world from another PC, drop it on Add a world at the top of the Worlds page.')],
       actions: [{ label: 'Close', kind: 'primary' }],
     });
   }
@@ -550,7 +437,7 @@ async function localImportModal(app) {
     actions: [{ label: 'Cancel' }, {
       label: 'Import', kind: 'primary', icon: 'check', onClick: async () => {
         await api('/api/local-worlds/import', { method: 'POST', body: { choices: rows.choices() } });
-        toast('Importing…', 'info');
+        toast('Copying the worlds…', 'info');
         app.poll();
       },
     }],

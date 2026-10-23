@@ -75,7 +75,6 @@ type Checklist struct {
 	Installed     bool    `json:"installed"`
 	Firewall      bool    `json:"firewall"`
 	Hibernate     bool    `json:"hibernate"`
-	RemotePanel   bool    `json:"remotePanel"`
 	LaunchOnLogin bool    `json:"launchOnLogin"`
 	FreeDiskGB    float64 `json:"freeDiskGB"`
 }
@@ -158,7 +157,6 @@ func (m *Manager) Status() Status {
 		Installed:     st.Installed,
 		Firewall:      m.checks.firewall,
 		Hibernate:     m.checks.hibernate.Available,
-		RemotePanel:   s.Panel.Remote && s.Panel.PasswordHash != "",
 		LaunchOnLogin: m.checks.launchOnLogin,
 	}
 	if m.checks.freeDiskOK {

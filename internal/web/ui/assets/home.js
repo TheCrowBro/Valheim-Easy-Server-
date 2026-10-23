@@ -78,7 +78,7 @@ function hero(app) {
     extra.push(h('div', { class: 'callout bad jobline', role: 'alert' }, icon('alert'),
       h('div', { class: 'body' }, h('p', null, h('strong', null, failed.title + ' didn’t work. ')), h('p', null, failed.error),
         h('div', { class: 'actions' },
-          act && (act[0] !== 'enable-hibernate' || app.local) ? h('button', { class: `btn btn-sm ${act[2] ? 'btn-' + act[2] : ''}`, 'data-action': act[0] }, act[1]) : null,
+          act ? h('button', { class: `btn btn-sm ${act[2] ? 'btn-' + act[2] : ''}`, 'data-action': act[0] }, act[1]) : null,
           h('button', { class: 'btn btn-sm btn-ghost', 'data-action': 'dismiss-job', 'data-id': failed.id }, 'Dismiss')))));
   }
   if (st.needsRestart && st.state === 'online' && !job) {
@@ -203,12 +203,11 @@ function feed(app) {
 function checklist(app) {
   const st = app.status;
   const c = st.checklist;
-  if (!app.local || localStorage.getItem('ves-setup-hidden') === '1') return null;
+  if (localStorage.getItem('ves-setup-hidden') === '1') return null;
   const items = [
     [c.installed, 'Install the Valheim server', 'Free, downloaded from Steam.', !c.installed && h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'install' }, 'Install')],
     [c.firewall, 'Allow it through Windows Firewall', 'So friends can connect. Windows asks for permission.', !c.firewall && h('button', { class: 'btn btn-sm', 'data-action': 'fix-firewall' }, 'Allow')],
     [c.hibernate, 'Hibernation turned on', c.hibernate ? 'The Hibernate button works.' : 'Needed for the Hibernate button.', !c.hibernate && h('button', { class: 'btn btn-sm', 'data-action': 'enable-hibernate' }, 'Turn on')],
-    [c.remotePanel, 'Let friends use this control panel', 'From their own phone or computer, with a password.', !c.remotePanel && h('button', { class: 'btn btn-sm', 'data-action': 'go', 'data-page': 'settings' }, 'Set up')],
     [c.launchOnLogin, 'Start this app with Windows', 'So it’s ready after a restart.', !c.launchOnLogin && h('button', { class: 'btn btn-sm', 'data-action': 'go', 'data-page': 'settings' }, 'Set up')],
   ];
   const left = items.filter((i) => !i[0]).length;
@@ -242,7 +241,7 @@ export default {
   heading: 'Server',
   icon: 'home',
   render(app) {
-    if (!app.status) return h('div', { class: 'card' }, h('p', { class: 'muted' }, 'Connecting to the server computer…'));
+    if (!app.status) return h('div', { class: 'card' }, h('p', { class: 'muted' }, 'Connecting…'));
     return h('div', { class: 'stack' },
       hero(app),
       warnings(app),

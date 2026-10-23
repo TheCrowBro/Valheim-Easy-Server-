@@ -71,11 +71,17 @@ func (j *jobCtl) result(msg string) {
 // runJob starts fn as the current job. It fails with BusyError when another
 // job is still running.
 func (m *Manager) runJob(kind, title string, cancellable bool, fn func(ctx context.Context, j *jobCtl) error) error {
+	_, err := m.startJob(kind, title, cancellable, fn)
+	return err
+}
+
+// startJob is runJob that also returns the new job's ID.
+func (m *Manager) startJob(kind, title string, cancellable bool, fn func(ctx context.Context, j *jobCtl) error) (int, error) {
 	m.mu.Lock()
 	if m.job != nil && m.job.Finished == nil {
 		t := m.job.Title
 		m.mu.Unlock()
-		return &BusyError{Title: lowerFirst(t)}
+		return 0, &BusyError{Title: lowerFirst(t)}
 	}
 	m.jobSeq++
 	parent := m.ctx
@@ -106,7 +112,9 @@ func (m *Manager) runJob(kind, title string, cancellable bool, fn func(ctx conte
 		m.mu.Lock()
 		now := time.Now()
 		job.Finished = &now
-		if err != nil {
+		if errors.Is(err, errCancelled) {
+			job.Result = "Cancelled."
+		} else if err != nil {
 			job.Error = err.Error()
 			var ae *ActionError
 			if errors.As(err, &ae) {
@@ -120,7 +128,7 @@ func (m *Manager) runJob(kind, title string, cancellable bool, fn func(ctx conte
 		m.mu.Unlock()
 		m.notify()
 	}()
-	return nil
+	return job.ID, nil
 }
 
 // CancelJob cancels the current job if it can be cancelled.

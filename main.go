@@ -1,7 +1,7 @@
 // Valheim Easy Server runs a Valheim dedicated server on this computer and
 // gives it a friendly control panel: start and stop, worlds, backups,
 // players, usage stats and hibernation. The panel opens in its own window
-// and, if you allow it, friends can use it from their own devices.
+// on this computer.
 package main
 
 import (
@@ -39,7 +39,7 @@ func main() {
 	dataFlag := flag.String("data", "", "folder for settings, server files, worlds and logs (default: next to this program)")
 	background := flag.Bool("background", false, "start without opening the control panel window (used when starting with Windows)")
 	noWindow := flag.Bool("no-window", false, "don't open the control panel window")
-	panelPort := flag.Int("port", 0, "use this port for the control panel instead of the saved one")
+	panelPort := flag.Int("port", web.DefaultPort, "port for the control panel (it only listens on this computer)")
 	devServer := flag.String("dev-fake-server", "", "development only: install this program instead of downloading the real server")
 	flag.Parse()
 
@@ -96,23 +96,15 @@ func main() {
 		})
 	}
 
-	srv := web.New(web.Options{Manager: m, Logger: logger, DataDir: dataDir, Version: version, Quit: quit})
-	panel := m.Settings().Panel
-	if *panelPort != 0 {
-		panel.Port = *panelPort
-	}
-	if err := srv.Listen(panel); err != nil {
-		logger.Printf("control panel: %v", err)
-		panel.Remote = false
-		if err := srv.Listen(panel); err != nil {
-			platform.ShowError(appName, "Couldn't open the control panel:\n"+err.Error())
-			os.Exit(1)
-		}
+	srv := web.New(web.Options{Manager: m, Logger: logger, Version: version, Quit: quit})
+	if err := srv.Listen(*panelPort); err != nil {
+		platform.ShowError(appName, "Couldn't open the control panel:\n"+err.Error())
+		os.Exit(1)
 	}
 	writeInstance(dataDir, srv)
 	m.Start()
 
-	url := srv.LocalURL()
+	url := srv.URL()
 	fmt.Printf("%s is running. Control panel: %s\n", appName, url)
 	if !*background && !*noWindow {
 		if err := platform.OpenAppWindow(url); err != nil {
@@ -165,7 +157,7 @@ func main() {
 			s := m.Status().State
 			return s == manager.StateOnline || s == manager.StateStarting
 		},
-		Open:  func() { platform.OpenAppWindow(srv.LocalURL()) },
+		Open:  func() { platform.OpenAppWindow(srv.URL()) },
 		Start: func() { trayAction(m.StartServer()) },
 		Stop: func() {
 			if confirmPlayers(m, "stop the server") {
@@ -173,7 +165,7 @@ func main() {
 			}
 		},
 		Hibernate: func() {
-			if platform.Confirm(appName, "Save the world, stop the server and hibernate this computer?\n\nPress the power button to wake it up.") {
+			if platform.Confirm(appName, "Save the world, stop the server and hibernate this computer?\n\nTo wake it up, someone has to press the computer's power button.") {
 				trayAction(m.Hibernate(""))
 			}
 		},
@@ -290,14 +282,13 @@ func openLog(dataDir string) (*log.Logger, func()) {
 }
 
 type instanceInfo struct {
-	Port  int    `json:"port"`
-	Token string `json:"token"`
+	Port int `json:"port"`
 }
 
 // writeInstance lets a second start of the app open this copy's window.
 func writeInstance(dataDir string, srv *web.Server) {
-	b, _ := json.Marshal(instanceInfo{Port: srv.Port(), Token: srv.Token()})
-	config.WriteFileAtomic(filepath.Join(dataDir, ".instance.json"), b, 0o600)
+	b, _ := json.Marshal(instanceInfo{Port: srv.Port()})
+	config.WriteFileAtomic(filepath.Join(dataDir, ".instance.json"), b, 0o644)
 }
 
 func openExisting(dataDir string) bool {
@@ -309,6 +300,6 @@ func openExisting(dataDir string) bool {
 	if json.Unmarshal(b, &info) != nil || info.Port == 0 {
 		return false
 	}
-	err = platform.OpenAppWindow(fmt.Sprintf("http://127.0.0.1:%d/?token=%s", info.Port, info.Token))
+	err = platform.OpenAppWindow(fmt.Sprintf("http://127.0.0.1:%d/", info.Port))
 	return !errors.Is(err, os.ErrNotExist) && err == nil
 }

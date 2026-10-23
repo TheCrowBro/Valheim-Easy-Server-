@@ -23,14 +23,10 @@ import (
 
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
-	a := func(pattern string, h http.HandlerFunc) { mux.HandleFunc(pattern, s.auth(false, h)) }
-	local := func(pattern string, h http.HandlerFunc) { mux.HandleFunc(pattern, s.auth(true, h)) }
+	a := mux.HandleFunc
 
-	mux.HandleFunc("GET /{$}", s.index)
+	a("GET /{$}", s.index)
 	mux.Handle("GET /assets/", s.static())
-	mux.HandleFunc("GET /api/session", s.getSession)
-	mux.HandleFunc("POST /api/login", s.login)
-	mux.HandleFunc("POST /api/logout", s.logout)
 
 	a("GET /api/status", s.status)
 	a("POST /api/server/start", s.act(func(r *http.Request) error { return s.m.StartServer() }))
@@ -41,7 +37,7 @@ func (s *Server) routes() http.Handler {
 	a("POST /api/job/cancel", s.act(func(r *http.Request) error { return s.m.CancelJob() }))
 	a("POST /api/power/hibernate", s.act(func(r *http.Request) error { return s.m.Hibernate("") }))
 	a("POST /api/power/keep-awake", s.act(func(r *http.Request) error { s.m.KeepAwake(); return nil }))
-	local("POST /api/power/enable-hibernate", s.act(func(r *http.Request) error { return s.m.EnableHibernation() }))
+	a("POST /api/power/enable-hibernate", s.act(func(r *http.Request) error { return s.m.EnableHibernation() }))
 
 	a("GET /api/worlds", s.worlds)
 	a("POST /api/worlds/select", s.selectWorld)
@@ -58,12 +54,11 @@ func (s *Server) routes() http.Handler {
 	a("POST /api/uploads/{id}/scan", s.scanUpload)
 	a("POST /api/uploads/{id}/import", s.importUpload)
 	a("DELETE /api/uploads/{id}", s.discardUpload)
-	local("GET /api/local-worlds", s.localWorlds)
-	local("POST /api/local-worlds/import", s.importLocal)
+	a("GET /api/local-worlds", s.localWorlds)
+	a("POST /api/local-worlds/import", s.importLocal)
 
 	a("GET /api/settings", s.getSettings)
 	a("POST /api/settings", s.saveSettings)
-	local("POST /api/panel", s.savePanel)
 	a("GET /api/lists", s.getLists)
 	a("POST /api/lists", s.saveList)
 	a("GET /api/players", s.players)
@@ -73,11 +68,11 @@ func (s *Server) routes() http.Handler {
 	a("GET /api/logs", s.logs)
 	a("GET /api/logs/download", s.downloadLog)
 
-	local("POST /api/system/firewall", s.act(func(r *http.Request) error { return s.m.FixFirewall() }))
-	local("POST /api/system/open-folder", s.openFolder)
-	local("POST /api/system/launch-on-login", s.launchOnLogin)
-	local("POST /api/system/quit", s.quitApp)
-	return securityHeaders(mux)
+	a("POST /api/system/firewall", s.act(func(r *http.Request) error { return s.m.FixFirewall() }))
+	a("POST /api/system/open-folder", s.openFolder)
+	a("POST /api/system/launch-on-login", s.launchOnLogin)
+	a("POST /api/system/quit", s.quitApp)
+	return securityHeaders(guard(mux))
 }
 
 // --- helpers ------------------------------------------------------------
@@ -131,79 +126,10 @@ func (s *Server) act(fn func(r *http.Request) error) http.HandlerFunc {
 	}
 }
 
-// --- session --------------------------------------------------------------
-
-func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
-	c, _ := r.Cookie(cookieName)
-	sess, ok := session{}, false
-	if c != nil {
-		sess, ok = s.sessions.get(c.Value)
-	}
-	if ok && sess.Local && !isLoopback(r) {
-		ok = false
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"authenticated": ok,
-		"local":         ok && sess.Local,
-		"onServerPC":    isLoopback(r),
-		"version":       s.version,
-	})
-}
-
-func (s *Server) login(w http.ResponseWriter, r *http.Request) {
-	if !sameOrigin(r) {
-		writeErr(w, http.StatusForbidden, "This request was blocked for safety. Reload the page and try again.")
-		return
-	}
-	ip := clientIP(r)
-	if !s.limit.allowed(ip) {
-		writeErr(w, http.StatusTooManyRequests, "Too many wrong passwords. Wait 15 minutes and try again.")
-		return
-	}
-	var body struct {
-		Password string `json:"password"`
-	}
-	if err := readJSON(r, &body); err != nil {
-		fail(w, err)
-		return
-	}
-	if !s.m.Settings().Panel.Remote && !isLoopback(r) {
-		writeErr(w, http.StatusForbidden, "Remote access to the control panel is turned off.")
-		return
-	}
-	if !s.m.CheckPanelPassword(body.Password) {
-		s.limit.fail(ip)
-		time.Sleep(700 * time.Millisecond) // slow down guessing a little more
-		writeErr(w, http.StatusUnauthorized, "That password isn't right.")
-		return
-	}
-	s.limit.reset(ip)
-	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: s.sessions.create(false), Path: "/",
-		HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: int(remoteSession.Seconds())})
-	ok(w)
-}
-
-func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
-	if !sameOrigin(r) {
-		writeErr(w, http.StatusForbidden, "This request was blocked for safety.")
-		return
-	}
-	if c, _ := r.Cookie(cookieName); c != nil {
-		s.sessions.remove(c.Value)
-	}
-	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/", MaxAge: -1})
-	ok(w)
-}
-
 // --- status & server ---------------------------------------------------
 
 func (s *Server) status(w http.ResponseWriter, r *http.Request) {
-	st := s.m.Status()
-	sess := sessionOf(r)
-	writeJSON(w, http.StatusOK, struct {
-		manager.Status
-		Local bool `json:"local"`
-	}{st, sess.Local})
+	writeJSON(w, http.StatusOK, s.m.Status())
 }
 
 func (s *Server) install(w http.ResponseWriter, r *http.Request) {
@@ -228,9 +154,6 @@ func (s *Server) worlds(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fail(w, err)
 		return
-	}
-	if !sessionOf(r).Local {
-		v.Folder = ""
 	}
 	writeJSON(w, http.StatusOK, v)
 }
@@ -440,11 +363,12 @@ func (s *Server) importUpload(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	if err := s.m.ImportUpload(r.PathValue("id"), body.Choices); err != nil {
+	job, err := s.m.ImportUpload(r.PathValue("id"), body.Choices)
+	if err != nil {
 		fail(w, err)
 		return
 	}
-	ok(w)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "job": job})
 }
 
 func (s *Server) discardUpload(w http.ResponseWriter, r *http.Request) {
@@ -464,50 +388,38 @@ func (s *Server) importLocal(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	if err := s.m.ImportLocal(body.Choices); err != nil {
+	job, err := s.m.ImportLocal(body.Choices)
+	if err != nil {
 		fail(w, err)
 		return
 	}
-	ok(w)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "job": job})
 }
 
 // --- settings ---------------------------------------------------------------
 
 type settingsView struct {
 	Settings      config.Settings     `json:"settings"`
-	Local         bool                `json:"local"`
-	PanelPassword bool                `json:"panelPasswordSet"`
 	Presets       []string            `json:"presets"`
 	Modifiers     map[string][]string `json:"modifiers"`
 	ModifierOrder []string            `json:"modifierOrder"`
 	Keys          []string            `json:"keys"`
-	Paths         *config.Paths       `json:"paths,omitempty"`
-	PanelPort     int                 `json:"panelPort"`
-	OnServerPC    bool                `json:"onServerPC"`
+	Paths         config.Paths        `json:"paths"`
 	LaunchOnLogin bool                `json:"launchOnLogin"`
+	Version       string              `json:"version"` // this app's
 }
 
 func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
-	set := s.m.Settings()
 	v := settingsView{
-		Local:         sessionOf(r).Local,
-		PanelPassword: set.Panel.PasswordHash != "",
+		Settings:      s.m.Settings(),
 		Presets:       config.Presets,
 		Modifiers:     config.Modifiers,
 		ModifierOrder: config.ModifierOrder,
 		Keys:          config.Keys,
-		PanelPort:     s.Port(),
-		OnServerPC:    isLoopback(r),
+		Paths:         s.m.Paths(),
+		Version:       s.version,
 	}
-	set.Panel.PasswordHash = ""
-	if !v.Local {
-		set.ServerDir, set.SaveDir, set.ExtraArgs = "", "", ""
-	} else {
-		p := s.m.Paths()
-		v.Paths = &p
-		v.LaunchOnLogin, _ = platform.LaunchOnLogin()
-	}
-	v.Settings = set
+	v.LaunchOnLogin, _ = platform.LaunchOnLogin()
 	writeJSON(w, http.StatusOK, v)
 }
 
@@ -517,36 +429,11 @@ func (s *Server) saveSettings(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	if err := s.m.UpdateSettings(in, sessionOf(r).Local); err != nil {
+	if err := s.m.UpdateSettings(in); err != nil {
 		fail(w, err)
 		return
 	}
 	ok(w)
-}
-
-func (s *Server) savePanel(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Remote   bool   `json:"remote"`
-		Port     int    `json:"port"`
-		Password string `json:"password"`
-	}
-	if err := readJSON(r, &body); err != nil {
-		fail(w, err)
-		return
-	}
-	panel, err := s.m.SetPanel(body.Remote, body.Port, body.Password)
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	if body.Password != "" {
-		s.sessions.removeRemote() // a new password logs everyone else out
-	}
-	if err := s.Listen(panel); err != nil {
-		fail(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "port": s.Port()})
 }
 
 func (s *Server) getLists(w http.ResponseWriter, r *http.Request) {
@@ -622,7 +509,7 @@ func (s *Server) downloadLog(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, f)
 }
 
-// --- server computer only ---------------------------------------------------
+// --- this computer ---------------------------------------------------------
 
 func (s *Server) openFolder(w http.ResponseWriter, r *http.Request) {
 	var body struct {

@@ -43,9 +43,7 @@ type Settings struct {
 	// WorldOptions holds difficulty settings per world name.
 	WorldOptions map[string]WorldOptions `json:"worldOptions,omitempty"`
 
-	Panel Panel `json:"panel"`
-
-	// Advanced, only changeable from the server computer itself.
+	// Advanced: other folders and extra launch options.
 	ServerDir string `json:"serverDir,omitempty"`
 	SaveDir   string `json:"saveDir,omitempty"`
 	ExtraArgs string `json:"extraArgs,omitempty"`
@@ -58,18 +56,7 @@ type WorldOptions struct {
 	Keys      []string          `json:"keys,omitempty"`
 }
 
-// Panel controls the web control panel.
-type Panel struct {
-	// Remote lets other devices on the network open the panel.
-	Remote       bool   `json:"remote"`
-	Port         int    `json:"port"`
-	PasswordHash string `json:"passwordHash,omitempty"`
-}
-
-const (
-	DefaultGamePort  = 2456
-	DefaultPanelPort = 8456
-)
+const DefaultGamePort = 2456
 
 // Presets are the values Valheim accepts for -preset.
 var Presets = []string{"normal", "casual", "easy", "hard", "hardcore", "immersive", "hammer"}
@@ -106,7 +93,6 @@ func Defaults() Settings {
 		AutoRestart:         true,
 		StartAfterWake:      true,
 		IdleMinutes:         60,
-		Panel:               Panel{Port: DefaultPanelPort},
 	}
 }
 
@@ -166,9 +152,6 @@ func (s *Settings) fillMissing() {
 	}
 	if s.IdleMinutes == 0 {
 		s.IdleMinutes = d.IdleMinutes
-	}
-	if s.Panel.Port == 0 {
-		s.Panel.Port = d.Panel.Port
 	}
 }
 
@@ -310,9 +293,6 @@ func (s Settings) Validate() FieldErrors {
 	if s.IdleMinutes < 10 || s.IdleMinutes > 1440 {
 		errs["idleMinutes"] = "Choose between 10 and 1440 minutes."
 	}
-	if s.Panel.Port < 1024 || s.Panel.Port > 65535 {
-		errs["panelPort"] = "The control panel port must be between 1024 and 65535."
-	}
 	if len(s.ExtraArgs) > 1000 {
 		errs["extraArgs"] = "Extra arguments are too long."
 	} else if _, err := SplitArgs(s.ExtraArgs); err != nil {
@@ -397,17 +377,17 @@ func contains(list []string, v string) bool {
 
 // Paths are the folders the app works with.
 type Paths struct {
-	Data       string // the app's own folder (settings, logs, backups)
-	Server     string // where valheim_server is installed
-	Save       string // passed to -savedir
-	Worlds     string // Save/worlds_local
-	Backups    string // the app's world backups
-	Logs       string // server and app logs
-	SteamCMD   string // SteamCMD install
-	Staging    string // uploads waiting to be imported
-	Settings   string // settings.json
-	ServerExe  string // full path to the server executable
-	SteamCMDEx string // full path to steamcmd
+	Data       string `json:"data"`        // the app's own folder (settings, logs, backups)
+	Server     string `json:"server"`      // where valheim_server is installed
+	Save       string `json:"save"`        // passed to -savedir
+	Worlds     string `json:"worlds"`      // Save/worlds_local
+	Backups    string `json:"backups"`     // the app's world backups
+	Logs       string `json:"logs"`        // server and app logs
+	SteamCMD   string `json:"steamcmd"`    // SteamCMD install
+	Staging    string `json:"staging"`     // uploads waiting to be imported
+	Settings   string `json:"settings"`    // settings.json
+	ServerExe  string `json:"serverExe"`   // full path to the server executable
+	SteamCMDEx string `json:"steamcmdExe"` // full path to steamcmd
 }
 
 // ServerExeName is the dedicated server binary for this OS.

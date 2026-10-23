@@ -30,6 +30,19 @@ type Candidate struct {
 	Problem   string    `json:"problem,omitempty"` // can't be imported as is
 	Source    string    `json:"source,omitempty"`
 
+	// IsBackup marks one of Valheim's own backup copies of a world.
+	IsBackup bool `json:"isBackup,omitempty"`
+	// Superseded means another candidate is a better copy of the same world
+	// (the world itself rather than a backup, or a newer backup), so this
+	// one is skipped unless chosen.
+	Superseded bool `json:"superseded,omitempty"`
+	// When Exists: the server's copy, a free name for keeping both (only
+	// for renamable worlds), and whether the server is playing it now.
+	ServerModified time.Time `json:"serverModified,omitzero"`
+	ServerSize     int64     `json:"serverSize,omitempty"`
+	FreeName       string    `json:"freeName,omitempty"`
+	InUse          bool      `json:"inUse,omitempty"`
+
 	dir     string // 1.0 world: its folder
 	fwlPath string // classic world: the .fwl file
 	dbPath  string // classic world: the .db file, if any
@@ -51,6 +64,7 @@ func Detect(root string, maxDepth int) []Candidate {
 			if m := reBackupName.FindStringSubmatch(name); m != nil {
 				name = m[1]
 				c.Note = "This is one of Valheim's backup copies of the world."
+				c.IsBackup = true
 			}
 			if dir == root { // loose files without their folder
 				name = ""
@@ -97,6 +111,7 @@ func Detect(root string, maxDepth int) []Candidate {
 			if m := reBackupName.FindStringSubmatch(base); m != nil {
 				c.Name = m[1]
 				c.Note = "This is one of Valheim's backup copies of the world."
+				c.IsBackup = true
 			}
 			if data, err := os.ReadFile(c.fwlPath); err == nil {
 				if meta, err := ParseMeta(data); err == nil {
@@ -118,8 +133,17 @@ func Detect(root string, maxDepth int) []Candidate {
 	return out
 }
 
-// Check fills in Exists and Problem for the server's current worlds.
+// Check compares candidates with the server's current worlds: whether the
+// name is taken (and by what), and whether the name can be used. It also
+// marks the copies that are superseded by a better copy of the same world.
 func (l *Library) Check(cands []Candidate) []Candidate {
+	markSuperseded(cands)
+	taken := map[string]bool{}
+	for _, c := range cands {
+		if c.Name != "" && !c.Superseded {
+			taken[strings.ToLower(c.Name)] = true
+		}
+	}
 	for i := range cands {
 		c := &cands[i]
 		c.Exists = c.Name != "" && l.exists(c.Name)
@@ -128,8 +152,67 @@ func (l *Library) Check(cands []Candidate) []Candidate {
 				c.Problem = msg
 			}
 		}
+		if !c.Exists {
+			continue
+		}
+		if w, err := l.Get(c.Name); err == nil {
+			c.ServerModified, c.ServerSize = w.Modified, w.Size
+		}
+		if c.Renamable && !c.Superseded {
+			c.FreeName = l.freeName(c.Name, taken)
+			taken[strings.ToLower(c.FreeName)] = true
+		}
 	}
 	return cands
+}
+
+// markSuperseded keeps one candidate per world name as the one to import:
+// the world itself rather than Valheim's backups of it (the 1.0 folder if
+// both formats are there), or else the newest backup.
+func markSuperseded(cands []Candidate) {
+	best := map[string]int{}
+	better := func(a, b Candidate) bool { // is a a better copy than b?
+		if a.Problem == "" && b.Problem != "" {
+			return true
+		}
+		if a.IsBackup != b.IsBackup {
+			return !a.IsBackup
+		}
+		if !a.IsBackup && a.Format != b.Format {
+			return a.Format == FormatFolder
+		}
+		return a.Modified.After(b.Modified)
+	}
+	for i, c := range cands {
+		if c.Name == "" {
+			continue
+		}
+		key := strings.ToLower(c.Name)
+		j, seen := best[key]
+		if !seen || better(c, cands[j]) {
+			best[key] = i
+		}
+	}
+	for i := range cands {
+		if j, ok := best[strings.ToLower(cands[i].Name)]; ok && j != i {
+			cands[i].Superseded = true
+		}
+	}
+}
+
+// freeName finds a name like "Midgard 2" that no world uses yet.
+func (l *Library) freeName(name string, taken map[string]bool) string {
+	for n := 2; ; n++ {
+		suffix := " " + strconv.Itoa(n)
+		base := []rune(name)
+		if max := 40 - len(suffix); len(base) > max {
+			base = base[:max]
+		}
+		try := strings.TrimSpace(string(base)) + suffix
+		if !taken[strings.ToLower(try)] && !l.exists(try) && config.WorldNameProblem(try) == "" {
+			return try
+		}
+	}
 }
 
 // Choice says what to do with one candidate.
@@ -139,10 +222,17 @@ type Choice struct {
 	Name   string `json:"name"`   // final name; empty keeps the suggestion
 }
 
+// Placed is a world Import put on the server.
+type Placed struct {
+	Name     string `json:"name"`
+	Replaced bool   `json:"replaced"`
+}
+
 // Import copies (or, with move, moves) the chosen candidates into the
-// worlds folder. Worlds that get replaced are backed up first. busy reports
-// whether a world is in use by the running server.
-func (l *Library) Import(cands []Candidate, choices []Choice, busy func(string) bool, move bool) ([]string, error) {
+// worlds folder. Worlds that get replaced are backed up first, and put back
+// if the new copy can't be placed. busy reports whether a world is in use
+// by the running server.
+func (l *Library) Import(cands []Candidate, choices []Choice, busy func(string) bool, move bool) ([]Placed, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	byID := map[string]Candidate{}
@@ -191,20 +281,30 @@ func (l *Library) Import(cands []Candidate, choices []Choice, busy func(string) 
 		}
 		jobs = append(jobs, job{c, name, exists})
 	}
-	var done []string
+	var done []Placed
 	for _, j := range jobs {
+		var old Backup
 		if j.replace {
-			if _, err := l.backupLocked(j.name, "before-replace"); err != nil {
+			b, err := l.backupLocked(j.name, "before-replace")
+			if err != nil {
 				return done, fmt.Errorf("couldn't back up %q before replacing it, so it was left alone: %w", j.name, err)
 			}
+			old = b
 			if err := l.removeLive(j.name); err != nil {
 				return done, err
 			}
 		}
 		if err := place(j.c, j.name, l.Worlds, move); err != nil {
-			return done, fmt.Errorf("couldn't import %q: %w", j.name, err)
+			l.removeLive(j.name) // whatever was half copied
+			if !j.replace {
+				return done, fmt.Errorf("couldn't import %q: %w", j.name, err)
+			}
+			if perr := l.putBack(j.name, old); perr != nil {
+				return done, fmt.Errorf("couldn't import %q (%v), and putting the server's old copy back failed too (%v). Restore it from the world's backups.", j.name, err, perr)
+			}
+			return done, fmt.Errorf("couldn't import %q, so the server's copy was left as it was: %w", j.name, err)
 		}
-		done = append(done, j.name)
+		done = append(done, Placed{Name: j.name, Replaced: j.replace})
 	}
 	return done, nil
 }
@@ -245,7 +345,13 @@ func place(c Candidate, name, worldsDir string, move bool) error {
 				return err
 			}
 		}
-		return config.WriteFileAtomic(dst+".fwl", data, 0o644)
+		if err := config.WriteFileAtomic(dst+".fwl", data, 0o644); err != nil {
+			return err
+		}
+		if st, err := os.Stat(c.fwlPath); err == nil { // keep "last saved" meaningful
+			os.Chtimes(dst+".fwl", st.ModTime(), st.ModTime())
+		}
+		return nil
 	}
 }
 

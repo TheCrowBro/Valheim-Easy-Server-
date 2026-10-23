@@ -101,29 +101,12 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 	// Missing fields in an old file get defaults.
 	os.WriteFile(path, []byte(`{"serverName":"Old","password":"oldpass1"}`), 0o644)
 	old, _, err := Load(path)
-	if err != nil || old.Port != DefaultGamePort || old.World != "Midgard" || old.Panel.Port != DefaultPanelPort {
+	if err != nil || old.Port != DefaultGamePort || old.World != "Midgard" {
 		t.Fatalf("old file: %+v %v", old, err)
 	}
 	os.WriteFile(path, []byte(`{broken`), 0o644)
 	if _, _, err := Load(path); err == nil {
 		t.Fatal("damaged file not reported")
-	}
-}
-
-func TestPanelPassword(t *testing.T) {
-	if _, err := HashPanelPassword("short"); err == nil {
-		t.Fatal("short password accepted")
-	}
-	h, err := HashPanelPassword("valhalla!")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !CheckPanelPassword(h, "valhalla!") || CheckPanelPassword(h, "Valhalla!") || CheckPanelPassword("garbage", "x") {
-		t.Fatal("password check wrong")
-	}
-	h2, _ := HashPanelPassword("valhalla!")
-	if h == h2 {
-		t.Fatal("hashes must be salted")
 	}
 }
 

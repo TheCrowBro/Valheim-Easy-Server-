@@ -19,18 +19,18 @@ var timeNow = time.Now
 
 // ExportWorld streams a world as a zip file.
 func (m *Manager) ExportWorld(w io.Writer, name string) error {
-	return m.lib.Export(w, name)
+	return m.library().Export(w, name)
 }
 
 // ExportBackup streams a backup as a zip file.
 func (m *Manager) ExportBackup(w io.Writer, name, id string) error {
-	return m.lib.ExportBackup(w, name, id)
+	return m.library().ExportBackup(w, name, id)
 }
 
 // NewUpload starts an upload of world files.
 func (m *Manager) NewUpload() (*worlds.Upload, error) {
-	m.lib.CleanUploads(2 * time.Hour)
-	u, err := m.lib.NewUpload()
+	m.library().CleanUploads(2 * time.Hour)
+	u, err := m.library().NewUpload()
 	if err != nil {
 		return nil, err
 	}
@@ -46,12 +46,23 @@ func (m *Manager) FinishUpload(id string) ([]worlds.Candidate, error) {
 	if err != nil {
 		return nil, err
 	}
-	cands := u.Scan(m.lib)
+	cands := u.Scan(m.library())
 	if len(cands) == 0 {
 		m.DiscardUpload(id)
-		return nil, errors.New("No Valheim worlds were found in what you uploaded. Upload the world's folder (Valheim 1.0), its .fwl and .db files (older versions), or a zip of either.")
+		return nil, errors.New("No Valheim worlds were found in that. Add the world's folder (Valheim 1.0), its .fwl and .db files (older versions), or a zip of either.")
 	}
+	m.markInUse(cands)
 	return cands, nil
+}
+
+// markInUse flags candidates that would replace the world the server is
+// playing.
+func (m *Manager) markInUse(cands []worlds.Candidate) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range cands {
+		cands[i].InUse = cands[i].Exists && m.worldBusyLocked(cands[i].Name)
+	}
 }
 
 func (m *Manager) upload(id string) (*worlds.Upload, error) {
@@ -75,24 +86,22 @@ func (m *Manager) DiscardUpload(id string) {
 	}
 }
 
-// ImportUpload imports the chosen worlds from an upload.
-func (m *Manager) ImportUpload(id string, choices []worlds.Choice) error {
+// ImportUpload puts the chosen worlds from an upload on the server and
+// returns the job doing it.
+func (m *Manager) ImportUpload(id string, choices []worlds.Choice) (int, error) {
 	u, err := m.upload(id)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return m.runJob("import", "Importing worlds", false, func(_ ctxT, j *jobCtl) error {
-		defer m.DiscardUpload(id)
-		j.step("Moving the worlds into place…", -1)
-		return m.finishImport(j, u.Candidates, choices, true)
-	})
+	return m.startImport(u.Candidates, choices, true, func() { m.DiscardUpload(id) })
 }
 
 // LocalWorlds finds worlds saved by the Valheim game on this computer.
 func (m *Manager) LocalWorlds() []worlds.Candidate {
 	home, _ := os.UserHomeDir()
 	sources := worlds.GameSaveSources(home, platform.SteamPath(), isWindows)
-	cands := m.lib.LocalCandidates(sources)
+	cands := m.library().LocalCandidates(sources)
+	m.markInUse(cands)
 	m.mu.Lock()
 	m.localCands = cands
 	m.mu.Unlock()
@@ -102,47 +111,159 @@ func (m *Manager) LocalWorlds() []worlds.Candidate {
 	return cands
 }
 
-// ImportLocal copies chosen worlds from this computer's game saves.
-func (m *Manager) ImportLocal(choices []worlds.Choice) error {
+// ImportLocal copies chosen worlds from this computer's game saves and
+// returns the job doing it.
+func (m *Manager) ImportLocal(choices []worlds.Choice) (int, error) {
 	m.mu.Lock()
 	cands := m.localCands
 	m.mu.Unlock()
 	if len(cands) == 0 {
-		return errors.New("Look for worlds on this computer first.")
+		return 0, errors.New("Look for worlds on this computer first.")
 	}
-	return m.runJob("import", "Importing worlds", false, func(_ ctxT, j *jobCtl) error {
-		j.step("Copying the worlds…", -1)
-		return m.finishImport(j, cands, choices, false)
+	return m.startImport(cands, choices, false, nil)
+}
+
+// startImport puts chosen worlds into the worlds folder as a job (moving
+// them, or copying with move=false). Replacing the world the server is
+// playing stops the server first, which saves it, so the current state is
+// in the backup made before replacing; the server then starts again with
+// the new copy. after runs when the job ends.
+func (m *Manager) startImport(cands []worlds.Candidate, choices []worlds.Choice, move bool, after func()) (int, error) {
+	names := chosenNames(cands, choices)
+	if len(names) == 0 {
+		if after != nil {
+			after()
+		}
+		return 0, errors.New("Nothing was chosen to add.")
+	}
+	if m.replacesRunning(names) {
+		m.endStartWait() // don't wait for a start that is only loading the world
+	}
+	title := "Adding worlds"
+	if len(names) == 1 {
+		for name, replace := range names {
+			title = fmt.Sprintf("Adding %q", name)
+			if replace {
+				title = fmt.Sprintf("Replacing %q", name)
+			}
+		}
+	}
+	return m.startJob("import", title, false, func(ctx ctxT, j *jobCtl) error {
+		if after != nil {
+			defer after()
+		}
+		restart := m.replacesRunning(names)
+		if restart {
+			if err := m.doStop(ctx, j); err != nil {
+				return err
+			}
+		}
+		before, _, _ := m.library().List()
+		j.step("Putting the world in place…", -1)
+		busy := func(name string) bool {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			return m.worldBusyLocked(name)
+		}
+		done, err := m.library().Import(cands, choices, busy, move)
+		for _, p := range done {
+			if p.Replaced {
+				m.addActivity("import", "", fmt.Sprintf("The world %q was replaced with a new copy. The old one is kept as a backup.", p.Name))
+			} else {
+				m.addActivity("import", "", fmt.Sprintf("The world %q was added.", p.Name))
+			}
+		}
+		if restart {
+			j.step("Starting the server again…", -1)
+			if serr := m.doStart(ctx, j); serr != nil {
+				if err == nil {
+					return fmt.Errorf("%s But the server didn't start again: %w", importResult(done), serr)
+				}
+				m.log.Printf("restart after a failed import: %v", serr)
+			}
+		}
+		if err != nil {
+			return err
+		}
+		msg := importResult(done)
+		if restart {
+			msg += " The server restarted with it."
+		}
+		// On a new server, the first world added is the one to play.
+		if len(before) == 0 && len(done) == 1 && !m.serverRunning() {
+			if err := m.SelectWorld(done[0].Name, false); err == nil {
+				msg += " It's now the world the server plays."
+			}
+		}
+		j.result(msg)
+		return nil
 	})
 }
 
-func (m *Manager) finishImport(j *jobCtl, cands []worlds.Candidate, choices []worlds.Choice, move bool) error {
-	busy := func(name string) bool {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		return m.worldBusyLocked(name)
-	}
-	done, err := m.lib.Import(cands, choices, busy, move)
-	for _, name := range done {
-		m.addActivity("import", "", fmt.Sprintf("The world %q was imported.", name))
-	}
-	if err != nil {
-		return err
-	}
-	if len(done) == 0 {
-		j.result("Nothing was imported.")
-	} else {
-		j.result("Imported " + strings.Join(quoteAll(done), ", ") + ".")
-	}
-	return nil
+func (m *Manager) serverRunning() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.run != nil
 }
 
-func quoteAll(names []string) []string {
-	out := make([]string, len(names))
-	for i, n := range names {
-		out[i] = fmt.Sprintf("%q", n)
+// chosenNames maps the world names the choices put on the server to
+// whether each replaces a world.
+func chosenNames(cands []worlds.Candidate, choices []worlds.Choice) map[string]bool {
+	byID := map[string]worlds.Candidate{}
+	for _, c := range cands {
+		byID[c.ID] = c
 	}
-	return out
+	names := map[string]bool{}
+	for _, ch := range choices {
+		c, ok := byID[ch.ID]
+		if !ok || ch.Action == "skip" {
+			continue
+		}
+		name := strings.TrimSpace(ch.Name)
+		if name == "" {
+			name = c.Name
+		}
+		names[name] = ch.Action == "replace"
+	}
+	return names
+}
+
+func (m *Manager) replacesRunning(names map[string]bool) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for name, replace := range names {
+		if replace && m.worldBusyLocked(name) {
+			return true
+		}
+	}
+	return false
+}
+
+func importResult(done []worlds.Placed) string {
+	switch {
+	case len(done) == 0:
+		return "Nothing was added."
+	case len(done) == 1 && done[0].Replaced:
+		return fmt.Sprintf("%q was replaced. The server's old copy is kept as a backup.", done[0].Name)
+	case len(done) == 1:
+		return fmt.Sprintf("%q was added to the server.", done[0].Name)
+	}
+	var added, replaced []string
+	for _, p := range done {
+		if p.Replaced {
+			replaced = append(replaced, fmt.Sprintf("%q", p.Name))
+		} else {
+			added = append(added, fmt.Sprintf("%q", p.Name))
+		}
+	}
+	var parts []string
+	if len(added) > 0 {
+		parts = append(parts, "Added "+strings.Join(added, ", ")+".")
+	}
+	if len(replaced) > 0 {
+		parts = append(parts, "Replaced "+strings.Join(replaced, ", ")+" (the old copies are kept as backups).")
+	}
+	return strings.Join(parts, " ")
 }
 
 // Upload returns an upload in progress.

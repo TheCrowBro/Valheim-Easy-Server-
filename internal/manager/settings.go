@@ -9,27 +9,26 @@ import (
 	"valheim-easy-server/internal/worlds"
 )
 
-// UpdateSettings saves general settings. The selected world, world
-// options and control-panel settings have their own methods. Folders and
-// extra launch arguments can only be changed from the server computer
-// (local=true).
-func (m *Manager) UpdateSettings(in config.Settings, local bool) error {
+// UpdateSettings saves general settings. The selected world and world
+// options have their own methods.
+func (m *Manager) UpdateSettings(in config.Settings) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	cur := m.settings
 	next := in.Clone()
 	next.World = cur.World
 	next.WorldOptions = cur.Clone().WorldOptions
-	next.Panel = cur.Panel
-	if !local {
-		next.ServerDir, next.SaveDir, next.ExtraArgs = cur.ServerDir, cur.SaveDir, cur.ExtraArgs
-	}
 	next.Normalize()
 	if errs := next.Validate(); errs != nil {
 		return errs
 	}
-	if (next.ServerDir != cur.ServerDir || next.SaveDir != cur.SaveDir) && m.run != nil {
-		return errors.New("Stop the server before changing its folders.")
+	if next.ServerDir != cur.ServerDir || next.SaveDir != cur.SaveDir {
+		if m.run != nil {
+			return errors.New("Stop the server before changing its folders.")
+		}
+		if m.job != nil && m.job.Finished == nil {
+			return &BusyError{Title: lowerFirst(m.job.Title)}
+		}
 	}
 	if next.IdleHibernate && !cur.IdleHibernate {
 		m.idleSince = timeNow() // start counting from now
@@ -40,6 +39,15 @@ func (m *Manager) UpdateSettings(in config.Settings, local bool) error {
 	return nil
 }
 
+// library is the worlds library for the current folders. A Library's
+// folders never change; when the settings move them, a new one replaces it,
+// and anything still using the old one finishes in the old folders.
+func (m *Manager) library() *worlds.Library { return m.libPtr.Load() }
+
+func newLibrary(p config.Paths) *worlds.Library {
+	return &worlds.Library{Worlds: p.Worlds, Backups: p.Backups, Staging: p.Staging}
+}
+
 // saveSettingsLocked writes settings and updates derived paths.
 func (m *Manager) saveSettingsLocked(s config.Settings) error {
 	if err := config.Save(m.paths.Settings, s); err != nil {
@@ -47,46 +55,14 @@ func (m *Manager) saveSettingsLocked(s config.Settings) error {
 	}
 	m.settings = s
 	m.paths = config.ResolvePaths(m.opt.DataDir, s)
-	m.lib.Worlds, m.lib.Backups, m.lib.Staging = m.paths.Worlds, m.paths.Backups, m.paths.Staging
+	if lib := m.library(); lib.Worlds != m.paths.Worlds || lib.Backups != m.paths.Backups || lib.Staging != m.paths.Staging {
+		m.libPtr.Store(newLibrary(m.paths))
+	}
 	if inst, ok := m.opt.Installer.(interface{ SetInstallDir(string) }); ok {
 		inst.SetInstallDir(m.paths.Server)
 	}
 	go m.notify()
 	return nil
-}
-
-// SetPanel changes the control panel's remote access settings.
-func (m *Manager) SetPanel(remote bool, port int, newPassword string) (config.Panel, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	next := m.settings.Clone()
-	next.Panel.Remote = remote
-	next.Panel.Port = port
-	if newPassword != "" {
-		hash, err := config.HashPanelPassword(newPassword)
-		if err != nil {
-			return next.Panel, err
-		}
-		next.Panel.PasswordHash = hash
-	}
-	if remote && next.Panel.PasswordHash == "" {
-		return next.Panel, errors.New("Set a control panel password before letting friends in.")
-	}
-	if errs := next.Validate(); errs != nil {
-		return next.Panel, errs
-	}
-	if err := m.saveSettingsLocked(next); err != nil {
-		return next.Panel, err
-	}
-	return next.Panel, nil
-}
-
-// CheckPanelPassword verifies a friend's control panel password.
-func (m *Manager) CheckPanelPassword(pw string) bool {
-	m.mu.Lock()
-	hash := m.settings.Panel.PasswordHash
-	m.mu.Unlock()
-	return hash != "" && config.CheckPanelPassword(hash, pw)
 }
 
 // SetWorldOptions changes a world's difficulty settings.
@@ -163,7 +139,7 @@ type WorldsView struct {
 
 // Worlds lists the worlds and their backups.
 func (m *Manager) Worlds() (WorldsView, error) {
-	ws, orphans, err := m.lib.List()
+	ws, orphans, err := m.library().List()
 	if err != nil {
 		return WorldsView{}, err
 	}
@@ -235,7 +211,7 @@ func (m *Manager) CreateWorld(name string, o config.WorldOptions, restart bool) 
 	if msg := config.WorldNameProblem(name); msg != "" {
 		return errors.New(msg)
 	}
-	if m.lib.Exists(name) {
+	if m.library().Exists(name) {
 		return fmt.Errorf("there's already a world called %q", name)
 	}
 	if !o.IsZero() {
@@ -250,7 +226,7 @@ func (m *Manager) CreateWorld(name string, o config.WorldOptions, restart bool) 
 func (m *Manager) BackupWorld(name string) error {
 	return m.runJob("backup", "Backing up "+name, false, func(_ ctxT, j *jobCtl) error {
 		j.step("Copying the world into a backup file…", -1)
-		b, err := m.lib.Backup(name, "manual")
+		b, err := m.library().Backup(name, "manual")
 		if err != nil {
 			return err
 		}
@@ -270,7 +246,7 @@ func (m *Manager) RestoreWorld(name, backupID string) error {
 			return err
 		}
 		j.step("Keeping a copy of the current world, then restoring the backup…", -1)
-		if err := m.lib.Restore(name, backupID); err != nil {
+		if err := m.library().Restore(name, backupID); err != nil {
 			return err
 		}
 		m.addActivity("restore", "", fmt.Sprintf("%q was restored from a backup.", name))
@@ -292,7 +268,7 @@ func (m *Manager) DeleteWorld(name string) error {
 	}
 	return m.runJob("delete", "Deleting "+name, false, func(_ ctxT, j *jobCtl) error {
 		j.step("Keeping a backup copy, then deleting…", -1)
-		if err := m.lib.Delete(name); err != nil {
+		if err := m.library().Delete(name); err != nil {
 			return err
 		}
 		m.addActivity("delete", "", fmt.Sprintf("%q was deleted. A backup copy is kept on the Worlds page.", name))
@@ -307,7 +283,7 @@ func (m *Manager) RenameWorld(name, newName string) error {
 		return err
 	}
 	newName = strings.TrimSpace(newName)
-	if err := m.lib.Rename(name, newName); err != nil {
+	if err := m.library().Rename(name, newName); err != nil {
 		return err
 	}
 	m.mu.Lock()

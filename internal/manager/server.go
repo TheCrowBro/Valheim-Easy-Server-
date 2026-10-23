@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -94,7 +93,7 @@ func (m *Manager) ForceStop() error {
 	m.mu.Lock()
 	run := m.run
 	if run != nil {
-		run.stopping = true
+		run.stopping, run.forced = true, true
 	}
 	m.mu.Unlock()
 	if run == nil {
@@ -191,7 +190,7 @@ func (m *Manager) doStart(ctx context.Context, j *jobCtl) error {
 		}
 	}
 	j.setCancellable(false)
-	if udpPortInUse(s.Port) {
+	if platform.UDPPortInUse(s.Port) {
 		return fmt.Errorf("Port %d is already being used by another program, maybe another Valheim server. Close it or pick another port in Settings.", s.Port)
 	}
 	for _, dir := range []string{p.Save, p.Worlds, p.Logs} {
@@ -279,8 +278,17 @@ func (m *Manager) doStop(ctx context.Context, j *jobCtl) error {
 	for {
 		select {
 		case <-run.done:
-			j.result("The world was saved and the server stopped.")
+			m.mu.Lock()
+			forced := run.forced
+			m.mu.Unlock()
+			if forced {
+				j.result("The server was forced to stop.")
+			} else {
+				j.result("The world was saved and the server stopped.")
+			}
 			return nil
+		case <-ctx.Done():
+			return nil // the app is closing; the server finishes stopping by itself
 		case <-tick.C:
 			waited := time.Since(start)
 			m.mu.Lock()
@@ -313,15 +321,6 @@ func sinceText(t time.Time) string {
 		return ""
 	}
 	return " (" + logparse.HumanDuration(time.Since(t)) + " ago)"
-}
-
-func udpPortInUse(port int) bool {
-	c, err := net.ListenPacket("udp", fmt.Sprintf(":%d", port))
-	if err != nil {
-		return true
-	}
-	c.Close()
-	return false
 }
 
 // attach starts following a server process: its log and its exit.
@@ -512,6 +511,12 @@ func (m *Manager) tail(ctx context.Context, run *serverRun) {
 			if run.replaying {
 				m.mu.Lock()
 				run.replaying = false // caught up with the existing log
+				// Remember players who joined while this app was closed.
+				for _, p := range run.tracker.Players() {
+					if m.known[p.Name] == nil {
+						m.notePlayerLocked(logparse.Activity{Kind: "join", Time: p.Since, Name: p.Name, PlatformID: p.PlatformID}, time.Time{})
+					}
+				}
 				m.mu.Unlock()
 				m.notify()
 			}

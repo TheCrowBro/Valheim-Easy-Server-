@@ -64,7 +64,8 @@ type Orphan struct {
 	Backups []Backup `json:"backups"`
 }
 
-// Library manages the worlds folder.
+// Library manages the worlds folder. Its folders must not change once it
+// is in use; make a new Library for other folders.
 type Library struct {
 	Worlds  string // the server's worlds_local folder
 	Backups string // this app's backup folder
@@ -686,33 +687,12 @@ func (l *Library) Restore(name, id string) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.MkdirTemp(filepath.Dir(l.Worlds), ".restore-")
+	// Prepare the restored files first, so a failure leaves the world as is.
+	c, tmp, err := l.stageBackup(name, b)
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(tmp)
-
-	// Prepare the restored files first, so a failure leaves the world as is.
-	switch {
-	case b.Kind == KindApp:
-		if err := extractZip(b.path, tmp, 0); err != nil {
-			return fmt.Errorf("the backup file is damaged: %w", err)
-		}
-	default:
-		files, err := backupEntries(name, b)
-		if err != nil {
-			return err
-		}
-		for rel, src := range files {
-			if err := copyFile(src, filepath.Join(tmp, filepath.FromSlash(rel))); err != nil {
-				return err
-			}
-		}
-	}
-	cands := Detect(tmp, 2)
-	if len(cands) != 1 {
-		return errors.New("the backup doesn't contain exactly one world")
-	}
 	if l.exists(name) {
 		if _, err := l.backupLocked(name, "before-restore"); err != nil {
 			return fmt.Errorf("couldn't back up the current world first, so nothing was changed: %w", err)
@@ -721,7 +701,50 @@ func (l *Library) Restore(name, id string) error {
 			return err
 		}
 	}
-	return place(cands[0], name, l.Worlds, true)
+	return place(c, name, l.Worlds, true)
+}
+
+// putBack restores a backup of a world that has just been removed.
+func (l *Library) putBack(name string, b Backup) error {
+	c, tmp, err := l.stageBackup(name, b)
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmp)
+	return place(c, name, l.Worlds, true)
+}
+
+// stageBackup unpacks or copies a backup into a new temporary folder and
+// returns the world found there. The caller removes the folder.
+func (l *Library) stageBackup(name string, b Backup) (Candidate, string, error) {
+	tmp, err := os.MkdirTemp(filepath.Dir(l.Worlds), ".restore-")
+	if err != nil {
+		return Candidate{}, "", err
+	}
+	fail := func(err error) (Candidate, string, error) {
+		os.RemoveAll(tmp)
+		return Candidate{}, "", err
+	}
+	if b.Kind == KindApp {
+		if err := extractZip(b.path, tmp, 0); err != nil {
+			return fail(fmt.Errorf("the backup file is damaged: %w", err))
+		}
+	} else {
+		files, err := backupEntries(name, b)
+		if err != nil {
+			return fail(err)
+		}
+		for rel, src := range files {
+			if err := copyFile(src, filepath.Join(tmp, filepath.FromSlash(rel))); err != nil {
+				return fail(err)
+			}
+		}
+	}
+	cands := Detect(tmp, 2)
+	if len(cands) != 1 {
+		return fail(errors.New("the backup doesn't contain exactly one world"))
+	}
+	return cands[0], tmp, nil
 }
 
 func fileExists(p string) bool {
