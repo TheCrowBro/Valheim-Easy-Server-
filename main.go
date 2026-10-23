@@ -76,6 +76,8 @@ func main() {
 		}
 		opt.HibernateStatus = func() (bool, string) { return true, "" }
 		opt.Hibernate = func() error { logger.Printf("development mode: pretending to hibernate"); return nil }
+		opt.SleepStatus = func() (bool, string) { return true, "" }
+		opt.Sleep = func() error { logger.Printf("development mode: pretending to sleep"); return nil }
 	}
 	m, err := manager.New(opt)
 	if err != nil {
@@ -164,8 +166,10 @@ func main() {
 				trayAction(m.StopServer())
 			}
 		},
+		RestLabel: func() string { label, _ := restWords(m); return label },
 		Hibernate: func() {
-			if platform.Confirm(appName, "Save the world, stop the server and hibernate this computer?\n\nTo wake it up, someone has to press the computer's power button.") {
+			_, question := restWords(m)
+			if platform.Confirm(appName, question+"\n\nWake it with Wake-on-LAN (for example from an IP KVM) or its power button.") {
 				trayAction(m.Hibernate(""))
 			}
 		},
@@ -179,6 +183,15 @@ func main() {
 	}, done)
 	<-done
 	select {} // the closing goroutine exits the program
+}
+
+// restWords gives the tray's menu label and question for resting the
+// computer, which depend on whether it hibernates or sleeps.
+func restWords(m *manager.Manager) (label, question string) {
+	if m.Settings().RestMode == config.RestSleep {
+		return "Put computer to sleep", "Save the world, stop the server and put this computer to sleep?"
+	}
+	return "Hibernate computer", "Save the world, stop the server and hibernate this computer?"
 }
 
 func trayAction(err error) {

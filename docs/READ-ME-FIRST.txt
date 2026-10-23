@@ -29,6 +29,7 @@ SETTING UP (once, on the server computer)
 6. Finish the checklist under "Setup on this computer" on the Home page:
    - Allow it through Windows Firewall (click Yes when Windows asks)
    - Turn on hibernation
+   - Turn on Wake-on-LAN (so your IP KVM can wake the computer)
    - Start this app with Windows
 
 Closing the window doesn't stop anything: the app stays next to the clock
@@ -60,10 +61,24 @@ Open Valheim, go to Join Game and enter the join code (or the address) and
 the password from the control panel.
 
 
+TAKING A COPY OF A WORLD
+------------------------
+On the Worlds page, click "Download" on the world's card. A Save window
+asks where to put the zip: through an IP KVM the file is saved on the
+server computer, so pick a cloud-drive folder (such as OneDrive) or a USB
+stick. A note inside the zip explains how to play the world on your own PC.
+
+
 WAKING THE COMPUTER UP
 ----------------------
-After "Hibernate", someone has to press the power button on the server
-computer. If the server was running before, it starts again by itself.
+After "Hibernate" (or "Sleep"), wake the computer with Wake-on-LAN from
+your IP KVM, or press its power button. If the server was running before,
+it starts again by itself.
+
+The address the KVM needs (the MAC address) is in Settings, under
+"Resting and waking up". The computer must be connected by a network
+cable. If Wake-on-LAN doesn't wake it from hibernation, choose "Sleep"
+there instead.
 
 
 MORE HELP

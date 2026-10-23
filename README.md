@@ -11,7 +11,7 @@ Run a Valheim dedicated server on a spare Windows PC, such as an old Mac Pro run
 - **Several worlds.** Switch worlds with one click, create new ones (with Valheim's difficulty presets and modifiers), rename old ones, and delete worlds. Deleted worlds keep a backup.
 - **Add a world by dropping it in.** Drop a world onto the app (a Valheim 1.0 world folder, an older `.fwl` + `.db` pair, or a zip of either) and it goes into the server's worlds folder by itself. The app only asks when the server already has a world with that name: replace it (keeping a backup) or keep both. Replacing the world that's running restarts the server with the new copy. Any world can be downloaded as a zip, and "Import from this PC" copies worlds from the Valheim game installed on the server computer.
 - **Backups.** Valheim's own automatic backups and the app's backups are listed together, and each one can be restored or downloaded. The app makes a backup before anything is replaced, restored over or deleted.
-- **Hibernate.** Saves the world, stops the server and hibernates the computer. When someone presses the power button, the server starts again. It can also hibernate on its own when nobody has played for a while.
+- **Hibernate or sleep, and wake with Wake-on-LAN.** Saves the world, stops the server and hibernates the computer (or puts it to sleep). Wake it from an IP KVM's Wake-on-LAN, or with the power button, and the server starts again. It can also rest on its own when nobody has played for a while.
 - **Stats.** CPU, memory, GPU and network use for the Valheim server and the whole computer, over 15 minutes to 24 hours. A breakdown by number of players estimates what each extra player costs.
 - **Players.** See who's online and everyone who has played, with total play time. Make someone an admin or ban them with one click, without hunting for Steam IDs.
 - **Looks after itself.** It updates the server through Steam before each start, so friends never get a "version mismatch". It restarts the server after a crash and keeps Windows from falling asleep while people play. Closing the window doesn't stop the server, and the app picks it back up when it starts again.
@@ -37,6 +37,7 @@ Run a Valheim dedicated server on a spare Windows PC, such as an old Mac Pro run
 7. Work through **Setup on this computer** on the Home page:
    - **Allow it through Windows Firewall.** Windows asks for permission; click Yes. If Windows showed its own firewall pop-up earlier and it was dismissed, this also fixes that.
    - **Turn on hibernation**, which the Hibernate button needs.
+   - **Turn on Wake-on-LAN**, so the IP KVM can wake the computer (see [below](#hibernate-sleep-and-waking-up)).
    - **Start this app with Windows**, so everything comes back after a reboot.
 
 The app lives next to the clock as a shield icon. Click the icon to open the panel; right-click it for Start, Stop, Hibernate and Close.
@@ -56,7 +57,8 @@ The app is made to be used on the server computer itself, so anyone who can see 
 
 - The control panel is the **Valheim Easy Server** window. If it was closed, click the shield icon next to the clock or double-click `ValheimEasyServer.exe` again.
 - Files you drop on **Add a world** must be on the server computer. Bring them over on a USB stick, through the KVM's virtual drive if it has one, or by downloading them there from a chat or cloud drive.
-- After **Hibernate**, waking the computer needs someone to press its power button. An IP KVM usually can't do that, so think twice before hibernating from a distance.
+- After **Hibernate** (or **Sleep**), wake the computer with the KVM's Wake-on-LAN. The address it needs is in **Settings → Resting and waking up**.
+- **Download** saves files on the server computer, because that's the computer the KVM shows. It asks where to save: choose a cloud-drive folder (such as OneDrive) or a USB stick, so you can get the file on your own PC.
 
 ## Worlds
 
@@ -65,14 +67,24 @@ The app is made to be used on the server computer itself, so anyone who can see 
 - **Add a world from someone's PC:** on that PC, press <kbd>Windows</kbd>+<kbd>R</kbd>, paste `%userprofile%\AppData\LocalLow\IronGate\Valheim\worlds_local` and press Enter. In Valheim 1.0 each world is a **folder** there. Older worlds are two files, `Name.fwl` and `Name.db`, which the server converts to the 1.0 format the first time it loads them. Bring the folder, the two files or a zip of either to the server computer, then drop it anywhere on the app, or use **Choose a world folder** under **Add a world**. The app finds the world, even inside a whole `worlds_local` folder full of Valheim's backups, and puts it in the server's worlds folder. Worlds saved in Steam Cloud must first be moved to local saves in Valheim (*Manage saves*).
 - **Same name as a world on the server:** the app asks whether to **replace the server's copy** or **keep both** (older-format worlds only; the new one gets a name like "Midgard 2"). It shows when each copy was last saved. Replacing makes a backup of the server's copy first. If that world is running, the server saves, stops, swaps in the new copy and starts again.
 - **First world on a new server:** it becomes the world the server plays.
-- **Download a world** as a zip to play it yourself or move it to another server.
+- **Download a world:** the **Download** button on its card saves it as a zip named after the world and the date, such as `Midgard 2026-10-23.zip`. A Save window asks where to put it: a USB stick, a cloud-drive folder or the Desktop. The zip contains a short note on how to play the world in Valheim on your own PC, and it can be dropped on **Add a world** on another server. If the server is playing that world, the zip has it as of the last save (the server saves every 15 minutes by default).
 - **Backups:** each world's ⋯ menu has **Backups**, where you can restore or download any backup. Restoring keeps a copy of the current world first.
 
-## Hibernate and waking up
+## Hibernate, sleep and waking up
 
-**Hibernate** (top right on every page, or the tray menu) saves the world, stops the server and hibernates the computer, which then uses almost no power. To wake it, press the computer's power button. If the server was running before, it starts again by itself after about 20 seconds.
+**Hibernate** (top right on every page, or the tray menu) saves the world, stops the server and hibernates the computer, which then uses no power. If the server was running before, it starts again by itself about 20 seconds after the computer wakes up. The app always asks first.
 
-The app always asks before hibernating, because waking the computer needs someone at its power button. **Settings → Hibernate when nobody is playing** does it automatically after a set time without players, but never while someone is using the computer's keyboard or mouse (including through an IP KVM).
+**Waking it with Wake-on-LAN** (for example from an IP KVM):
+
+1. Connect the computer to the router with an Ethernet cable. Wake-on-LAN doesn't work over Wi-Fi.
+2. Open **Settings → Resting and waking up**. It shows the network address to wake (the MAC address, like `3C:07:54:12:34:56`) with a copy button.
+3. Click **Turn on Wake-on-LAN** and accept the Windows prompt. This lets the network adapter wake the computer when it receives a Wake-on-LAN packet, and only then, so ordinary network traffic doesn't wake it. Nobody playing is disconnected.
+4. Enter the MAC address in your IP KVM's Wake-on-LAN settings.
+5. Test it once: click **Hibernate**, wait a minute, then send Wake-on-LAN from the KVM.
+
+Some computers can't be woken over the network from hibernation, because their firmware turns the network port off. It's not known whether a 2013 Mac Pro running Windows can be, so test it. If it doesn't wake, choose **Sleep** in **Settings → Resting and waking up**. Sleep keeps a little power on, wakes in seconds, and Wake-on-LAN can wake most computers from it. The button then says **Sleep**. The power button always works too.
+
+**Settings → Hibernate when nobody is playing** (or **Sleep when nobody is playing**) rests the computer automatically after a set time without players, but never while someone is using its keyboard or mouse (including through an IP KVM).
 
 If the button says hibernation is off, click **Turn on hibernation** and accept the Windows prompt. Most Boot Camp Macs can hibernate in Windows.
 
@@ -95,6 +107,7 @@ The dedicated server runs without graphics, so GPU usage stays low; that's norma
 | A dropped world isn't found | Drop the world's own folder (the one with `_main` files inside), its `.fwl` and `.db` files, or a zip of either. A zip inside a zip doesn't work. |
 | Windows Security blocks or removes the app | Antivirus tools sometimes raise a false alarm for new programs that aren't signed. Allow it under *Windows Security → Virus & threat protection → Protection history*. |
 | Shutting down or restarting Windows | Stop the server first (or use Hibernate), so the world is saved. Windows doesn't give the server time to save when it shuts down. |
+| Wake-on-LAN doesn't wake the computer | Check that **Settings → Resting and waking up** says the network adapter may wake the computer, that the KVM uses the MAC address shown there, and that the computer is on a cable, not Wi-Fi. If it still won't wake from hibernation, choose **Sleep**, and restart the computer once. |
 | Mods (BepInEx) | Install them into the server folder (**Settings → Folders → Open**); the app starts the server the same way. Use **Repair server files** to undo. |
 
 The app's own log is in `logs\app.log` inside its folder, and the server's logs are next to it.
@@ -108,7 +121,8 @@ The app's own log is in `logs\app.log` inside its folder, and the server's logs 
 - installs and updates the server with Valve's SteamCMD (`app_update 896660`);
 - understands both Valheim world formats: 1.0 world folders (`_main.N.fwl2`, `.db2`, `.chunk` files) and the older `.fwl` + `.db` pairs;
 - serves the control panel from inside the app to this computer only (127.0.0.1) and opens it in a Microsoft Edge app window. It turns away requests that other websites open in a browser could make: it checks the address the browser used, the browser's own "which site is asking" header, and an anti-forgery header on every change;
-- reads CPU, GPU, memory and network usage from Windows' performance counters, the same source Task Manager uses.
+- reads CPU, GPU, memory and network usage from Windows' performance counters, the same source Task Manager uses;
+- hibernates with `shutdown /h` or sleeps through Windows' own sleep call, and sets up Wake-on-LAN with `powercfg /deviceenablewake` and the network adapter's power settings (magic packet on, pattern wake off).
 
 Its folder holds `settings.json`, `server\` (the Valheim server), `saves\worlds_local\` (worlds), `saves\adminlist.txt` and the other player lists, `backups\`, `logs\` and `steamcmd\`.
 

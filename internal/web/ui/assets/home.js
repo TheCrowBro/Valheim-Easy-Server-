@@ -207,7 +207,11 @@ function checklist(app) {
   const items = [
     [c.installed, 'Install the Valheim server', 'Free, downloaded from Steam.', !c.installed && h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'install' }, 'Install')],
     [c.firewall, 'Allow it through Windows Firewall', 'So friends can connect. Windows asks for permission.', !c.firewall && h('button', { class: 'btn btn-sm', 'data-action': 'fix-firewall' }, 'Allow')],
-    [c.hibernate, 'Hibernation turned on', c.hibernate ? 'The Hibernate button works.' : 'Needed for the Hibernate button.', !c.hibernate && h('button', { class: 'btn btn-sm', 'data-action': 'enable-hibernate' }, 'Turn on')],
+    st.restMode === 'sleep'
+      ? [st.sleep.available, 'Sleep works on this computer', st.sleep.available ? 'The Sleep button works.' : st.sleep.detail, !st.sleep.available && h('button', { class: 'btn btn-sm', 'data-action': 'go', 'data-page': 'settings' }, 'Settings')]
+      : [c.hibernate, 'Hibernation turned on', c.hibernate ? 'The Hibernate button works.' : 'Needed for the Hibernate button.', !c.hibernate && h('button', { class: 'btn btn-sm', 'data-action': 'enable-hibernate' }, 'Turn on')],
+    [c.wakeOnLan, 'Wake-on-LAN turned on', c.wired ? 'So the computer can be woken over the network, for example from an IP KVM.' : 'Needs a network cable: Wake-on-LAN doesn’t work over Wi-Fi.',
+      !c.wakeOnLan && c.wired && h('button', { class: 'btn btn-sm', 'data-action': 'enable-wol' }, 'Turn on')],
     [c.launchOnLogin, 'Start this app with Windows', 'So it’s ready after a restart.', !c.launchOnLogin && h('button', { class: 'btn btn-sm', 'data-action': 'go', 'data-page': 'settings' }, 'Set up')],
   ];
   const left = items.filter((i) => !i[0]).length;
@@ -227,7 +231,9 @@ function idleBanner(app) {
   const mins = Math.max(0, Math.round((new Date(st.idle.hibernateAt) - Date.now()) / 60000));
   return h('div', { class: 'callout warn' }, icon('moon'),
     h('div', { class: 'body' }, h('p', null, h('strong', null, 'Nobody is playing. '),
-      mins > 0 ? `This computer hibernates automatically in ${mins} min.` : 'This computer is about to hibernate.')),
+      st.restMode === 'sleep'
+        ? (mins > 0 ? `This computer goes to sleep automatically in ${mins} min.` : 'This computer is about to go to sleep.')
+        : (mins > 0 ? `This computer hibernates automatically in ${mins} min.` : 'This computer is about to hibernate.'))),
     h('button', { class: 'btn btn-sm', 'data-action': 'keep-awake' }, icon('sun'), 'Keep it awake'));
 }
 

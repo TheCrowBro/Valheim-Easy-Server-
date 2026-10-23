@@ -456,6 +456,11 @@ func backupEntries(name string, b Backup) (map[string]string, error) {
 
 // writeZip writes files (zip path -> disk path) to w, fastest compression.
 func writeZip(w io.Writer, files map[string]string) error {
+	return writeZipNotes(w, files, nil)
+}
+
+// writeZipNotes is writeZip plus small text files from memory.
+func writeZipNotes(w io.Writer, files map[string]string, notes map[string]string) error {
 	zw := zip.NewWriter(w)
 	zw.RegisterCompressor(zip.Deflate, func(out io.Writer) (io.WriteCloser, error) {
 		return flate.NewWriter(out, flate.BestSpeed)
@@ -467,6 +472,15 @@ func writeZip(w io.Writer, files map[string]string) error {
 	sort.Strings(names)
 	for _, n := range names {
 		if err := addFile(zw, n, files[n]); err != nil {
+			return err
+		}
+	}
+	for n, text := range notes {
+		f, err := zw.CreateHeader(&zip.FileHeader{Name: n, Method: zip.Deflate, Modified: time.Now()})
+		if err != nil {
+			return err
+		}
+		if _, err := io.WriteString(f, text); err != nil {
 			return err
 		}
 	}
@@ -497,17 +511,85 @@ func addFile(zw *zip.Writer, name, path string) error {
 	return err
 }
 
-// Export writes a world as a zip file.
-func (l *Library) Export(w io.Writer, name string) error {
+// ExportFile zips a world into a new file in dir and returns its path. The
+// zip holds the world laid out the way Valheim keeps it, plus a note on how
+// to play it. If the world's files change while they are being zipped
+// (the server saved), it starts again, so the copy is never half old and
+// half new.
+func (l *Library) ExportFile(name, dir string) (string, error) {
 	world, err := l.Get(name)
 	if err != nil {
-		return err
+		return "", err
 	}
-	files, err := worldEntries(world, l.Worlds)
-	if err != nil {
-		return err
+	notes := map[string]string{"How to play this world.txt": playNote(world)}
+	for try := 0; try < 3; try++ {
+		files, err := worldEntries(world, l.Worlds)
+		if err != nil {
+			return "", err
+		}
+		before := fingerprint(files)
+		f, err := os.CreateTemp(dir, ".download-*.zip")
+		if err != nil {
+			return "", err
+		}
+		err = writeZipNotes(f, files, notes)
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		if err == nil {
+			if after, aerr := worldEntries(world, l.Worlds); aerr == nil && fingerprint(after) == before {
+				return f.Name(), nil
+			}
+		}
+		os.Remove(f.Name())
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return "", err // a real problem, not a file replaced by a save
+		}
+		time.Sleep(exportRetryDelay) // let the save finish
 	}
-	return writeZip(w, files)
+	return "", errors.New("the server kept saving the world while it was being copied. Try again in a minute")
+}
+
+var exportRetryDelay = 2 * time.Second
+
+// fingerprint summarises files' names, sizes and times, to notice changes.
+func fingerprint(files map[string]string) string {
+	names := make([]string, 0, len(files))
+	for n := range files {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	var b strings.Builder
+	for _, n := range names {
+		st, err := os.Stat(files[n])
+		if err != nil {
+			fmt.Fprintf(&b, "%s missing\n", n)
+			continue
+		}
+		fmt.Fprintf(&b, "%s %d %d\n", n, st.Size(), st.ModTime().UnixNano())
+	}
+	return b.String()
+}
+
+// playNote explains how to play a downloaded world on your own PC.
+func playNote(w World) string {
+	what := fmt.Sprintf("the %q folder", w.Name)
+	if w.Format == FormatClassic {
+		what = fmt.Sprintf("%q and %q", w.Name+".fwl", w.Name+".db")
+	}
+	lines := []string{
+		fmt.Sprintf("How to play this world (%s) in Valheim on your own PC", w.Name),
+		"",
+		"1. Press Windows + R, paste this and press Enter:",
+		`       %userprofile%\AppData\LocalLow\IronGate\Valheim\worlds_local`,
+		fmt.Sprintf("2. Copy %s from this zip into that folder.", what),
+		fmt.Sprintf("   If you already have a world called %q there, move yours somewhere else first.", w.Name),
+		"3. Start Valheim, choose Start Game and pick your character. The world is in the list.",
+		"",
+		"To put it on a server run by Valheim Easy Server, drop this zip on",
+		`"Add a world" on the Worlds page.`,
+	}
+	return strings.Join(lines, "\r\n") + "\r\n"
 }
 
 // ExportBackup writes a backup as a zip file laid out like the world.

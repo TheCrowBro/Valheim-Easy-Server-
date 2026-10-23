@@ -15,29 +15,32 @@ import (
 
 // Status is everything the dashboard shows. It is polled every few seconds.
 type Status struct {
-	State        State                `json:"state"`
-	Installed    bool                 `json:"installed"`
-	Job          *Job                 `json:"job,omitempty"`
-	ServerName   string               `json:"serverName"`
-	World        string               `json:"world"`        // selected world
-	RunningWorld string               `json:"runningWorld"` // world of the running server
-	Players      []PlayerView         `json:"players"`
-	Join         JoinInfo             `json:"join"`
-	Version      string               `json:"version,omitempty"`
-	Build        string               `json:"build,omitempty"`
-	BuildDate    *time.Time           `json:"buildDate,omitempty"`
-	StartedAt    *time.Time           `json:"startedAt,omitempty"`
-	LastSave     *time.Time           `json:"lastSave,omitempty"`
-	LastExit     *ExitInfo            `json:"lastExit,omitempty"`
-	NeedsRestart bool                 `json:"needsRestart"`
-	Live         Live                 `json:"live"`
-	Idle         *IdleInfo            `json:"idle,omitempty"`
-	Hibernate    HibernateInfo        `json:"hibernate"`
-	Checklist    Checklist            `json:"checklist"`
-	Warnings     []string             `json:"warnings"`
-	Activity     []Activity           `json:"activity"`
-	Machine      platform.MachineInfo `json:"machine"`
-	Now          time.Time            `json:"now"`
+	State        State                 `json:"state"`
+	Installed    bool                  `json:"installed"`
+	Job          *Job                  `json:"job,omitempty"`
+	ServerName   string                `json:"serverName"`
+	World        string                `json:"world"`        // selected world
+	RunningWorld string                `json:"runningWorld"` // world of the running server
+	Players      []PlayerView          `json:"players"`
+	Join         JoinInfo              `json:"join"`
+	Version      string                `json:"version,omitempty"`
+	Build        string                `json:"build,omitempty"`
+	BuildDate    *time.Time            `json:"buildDate,omitempty"`
+	StartedAt    *time.Time            `json:"startedAt,omitempty"`
+	LastSave     *time.Time            `json:"lastSave,omitempty"`
+	LastExit     *ExitInfo             `json:"lastExit,omitempty"`
+	NeedsRestart bool                  `json:"needsRestart"`
+	Live         Live                  `json:"live"`
+	Idle         *IdleInfo             `json:"idle,omitempty"`
+	Hibernate    HibernateInfo         `json:"hibernate"`
+	Sleep        HibernateInfo         `json:"sleep"`
+	RestMode     string                `json:"restMode"` // config.RestHibernate or config.RestSleep
+	Network      []platform.NetAdapter `json:"network"`
+	Checklist    Checklist             `json:"checklist"`
+	Warnings     []string              `json:"warnings"`
+	Activity     []Activity            `json:"activity"`
+	Machine      platform.MachineInfo  `json:"machine"`
+	Now          time.Time             `json:"now"`
 }
 
 // PlayerView is a player in the dashboard list.
@@ -64,7 +67,7 @@ type IdleInfo struct {
 	HibernateAt time.Time `json:"hibernateAt"`
 }
 
-// HibernateInfo says whether hibernating is possible.
+// HibernateInfo says whether hibernating (or sleeping) is possible.
 type HibernateInfo struct {
 	Available bool   `json:"available"`
 	Detail    string `json:"detail,omitempty"`
@@ -75,6 +78,8 @@ type Checklist struct {
 	Installed     bool    `json:"installed"`
 	Firewall      bool    `json:"firewall"`
 	Hibernate     bool    `json:"hibernate"`
+	Wired         bool    `json:"wired"`     // connected by network cable
+	WakeOnLAN     bool    `json:"wakeOnLan"` // a connected wired adapter may wake the computer
 	LaunchOnLogin bool    `json:"launchOnLogin"`
 	FreeDiskGB    float64 `json:"freeDiskGB"`
 }
@@ -89,6 +94,8 @@ type checkCache struct {
 	at            time.Time
 	firewall      bool
 	hibernate     HibernateInfo
+	sleep         HibernateInfo
+	network       []platform.NetAdapter
 	launchOnLogin bool
 	freeDisk      uint64
 	freeDiskOK    bool
@@ -109,6 +116,9 @@ func (m *Manager) Status() Status {
 		Live:       m.live,
 		LastExit:   m.lastExit,
 		Hibernate:  m.checks.hibernate,
+		Sleep:      m.checks.sleep,
+		RestMode:   s.RestMode,
+		Network:    append([]platform.NetAdapter{}, m.checks.network...),
 		Activity:   acts,
 		Machine:    m.machine,
 		Now:        time.Now(),
@@ -158,6 +168,12 @@ func (m *Manager) Status() Status {
 		Firewall:      m.checks.firewall,
 		Hibernate:     m.checks.hibernate.Available,
 		LaunchOnLogin: m.checks.launchOnLogin,
+	}
+	for _, a := range m.checks.network {
+		if a.Wired && a.Connected {
+			st.Checklist.Wired = true
+			st.Checklist.WakeOnLAN = st.Checklist.WakeOnLAN || a.WakeArmed
+		}
 	}
 	if m.checks.freeDiskOK {
 		st.Checklist.FreeDiskGB = float64(m.checks.freeDisk) / (1 << 30)
@@ -247,6 +263,8 @@ func (m *Manager) checksLoop() {
 			c.at = time.Now()
 			c.firewall = platform.FirewallReady()
 			c.hibernate.Available, c.hibernate.Detail = m.opt.HibernateStatus()
+			c.sleep.Available, c.sleep.Detail = m.opt.SleepStatus()
+			c.network = platform.NetAdapters()
 			c.launchOnLogin, _ = platform.LaunchOnLogin()
 			c.freeDisk, c.freeDiskOK = platform.FreeDisk(save)
 			m.mu.Lock()
@@ -268,13 +286,21 @@ func (m *Manager) RefreshChecks() {
 	m.mu.Unlock()
 }
 
+// recheckSoon re-runs the setup checks a few times over the next half
+// minute, to notice changes made after a Windows permission prompt.
+func (m *Manager) recheckSoon() {
+	for _, d := range []time.Duration{0, 5 * time.Second, 15 * time.Second, 30 * time.Second} {
+		time.AfterFunc(d, m.RefreshChecks)
+	}
+}
+
 // FixFirewall adds the firewall rules (asks for admin permission).
 func (m *Manager) FixFirewall() error {
 	m.mu.Lock()
 	exe, data := m.paths.ServerExe, m.opt.DataDir
 	m.mu.Unlock()
 	err := platform.FixFirewall(exe, m.opt.AppExe, data)
-	m.RefreshChecks()
+	m.recheckSoon()
 	return err
 }
 

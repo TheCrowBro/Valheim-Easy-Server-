@@ -12,6 +12,14 @@ func HibernateStatus() (bool, string) {
 // Hibernate is only implemented on Windows.
 func Hibernate() error { return ErrUnsupported }
 
+// SleepStatus reports whether the computer can sleep.
+func SleepStatus() (bool, string) {
+	return false, "Sleep is only available on Windows."
+}
+
+// Sleep is only implemented on Windows.
+func Sleep() error { return ErrUnsupported }
+
 // EnableHibernate is only implemented on Windows.
 func EnableHibernate() error { return ErrUnsupported }
 

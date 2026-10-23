@@ -38,6 +38,7 @@ func (s *Server) routes() http.Handler {
 	a("POST /api/power/hibernate", s.act(func(r *http.Request) error { return s.m.Hibernate("") }))
 	a("POST /api/power/keep-awake", s.act(func(r *http.Request) error { s.m.KeepAwake(); return nil }))
 	a("POST /api/power/enable-hibernate", s.act(func(r *http.Request) error { return s.m.EnableHibernation() }))
+	a("POST /api/power/enable-wake-on-lan", s.act(func(r *http.Request) error { return s.m.EnableWakeOnLAN() }))
 
 	a("GET /api/worlds", s.worlds)
 	a("POST /api/worlds/select", s.selectWorld)
@@ -255,17 +256,33 @@ func attachment(w http.ResponseWriter, name string) {
 	w.Header().Set("Cache-Control", "no-store")
 }
 
+// downloadWorld packs a world into a zip first, so problems are reported
+// properly and the browser knows the size (for its progress bar).
 func (s *Server) downloadWorld(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
 	if msg := config.WorldNameProblem(name); msg != "" {
 		writeErr(w, http.StatusBadRequest, msg)
 		return
 	}
-	attachment(w, name+".zip")
-	if err := s.m.ExportWorld(w, name); err != nil {
-		s.log.Printf("download %s: %v", name, err)
-		// Headers may be sent already; a broken zip is the best signal left.
+	path, filename, err := s.m.PrepareDownload(name)
+	if err != nil {
+		fail(w, err)
+		return
 	}
+	defer os.Remove(path)
+	f, err := os.Open(path)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	attachment(w, filename)
+	http.ServeContent(w, r, filename, st.ModTime(), f)
 }
 
 func (s *Server) downloadBackup(w http.ResponseWriter, r *http.Request) {

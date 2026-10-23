@@ -47,6 +47,8 @@ type Options struct {
 	NewInstaller    func(config.Paths) steamcmd.Installer // used when Installer is nil
 	Hibernate       func() error
 	HibernateStatus func() (bool, string)
+	Sleep           func() error
+	SleepStatus     func() (bool, string)
 	NoPublicIP      bool // don't look up the public IP address
 	SampleInterval  time.Duration
 	RestartDelay    time.Duration // wait before restarting after a crash
@@ -195,6 +197,12 @@ func New(opt Options) (*Manager, error) {
 	}
 	if opt.HibernateStatus == nil {
 		m.opt.HibernateStatus = platform.HibernateStatus
+	}
+	if opt.Sleep == nil {
+		m.opt.Sleep = platform.Sleep
+	}
+	if opt.SleepStatus == nil {
+		m.opt.SleepStatus = platform.SleepStatus
 	}
 	if b, err := stats.Load(filepath.Join(opt.DataDir, "stats.json")); err == nil {
 		m.byPlayers = b

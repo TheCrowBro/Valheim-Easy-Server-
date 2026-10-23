@@ -1,5 +1,5 @@
-// Settings: one form for the server, automation, backups and folders, plus
-// maintenance.
+// Settings: one form for the server, automation, resting and waking up,
+// backups and folders, plus maintenance.
 
 import { h, icon, api, toast, confirmDialog, toggle } from './dom.js';
 
@@ -68,8 +68,9 @@ function automationSection() {
     switchRow('autoRestart', 'Restart the server if it crashes', 'Gives up after 3 crashes in 15 minutes.'),
     switchRow('startWithApp', 'Start the server when this app opens'),
     switchRow('startAfterWake', 'Start the server again after the computer wakes up',
-      'If the server was running when the computer went into hibernation, it starts again by itself when someone wakes the computer.'),
-    switchRow('idleHibernate', 'Hibernate when nobody is playing', 'Saves power. Someone has to press the power button to wake the computer again.', {
+      'If the server was running when the computer went to rest, it starts again by itself when someone wakes the computer.'),
+    switchRow('idleHibernate', draft.restMode === 'sleep' ? 'Sleep when nobody is playing' : 'Hibernate when nobody is playing',
+      'Saves power. Wake the computer with Wake-on-LAN (for example from the IP KVM) or its power button.', {
       extra: draft.idleHibernate ? h('div', { class: 'row', style: { marginTop: '8px' } }, 'After',
         h('input', { class: `input${errors.idleMinutes ? ' invalid' : ''}`, type: 'number', min: 10, max: 1440, 'data-field': 'idleMinutes', value: draft.idleMinutes, style: { width: '96px' }, 'aria-label': 'Minutes' }),
         'minutes without players') : null,
@@ -78,6 +79,43 @@ function automationSection() {
       h('div', { class: 'grow' }, h('div', { class: 'title' }, 'Start this app when Windows starts'),
         h('div', { class: 'help' }, 'Opens quietly in the background (look for the shield in the taskbar corner).')),
       toggle({ checked: !!view.launchOnLogin, 'data-action': 'settings-login', 'aria-label': 'Start with Windows' })));
+}
+
+function restSection(app) {
+  const st = app.status;
+  const canSleep = !st || st.sleep.available;
+  const option = (value, title, help, disabled) => h('label', { class: `choice${draft.restMode === value ? ' on' : ''}${disabled ? ' disabled' : ''}` },
+    h('input', { type: 'radio', name: 'restMode', value, 'data-field': 'restMode', checked: draft.restMode === value, disabled }),
+    h('div', null, h('div', { class: 'title' }, title), h('div', { class: 'help' }, help)));
+  const wired = (st ? st.network : []).filter((a) => a.wired);
+  const main = wired.find((a) => a.connected);
+  const others = wired.filter((a) => a !== main);
+  return h('section', { class: 'card' },
+    h('div', { class: 'card-head' }, h('h2', null, 'Resting and waking up')),
+    h('p', { class: 'text-2', style: { marginBottom: '12px' } }, 'When the Hibernate (or Sleep) button is used, or nobody has played for a while, the computer can:'),
+    h('div', { class: 'choices' },
+      option('hibernate', 'Hibernate', 'Uses no power. Some computers can’t be woken by Wake-on-LAN from hibernation; if yours doesn’t wake, choose Sleep.'),
+      option('sleep', 'Sleep', canSleep ? 'Uses a little power and wakes in seconds. Wake-on-LAN can wake most computers from sleep.' : st.sleep.detail, !canSleep)),
+    h('h3', { class: 'subhead' }, 'Wake-on-LAN'),
+    main ? [
+      h('p', { class: 'text-2' }, 'To wake this computer from your IP KVM (or any Wake-on-LAN app), use this address:'),
+      h('div', { class: 'row', style: { gap: '8px', margin: '8px 0' } },
+        h('span', { class: 'mac mono' }, main.mac),
+        h('button', { class: 'btn btn-sm', 'data-action': 'copy', 'data-text': main.mac, 'data-label': 'Address copied' }, icon('copy'), 'Copy')),
+      h('p', { class: 'small muted' }, [main.name, main.description !== main.name ? main.description : '', (main.ipv4 || [])[0] ? 'IP ' + main.ipv4[0] : ''].filter(Boolean).join(' · ')),
+      main.wakeArmed
+        ? h('div', { class: 'callout good', style: { marginTop: '12px' } }, icon('check'), h('div', { class: 'body' },
+          h('p', null, 'Windows lets this network adapter wake the computer.'),
+          h('p', { class: 'small text-2' }, 'Test it once: use the Hibernate (or Sleep) button, wait a minute, then send Wake-on-LAN from the IP KVM.')))
+        : h('div', { class: 'callout warn', style: { marginTop: '12px' } }, icon('alert'), h('div', { class: 'body' },
+          h('p', null, 'Windows doesn’t let this network adapter wake the computer yet.'),
+          h('div', { class: 'actions' }, h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'enable-wol' }, icon('power'), 'Turn on Wake-on-LAN')),
+          h('p', { class: 'small text-2', style: { marginTop: '8px' } }, 'Windows asks for permission. Nobody playing is disconnected. If it still doesn’t wake afterwards, restart the computer once.'))),
+      others.length ? h('p', { class: 'small muted', style: { marginTop: '10px' } }, 'Other network ports: ',
+        others.map((a) => `${a.name} (${a.mac}${a.connected ? '' : ', no cable'})`).join(', ')) : null,
+    ] : h('div', { class: 'callout warn' }, icon('alert'), h('div', { class: 'body' },
+      h('p', null, h('strong', null, 'Wake-on-LAN needs a network cable. ')),
+      h('p', null, 'No wired network connection was found. Connect the computer to the router with an Ethernet cable: Wake-on-LAN doesn’t work over Wi-Fi.'))));
 }
 
 function backupSection() {
@@ -141,6 +179,7 @@ export default {
     return h('div', { class: 'stack' },
       serverSection(),
       automationSection(),
+      restSection(app),
       backupSection(),
       foldersSection(),
       maintenanceSection(app),

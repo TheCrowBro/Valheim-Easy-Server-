@@ -127,8 +127,8 @@ function topbar() {
     h('h1', null, app.page.heading || app.page.title),
     h('span', { class: 'status-pill', role: 'status' }, h('span', { class: `dot ${info.dot}` }), info.label,
       st && st.state === 'online' ? h('span', { class: 'muted' }, `· ${st.players.length} playing`) : null),
-    h('button', { class: 'btn', 'data-action': 'hibernate', disabled: !st || hibernating, title: 'Save the world, stop the server and put the computer to sleep' },
-      icon('moon'), 'Hibernate'));
+    h('button', { class: 'btn', 'data-action': 'hibernate', disabled: !st || hibernating, title: 'Save the world, stop the server and let the computer rest' },
+      icon('moon'), restWord(st)));
 }
 
 function banners() {
@@ -206,19 +206,26 @@ A.repair = async () => {
   run('/api/server/install', { repair: true });
 };
 A['cancel-job'] = () => run('/api/job/cancel');
+// restWord is what the rest button says: the computer hibernates or sleeps.
+export function restWord(st) {
+  return st && st.restMode === 'sleep' ? 'Sleep' : 'Hibernate';
+}
+
 A.hibernate = async () => {
   const st = app.status;
-  const warn = playersWarning('hibernate');
+  const sleep = st && st.restMode === 'sleep';
+  const warn = playersWarning(sleep ? 'put the computer to sleep' : 'hibernate');
+  const rest = sleep ? 'Then the computer goes to sleep, using very little power.' : 'Then the computer goes into hibernation, using no power.';
   const msg = h('div', { class: 'stack', style: { gap: '10px' } },
-    h('p', null, st && st.state !== 'stopped' && st.state !== 'not_installed'
-      ? 'The world is saved and the server stops first. Then the computer goes into hibernation, using almost no power.'
-      : 'The computer goes into hibernation, using almost no power.'),
+    h('p', null, st && st.state !== 'stopped' && st.state !== 'not_installed' ? 'The world is saved and the server stops first. ' + rest : rest.replace(/^Then the/, 'The')),
     warn ? h('p', null, h('strong', null, warn)) : null,
-    h('p', null, h('strong', null, 'To wake it up, someone has to press the power button on the computer.')));
-  if (!await confirmDialog({ title: 'Hibernate this computer?', message: msg, confirm: 'Hibernate', icon: 'moon' })) return;
+    h('p', null, h('strong', null, 'Wake it with Wake-on-LAN (for example from the IP KVM) or its power button.'),
+      st && !st.checklist.wakeOnLan ? ' Wake-on-LAN isn’t turned on yet: see Settings → Resting and waking up.' : ''));
+  if (!await confirmDialog({ title: sleep ? 'Put this computer to sleep?' : 'Hibernate this computer?', message: msg, confirm: restWord(st), icon: 'moon' })) return;
   run('/api/power/hibernate');
 };
-A['keep-awake'] = () => run('/api/power/keep-awake', null, 'Automatic hibernation postponed.');
+A['keep-awake'] = () => run('/api/power/keep-awake', null, 'Resting automatically was postponed.');
+A['enable-wol'] = () => run('/api/power/enable-wake-on-lan', null, 'Windows will ask for permission. Click Yes, then wait a few seconds.');
 A['enable-hibernate'] = () => run('/api/power/enable-hibernate', null, 'Windows will ask for permission. Click Yes.');
 A['fix-firewall'] = () => run('/api/system/firewall', null, 'Windows will ask for permission. Click Yes, then wait a few seconds.');
 A['open-folder'] = (d) => run('/api/system/open-folder', { which: d.which });

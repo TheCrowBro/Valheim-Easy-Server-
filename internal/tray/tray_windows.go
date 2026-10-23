@@ -30,7 +30,7 @@ func ready(o Options, done <-chan struct{}) {
 	start := systray.AddMenuItem("Start server", "")
 	stop := systray.AddMenuItem("Stop server", "Saves the world, then stops")
 	systray.AddSeparator()
-	hibernate := systray.AddMenuItem("Hibernate computer", "Saves the world, stops the server and hibernates")
+	hibernate := systray.AddMenuItem(o.RestLabel(), "Saves the world and stops the server first")
 	systray.AddSeparator()
 	quit := systray.AddMenuItem("Close app (server keeps running)", "")
 	quitStop := systray.AddMenuItem("Stop server and close app", "")
@@ -44,6 +44,7 @@ func ready(o Options, done <-chan struct{}) {
 			tip = tip[:120]
 		}
 		systray.SetTooltip(tip)
+		hibernate.SetTitle(o.RestLabel())
 		if o.Running() {
 			start.Disable()
 			stop.Enable()

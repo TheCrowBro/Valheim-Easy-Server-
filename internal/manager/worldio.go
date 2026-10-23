@@ -17,9 +17,19 @@ type ctxT = context.Context
 
 var timeNow = time.Now
 
-// ExportWorld streams a world as a zip file.
-func (m *Manager) ExportWorld(w io.Writer, name string) error {
-	return m.library().Export(w, name)
+// PrepareDownload zips a world for downloading. It returns the zip's path
+// (the caller deletes it) and a name for the file, like "Midgard
+// 2026-10-23.zip".
+func (m *Manager) PrepareDownload(name string) (path, filename string, err error) {
+	lib := m.library()
+	if err := os.MkdirAll(lib.Staging, 0o755); err != nil {
+		return "", "", err
+	}
+	path, err = lib.ExportFile(name, lib.Staging)
+	if err != nil {
+		return "", "", fmt.Errorf("Couldn't pack %q: %v", name, err)
+	}
+	return path, fmt.Sprintf("%s %s.zip", name, timeNow().Format("2006-01-02")), nil
 }
 
 // ExportBackup streams a backup as a zip file.

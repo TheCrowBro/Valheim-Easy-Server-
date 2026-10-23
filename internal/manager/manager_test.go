@@ -46,6 +46,7 @@ type testEnv struct {
 	m          *Manager
 	data       string
 	hibernated atomic.Int32
+	slept      atomic.Int32
 }
 
 func newTestManager(t *testing.T, data string, env *testEnv) *Manager {
@@ -58,6 +59,11 @@ func newTestManager(t *testing.T, data string, env *testEnv) *Manager {
 		HibernateStatus: func() (bool, string) { return true, "" },
 		Hibernate: func() error {
 			env.hibernated.Add(1)
+			return nil
+		},
+		SleepStatus: func() (bool, string) { return true, "" },
+		Sleep: func() error {
+			env.slept.Add(1)
 			return nil
 		},
 	}
@@ -316,6 +322,30 @@ func TestHibernateStopsServerFirst(t *testing.T) {
 	m.mu.Unlock()
 	if !resume {
 		t.Fatal("should restart the server after waking up")
+	}
+}
+
+func TestSleepInsteadOfHibernate(t *testing.T) {
+	env := setup(t)
+	m := env.m
+	s := m.Settings()
+	s.RestMode = config.RestSleep
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	if st := m.Status(); st.RestMode != config.RestSleep {
+		t.Fatalf("status rest mode = %q", st.RestMode)
+	}
+	if err := m.Hibernate(""); err != nil {
+		t.Fatal(err)
+	}
+	job := waitJob(t, m, currentJobID(m))
+	if job.Error != "" || env.slept.Load() != 1 || env.hibernated.Load() != 0 {
+		t.Fatalf("job %+v, slept %d, hibernated %d", job, env.slept.Load(), env.hibernated.Load())
+	}
+	s.RestMode = "nap"
+	if err := m.UpdateSettings(s); err == nil {
+		t.Fatal("an unknown rest mode was accepted")
 	}
 }
 

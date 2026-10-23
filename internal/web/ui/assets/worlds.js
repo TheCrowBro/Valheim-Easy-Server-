@@ -3,6 +3,7 @@
 
 import { h, icon, api, toast, openModal, confirmDialog, fmtBytes, ago, dateTime, field } from './dom.js';
 import { uploadSection, recent } from './upload.js';
+import { saveZip, downloads, today } from './download.js';
 
 let data = null;
 let loadedAt = 0;
@@ -90,11 +91,23 @@ function worldCard(app, w) {
       opts ? h('dt', null, 'Difficulty') : null, opts ? h('dd', null, opts) : null),
     h('div', { class: 'actions' },
       playBtn,
-      h('button', { class: 'btn btn-sm', 'data-action': 'world-download', 'data-name': w.name, title: 'Download as a zip file' }, icon('download'), 'Download'),
+      downloadButton(w),
       h('button', { class: 'btn btn-sm', 'data-action': 'world-backup', 'data-name': w.name, disabled: busy }, icon('archive'), 'Back up'),
       h('div', { class: 'menu' },
         h('button', { class: 'btn btn-sm btn-icon', 'data-action': 'world-menu', 'data-name': w.name, 'aria-label': `More for ${w.name}`, 'aria-expanded': openMenu === w.name ? 'true' : 'false' }, icon('more')),
         menu)));
+}
+
+function downloadButton(w) {
+  const dl = downloads['world:' + w.name];
+  if (!dl) {
+    return h('button', { class: 'btn btn-sm', 'data-action': 'world-download', 'data-name': w.name, title: 'Save a copy of this world as a zip file, for example on a USB stick' },
+      icon('download'), 'Download');
+  }
+  const pct = dl.total ? Math.min(100, Math.round((dl.sent / dl.total) * 100)) : -1;
+  return h('div', { class: 'dl-progress', role: 'status' },
+    h('span', { class: 'small text-2' }, dl.phase === 'packing' ? 'Packing the world…' : pct >= 0 ? `Saving… ${pct}%` : `Saving… ${fmtBytes(dl.sent)}`),
+    h('div', { class: `progress${pct < 0 ? ' indeterminate' : ''}` }, h('i', { style: { width: (pct < 0 ? 35 : pct) + '%' } })));
 }
 
 function pendingCard(name) {
@@ -131,7 +144,8 @@ export default {
       uploadSection(app),
       h('div', { class: 'row', style: { margin: '22px 0 16px' } },
         h('p', { class: 'text-2', style: { flex: '1 1 320px' } },
-          'The server plays the ', h('b', null, 'selected'), ' world. Switching worlds restarts the server, and your other worlds stay safe here.'),
+          'The server plays the ', h('b', null, 'selected'), ' world. Switching worlds restarts the server, and your other worlds stay safe here. ',
+          h('b', null, 'Download'), ' saves a copy of a world, for example on a USB stick or in a cloud-drive folder.'),
         h('button', { class: 'btn', 'data-action': 'world-new', disabled: busy }, icon('plus'), 'New world'),
         h('button', { class: 'btn', 'data-action': 'world-local', disabled: busy }, icon('folder'), 'Import from this PC')),
       h('div', { class: 'world-grid' },
@@ -202,11 +216,10 @@ function registerActions(app) {
     app.poll();
   };
   A['world-download'] = (d) => {
-    const a = h('a', { href: '/api/worlds/download?name=' + encodeURIComponent(d.name), download: d.name + '.zip' });
-    document.body.append(a);
-    a.click();
-    a.remove();
-    toast('Your download is starting. Big worlds take a moment to pack.', 'info');
+    const st = app.status;
+    let note = 'There’s a note inside on how to play it on another PC.';
+    if (data.running === d.name && st && st.lastSave) note = `It has the world as of its last save, ${ago(st.lastSave)}. ` + note;
+    saveZip('world:' + d.name, '/api/worlds/download?name=' + encodeURIComponent(d.name), `${d.name} ${today()}.zip`, note, () => app.render());
   };
   A['world-backup'] = async (d) => {
     try {
@@ -338,7 +351,11 @@ function backupsModal(app, name) {
     h('div', { class: 'grow' },
       h('div', { class: 'name', style: { whiteSpace: 'normal' } }, b.label),
       h('div', { class: 'sub' }, `${dateTime(b.time)} · ${fmtBytes(b.size)}${b.format === 'classic' ? ' · old format' : ''}`)),
-    h('a', { class: 'btn btn-sm btn-icon', href: `/api/worlds/backup-download?name=${encodeURIComponent(name)}&id=${encodeURIComponent(b.id)}`, download: '', 'aria-label': 'Download this backup', title: 'Download' }, icon('download')),
+    h('button', {
+      class: 'btn btn-sm btn-icon', 'aria-label': 'Download this backup', title: 'Download',
+      onclick: () => saveZip('backup:' + b.id, `/api/worlds/backup-download?name=${encodeURIComponent(name)}&id=${encodeURIComponent(b.id)}`,
+        `${name} backup ${today(b.time)}.zip`, '', () => {}),
+    }, icon('download')),
     h('button', {
       class: 'btn btn-sm', disabled: runningNow, title: runningNow ? 'Stop the server first' : null,
       onclick: async () => {

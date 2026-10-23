@@ -17,6 +17,7 @@ import (
 var (
 	powrprof               = windows.NewLazySystemDLL("powrprof.dll")
 	procGetPwrCapabilities = powrprof.NewProc("GetPwrCapabilities")
+	procSetSuspendState    = powrprof.NewProc("SetSuspendState")
 	procPowerCreateRequest = kernel32.NewProc("PowerCreateRequest")
 	procPowerSetRequest    = kernel32.NewProc("PowerSetRequest")
 	procPowerClearRequest  = kernel32.NewProc("PowerClearRequest")
@@ -55,6 +56,30 @@ func Hibernate() error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("Windows refused to hibernate: %v %s", err, out)
+	}
+	return nil
+}
+
+// SleepStatus reports whether Windows can sleep (standby, ACPI S3).
+func SleepStatus() (available bool, detail string) {
+	// SystemS3 is byte 5 of SYSTEM_POWER_CAPABILITIES.
+	var caps [128]byte
+	if r, _, _ := procGetPwrCapabilities.Call(uintptr(unsafe.Pointer(&caps[0]))); r == 0 {
+		return false, "Windows didn't say whether sleep is available."
+	}
+	if caps[5] == 0 {
+		return false, "Windows can't put this computer to sleep (it may be missing a chipset or graphics driver). Use hibernation instead."
+	}
+	return true, ""
+}
+
+// Sleep puts the computer to sleep. Unlike hibernation it keeps a little
+// power on, which most network adapters need to wake the computer with
+// Wake-on-LAN. The call returns once the computer has woken up again.
+func Sleep() error {
+	// SetSuspendState(bHibernate=FALSE, bForce=FALSE, bWakeupEventsDisabled=FALSE)
+	if r, _, err := procSetSuspendState.Call(0, 0, 0); r == 0 {
+		return fmt.Errorf("Windows refused to sleep: %v", err)
 	}
 	return nil
 }

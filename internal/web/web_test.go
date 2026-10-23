@@ -1,6 +1,7 @@
 package web
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -161,6 +163,36 @@ func TestUploadKeepsFolders(t *testing.T) {
 	}
 	if !placed() {
 		t.Fatal("the world wasn't put in the worlds folder")
+	}
+
+	// Downloading it gives a dated zip with the world and a how-to note,
+	// and leaves no temporary file behind.
+	rec = ts.do("GET", "/api/worlds/download?name=Asgard", "127.0.0.1", nil, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("download = %d %s", rec.Code, rec.Body.String())
+	}
+	if cd := rec.Header().Get("Content-Disposition"); !strings.Contains(cd, `filename="Asgard 20`) {
+		t.Fatalf("Content-Disposition = %q", cd)
+	}
+	if rec.Header().Get("Content-Length") == "" {
+		t.Fatal("no Content-Length")
+	}
+	zr, err := zip.NewReader(bytes.NewReader(rec.Body.Bytes()), int64(rec.Body.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, f := range zr.File {
+		got[f.Name] = true
+	}
+	if !got["Asgard/_main.1.fwl2"] || !got["How to play this world.txt"] {
+		t.Fatalf("zip has %v", got)
+	}
+	if left, _ := filepath.Glob(filepath.Join(ts.m.Paths().Staging, ".download-*")); len(left) != 0 {
+		t.Fatalf("temporary files left: %v", left)
+	}
+	if rec := ts.do("GET", "/api/worlds/download?name=Nowhere", "127.0.0.1", nil, nil); rec.Code != http.StatusBadRequest {
+		t.Fatalf("download of a missing world = %d", rec.Code)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"time"
 
+	"valheim-easy-server/internal/config"
 	"valheim-easy-server/internal/platform"
 	"valheim-easy-server/internal/stats"
 )
@@ -20,10 +21,23 @@ type Live struct {
 	Cores    float64              `json:"cores"` // CPU cores the server keeps busy
 }
 
-// Hibernate saves the world, stops the server and hibernates the computer.
+const wakeHint = "Wake it with Wake-on-LAN (for example from an IP KVM) or its power button."
+
+// Hibernate saves the world, stops the server and puts the computer to
+// rest: into hibernation, or to sleep if the settings say so.
 func (m *Manager) Hibernate(reason string) error {
-	return m.runJob("hibernate", "Hibernating the computer", false, func(ctx context.Context, j *jobCtl) error {
-		if ok, detail := m.opt.HibernateStatus(); !ok {
+	m.mu.Lock()
+	sleep := m.settings.RestMode == config.RestSleep
+	m.mu.Unlock()
+	title := "Hibernating the computer"
+	if sleep {
+		title = "Putting the computer to sleep"
+	}
+	return m.runJob("hibernate", title, false, func(ctx context.Context, j *jobCtl) error {
+		if ok, detail := m.restStatus(sleep); !ok {
+			if sleep {
+				return &ActionError{Msg: detail, Action: "settings"}
+			}
 			return &ActionError{Msg: detail, Action: "enable_hibernate"}
 		}
 		m.mu.Lock()
@@ -31,50 +45,80 @@ func (m *Manager) Hibernate(reason string) error {
 		m.mu.Unlock()
 		if running {
 			if err := m.doStop(ctx, j); err != nil {
-				// Hibernating keeps everything in memory, so nothing is lost
+				// Resting keeps everything in memory, so nothing is lost
 				// even if the server didn't stop.
-				m.log.Printf("stopping before hibernate: %v", err)
+				m.log.Printf("stopping before resting: %v", err)
 			}
 		}
 		m.mu.Lock()
 		m.resumeOnWake = running
 		m.mu.Unlock()
-		text := "The computer is going into hibernation. Press its power button to wake it up."
+		text := "The computer is going into hibernation. " + wakeHint
+		if sleep {
+			text = "The computer is going to sleep. " + wakeHint
+		}
 		if reason != "" {
 			text = reason + " " + text
 		}
 		m.addActivity("hibernate", "", text)
-		j.step("Going to sleep… Press the power button on the computer to wake it up.", -1)
+		j.step("Going to rest… "+wakeHint, -1)
 		m.saveData()
 		time.Sleep(4 * time.Second) // let open control panels show the message
-		if err := m.opt.Hibernate(); err != nil {
+		rest := m.opt.Hibernate
+		if sleep {
+			rest = m.opt.Sleep
+		}
+		if err := rest(); err != nil {
 			m.mu.Lock()
 			m.resumeOnWake = false
 			m.mu.Unlock()
 			return err
 		}
-		j.result("The computer hibernated.")
+		if sleep {
+			j.result("The computer slept and has woken up again.") // Sleep returns after waking
+		} else {
+			j.result("The computer hibernated.")
+		}
 		return nil
 	})
 }
 
-// EnableHibernation turns hibernation on (Windows asks for admin
-// permission on the server computer).
-func (m *Manager) EnableHibernation() error {
-	err := platform.EnableHibernate()
-	m.mu.Lock()
-	m.checks.at = time.Time{} // re-check soon
-	m.mu.Unlock()
+// restStatus reports whether the computer can hibernate (or sleep).
+func (m *Manager) restStatus(sleep bool) (bool, string) {
+	if sleep {
+		return m.opt.SleepStatus()
+	}
+	return m.opt.HibernateStatus()
+}
+
+// EnableWakeOnLAN lets the wired network adapters wake the computer
+// (Windows asks for admin permission on the screen).
+func (m *Manager) EnableWakeOnLAN() error {
+	err := platform.EnableWakeOnLAN(m.opt.DataDir)
+	m.recheckSoon()
 	return err
 }
 
-// KeepAwake postpones automatic hibernation.
+// EnableHibernation turns hibernation on (Windows asks for admin
+// permission on the screen).
+func (m *Manager) EnableHibernation() error {
+	err := platform.EnableHibernate()
+	m.recheckSoon()
+	return err
+}
+
+// KeepAwake postpones automatic hibernation (or sleep).
 func (m *Manager) KeepAwake() {
 	m.mu.Lock()
 	m.idleSince = time.Now()
 	m.keepAwakeUntil = time.Now().Add(time.Duration(m.settings.IdleMinutes) * time.Minute)
+	sleep := m.settings.RestMode == config.RestSleep
 	m.mu.Unlock()
-	m.addActivity("info", "", "Automatic hibernation was postponed.")
+	if sleep {
+		m.addActivity("info", "", "Automatic sleep was postponed.")
+	} else {
+		m.addActivity("info", "", "Automatic hibernation was postponed.")
+	}
 	m.notify()
 }
 
@@ -92,7 +136,9 @@ func (m *Manager) sampleLoop() {
 		case now := <-tick.C:
 			gap := now.Sub(last)
 			last = now
-			if gap > m.opt.SampleInterval+time.Minute {
+			// The clock keeps running while the computer rests, so a long
+			// pause between readings means it has just woken up.
+			if gap > m.opt.SampleInterval+20*time.Second {
 				m.onWake(gap)
 				continue
 			}
@@ -207,6 +253,7 @@ func (m *Manager) checkIdle(now time.Time) {
 	busy := m.job != nil && m.job.Finished == nil
 	deadline := m.idleDeadlineLocked()
 	minutes := m.settings.IdleMinutes
+	sleep := m.settings.RestMode == config.RestSleep
 	m.mu.Unlock()
 	if busy || now.Before(deadline) {
 		return
@@ -215,7 +262,7 @@ func (m *Manager) checkIdle(now time.Time) {
 	if idle, ok := platform.IdleTime(); ok && idle < time.Duration(minutes)*time.Minute {
 		return
 	}
-	if ok, _ := m.opt.HibernateStatus(); !ok {
+	if ok, _ := m.restStatus(sleep); !ok {
 		return
 	}
 	// If hibernating fails for some reason, try again in a while rather

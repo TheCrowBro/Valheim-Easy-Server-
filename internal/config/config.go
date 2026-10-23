@@ -37,8 +37,12 @@ type Settings struct {
 	AutoRestart    bool `json:"autoRestart"`
 	StartWithApp   bool `json:"startWithApp"`
 	StartAfterWake bool `json:"startAfterWake"`
-	IdleHibernate  bool `json:"idleHibernate"`
+	IdleHibernate  bool `json:"idleHibernate"` // rest (see RestMode) when nobody plays
 	IdleMinutes    int  `json:"idleMinutes"`
+	// RestMode is how the computer rests: RestHibernate uses no power;
+	// RestSleep keeps a little, which most network adapters need to wake
+	// the computer with Wake-on-LAN.
+	RestMode string `json:"restMode"`
 
 	// WorldOptions holds difficulty settings per world name.
 	WorldOptions map[string]WorldOptions `json:"worldOptions,omitempty"`
@@ -57,6 +61,12 @@ type WorldOptions struct {
 }
 
 const DefaultGamePort = 2456
+
+// Rest modes.
+const (
+	RestHibernate = "hibernate"
+	RestSleep     = "sleep"
+)
 
 // Presets are the values Valheim accepts for -preset.
 var Presets = []string{"normal", "casual", "easy", "hard", "hardcore", "immersive", "hammer"}
@@ -93,6 +103,7 @@ func Defaults() Settings {
 		AutoRestart:         true,
 		StartAfterWake:      true,
 		IdleMinutes:         60,
+		RestMode:            RestHibernate,
 	}
 }
 
@@ -152,6 +163,9 @@ func (s *Settings) fillMissing() {
 	}
 	if s.IdleMinutes == 0 {
 		s.IdleMinutes = d.IdleMinutes
+	}
+	if s.RestMode == "" {
+		s.RestMode = d.RestMode
 	}
 }
 
@@ -292,6 +306,9 @@ func (s Settings) Validate() FieldErrors {
 	}
 	if s.IdleMinutes < 10 || s.IdleMinutes > 1440 {
 		errs["idleMinutes"] = "Choose between 10 and 1440 minutes."
+	}
+	if s.RestMode != RestHibernate && s.RestMode != RestSleep {
+		errs["restMode"] = "Choose hibernate or sleep."
 	}
 	if len(s.ExtraArgs) > 1000 {
 		errs["extraArgs"] = "Extra arguments are too long."

@@ -207,3 +207,27 @@ func TestUDPPortInUse(t *testing.T) {
 		t.Fatalf("port %d reported in use after closing", port)
 	}
 }
+
+func TestNetAdaptersAndSleep(t *testing.T) {
+	for _, a := range NetAdapters() {
+		t.Logf("adapter: %+v", a)
+		if len(a.MAC) != 17 || a.Name == "" {
+			t.Fatalf("adapter details wrong: %+v", a)
+		}
+	}
+	ok, detail := SleepStatus()
+	t.Logf("sleep available=%v %q", ok, detail)
+	for desc, virtual := range map[string]bool{
+		"Broadcom NetXtreme Gigabit Ethernet":      false,
+		"Broadcom NetXtreme Gigabit Ethernet #2":   false,
+		"Intel(R) Ethernet Connection I219-V":      false,
+		"Microsoft Hyper-V Network Adapter":        true,
+		"Hyper-V Virtual Ethernet Adapter":         true,
+		"TAP-Windows Adapter V9":                   true,
+		"Bluetooth Device (Personal Area Network)": true,
+	} {
+		if virtualAdapter(desc) != virtual {
+			t.Errorf("virtualAdapter(%q) = %v", desc, !virtual)
+		}
+	}
+}

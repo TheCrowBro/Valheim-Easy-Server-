@@ -170,13 +170,23 @@ func TestExportAndBackupDeleteRestore(t *testing.T) {
 	l := newLib(t)
 	makeFolderWorld(t, l.Worlds, "Midgard", "S")
 
-	var buf bytes.Buffer
-	if err := l.Export(&buf, "Midgard"); err != nil {
+	path, err := l.ExportFile("Midgard", t.TempDir())
+	if err != nil {
 		t.Fatal(err)
 	}
-	entries := zipEntries(t, buf.Bytes())
-	if entries["Midgard/_main.1.db2"] != 1000 || entries["Midgard/00_00__0_1.chunk"] != 500 || len(entries) != 5 {
+	data, _ := os.ReadFile(path)
+	entries := zipEntries(t, data)
+	if entries["Midgard/_main.1.db2"] != 1000 || entries["Midgard/00_00__0_1.chunk"] != 500 || entries["How to play this world.txt"] == 0 || len(entries) != 6 {
 		t.Fatalf("export entries = %v", entries)
+	}
+	// What was downloaded can be added again.
+	u, _ := l.NewUpload()
+	defer u.Remove()
+	f, _ := os.Open(path)
+	err = u.AddFile("Midgard 2026-10-23.zip", f)
+	f.Close()
+	if cands := u.Scan(l); err != nil || len(cands) != 1 || cands[0].Name != "Midgard" {
+		t.Fatalf("re-adding the download: %v %+v", err, cands)
 	}
 
 	if _, err := l.Backup("Midgard", "manual"); err != nil {
@@ -509,5 +519,39 @@ func TestFailedReplacePutsOldCopyBack(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(l.Worlds, "Midgard", "00_00__0_1.chunk")); err != nil {
 		t.Fatal("old copy not fully restored")
+	}
+}
+
+func TestExportWaitsForSaves(t *testing.T) {
+	old := exportRetryDelay
+	exportRetryDelay = 10 * time.Millisecond
+	t.Cleanup(func() { exportRetryDelay = old })
+	l := newLib(t)
+	makeFolderWorld(t, l.Worlds, "Midgard", "S")
+	// The "server" keeps saving: the world never stays the same while it is
+	// being zipped, so no half-and-half copy may be handed out.
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			os.WriteFile(filepath.Join(l.Worlds, "Midgard", "_main.1.db2"), bytes.Repeat([]byte{byte(i)}, 1000+i%7), 0o644)
+			time.Sleep(time.Millisecond)
+		}
+	}()
+	_, err := l.ExportFile("Midgard", t.TempDir())
+	close(stop)
+	<-done
+	if err == nil || !strings.Contains(err.Error(), "kept saving") {
+		t.Fatalf("err = %v", err)
+	}
+	// Once it settles, the export works.
+	if _, err := l.ExportFile("Midgard", t.TempDir()); err != nil {
+		t.Fatal(err)
 	}
 }
