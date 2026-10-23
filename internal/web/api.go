@@ -16,6 +16,7 @@ import (
 
 	"valheim-easy-server/internal/config"
 	"valheim-easy-server/internal/manager"
+	"valheim-easy-server/internal/mods"
 	"valheim-easy-server/internal/platform"
 	"valheim-easy-server/internal/stats"
 	"valheim-easy-server/internal/worlds"
@@ -422,8 +423,15 @@ type settingsView struct {
 	ModifierOrder []string            `json:"modifierOrder"`
 	Keys          []string            `json:"keys"`
 	Paths         config.Paths        `json:"paths"`
+	Mods          []modView           `json:"mods"`
 	LaunchOnLogin bool                `json:"launchOnLogin"`
 	Version       string              `json:"version"` // this app's
+}
+
+// modView is a mod the app offers, with the version installed, if any.
+type modView struct {
+	mods.Mod
+	Version string `json:"version,omitempty"`
 }
 
 func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
@@ -434,7 +442,12 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		ModifierOrder: config.ModifierOrder,
 		Keys:          config.Keys,
 		Paths:         s.m.Paths(),
+		Mods:          []modView{},
 		Version:       s.version,
+	}
+	installed := (&mods.Installer{Dir: v.Paths.Server}).Installed()
+	for _, md := range mods.Catalog {
+		v.Mods = append(v.Mods, modView{Mod: md, Version: installed[md.Package]})
 	}
 	v.LaunchOnLogin, _ = platform.LaunchOnLogin()
 	writeJSON(w, http.StatusOK, v)

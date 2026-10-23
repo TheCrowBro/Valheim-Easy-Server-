@@ -36,11 +36,37 @@ function joinPicture(crossplay) {
 const worldCard = (name, playing, extra) =>
   h('div', { class: `tut-world${playing ? ' playing' : ''}` }, h('span', { class: 'world-name' }, name), extra);
 
+// The world card's ⋯ menu, and the Difficulty window it opens.
+const worldMenu = () => worldCard('Midgard', false, h('div', { class: 'tut-menu' },
+  h('span', null, icon('archive'), 'Backups'),
+  press(h('span', null, icon('gauge'), 'Difficulty')),
+  h('span', null, icon('trash'), 'Delete…')));
+
+const check = (on, label) => h('span', { class: `tut-check${on ? ' on' : ''}` }, h('span', { class: 'box' }, on ? icon('check') : null), label);
+const difficultyWindow = () => h('div', { class: 'tut-dialog' },
+  h('span', { class: 'muted small' }, 'Difficulty'),
+  h('span', { class: 'tut-select' }, 'Hard', icon('chevronDown')),
+  check(false, 'No map'),
+  check(true, 'Fire hazard'));
+
 function steps(st) {
   const rest = restWord(st);
   const sleep = rest === 'Sleep';
   const crossplay = !st || st.join.crossplay;
+  const mods = (st && st.mods) || [];
   return [
+    {
+      icon: 'gauge',
+      title: 'Set the world’s difficulty',
+      picture: flow(
+        [worldMenu(), 'Worlds, then ⋯ on the world'],
+        [difficultyWindow(), 'Pick a preset and switches']),
+      text: [
+        ['Best done before a world is first played, but you can change it any time. Open ', b('Worlds'), ', click ', b('⋯'), ' on the world’s card and choose ', b('Difficulty'), '. A new world gets the same choices under ', b('New world'), '.'],
+        ['Pick a preset such as Casual or Hard. Under ', b('More options'), ' you can change combat, resources, raids and portals, and tick switches like ', b('No map'), ' or ', b('Fire hazard'), '.'],
+        ['Changes apply the next time the server starts the world. Mods, such as Advanced Portals, are in ', b('Settings'), '.'],
+      ],
+    },
     {
       icon: 'play',
       title: 'Start the world',
@@ -59,14 +85,19 @@ function steps(st) {
       picture: flow(
         [h('div', { class: 'tut-game' }, h('span', { class: 'muted small' }, 'Valheim'), press(h('span', { class: 'tut-game-button' }, 'Join Game'))), 'In the game'],
         [joinPicture(crossplay), 'From the Home page']),
-      text: crossplay
-        ? [
-          ['In Valheim, pick your character and go to ', b('Join Game'), '. Choose to join by code and type the ', b('join code'), ' from ', b('How friends join'), ' on the Home page, then the password.'],
-          ['The join code changes every time the server starts, so check it again after a restart.'],
-        ]
-        : [
-          ['In Valheim, pick your character and go to ', b('Join Game'), '. Add the server by the address from ', b('How friends join'), ' on the Home page, then enter the password.'],
-        ],
+      text: [
+        ...(crossplay
+          ? [
+            ['In Valheim, pick your character and go to ', b('Join Game'), '. Choose to join by code and type the ', b('join code'), ' from ', b('How friends join'), ' on the Home page, then the password.'],
+            ['The join code changes every time the server starts, so check it again after a restart.'],
+          ]
+          : [
+            ['In Valheim, pick your character and go to ', b('Join Game'), '. Add the server by the address from ', b('How friends join'), ' on the Home page, then enter the password.'],
+          ]),
+        ...(mods.length
+          ? [[`This server uses the ${mods.join(', ')} mod${mods.length > 1 ? 's' : ''}, so install the same in your game first, with a mod manager such as r2modman or Gale.`]]
+          : []),
+      ],
     },
     {
       icon: 'stop',
@@ -149,6 +180,8 @@ export function openTutorial(app) {
   back.onclick = () => show(at - 1);
   next.onclick = () => (at === last ? modal.close() : show(at + 1));
   modal.foot.prepend(dots);
+  modal.el.classList.add('tutorial');
+  const scroller = modal.el.querySelector('.modal-body');
   document.addEventListener('keydown', onKey);
 
   function show(i) {
@@ -166,6 +199,7 @@ export function openTutorial(app) {
     back.replaceChildren(icon('arrowLeft'), 'Back');
     next.replaceChildren(...(at === last ? [icon('check'), 'Done'] : ['Next', icon('arrowRight')]));
     live.textContent = `Step ${at + 1} of ${list.length}: ${list[at].title}`;
+    scroller.scrollTop = 0;
     if (document.activeElement === back && back.hidden) next.focus();
   }
   show(0);

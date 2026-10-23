@@ -38,6 +38,7 @@ func TestValidation(t *testing.T) {
 		{"worldOptions", func(s *Settings) {
 			s.WorldOptions = map[string]WorldOptions{s.World: {Modifiers: map[string]string{"combat": "impossible"}}}
 		}},
+		{"mods", func(s *Settings) { s.Mods = []string{"advancedportals", "epicloot"} }},
 	}
 	for _, c := range cases {
 		s := Defaults()
@@ -110,8 +111,13 @@ func TestWorldOptionsOff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(args, " "); !strings.Contains(got, "-removekey nomap -setkey fire") {
+	// Valheim keeps keys, so a world with one turned off is reset first.
+	if got := strings.Join(args, " "); !strings.HasSuffix(got, "-crossplay -resetmodifiers -setkey fire") {
 		t.Fatalf("args = %s", got)
+	}
+	s.WorldOptions = map[string]WorldOptions{"Ember": {Keys: []string{"fire"}}}
+	if args, _ := s.ServerArgs("x", "y"); strings.Contains(strings.Join(args, " "), "-resetmodifiers") {
+		t.Fatalf("reset without a key turned off: %v", args)
 	}
 	if (WorldOptions{Off: []string{"nope"}}).Problem() == "" {
 		t.Fatal("an unknown key in Off was accepted")

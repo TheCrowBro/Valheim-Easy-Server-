@@ -147,6 +147,12 @@ function joinCard(app) {
       h('li', null, 'In Valheim go to ', h('b', null, 'Join Game'), ', add the server by its address and enter the password.'),
       h('li', null, 'Friends outside your home need UDP ports ', h('b', null, `${j.port}–${j.port + 1}`), ' forwarded on your router to this computer. Or turn on Crossplay in Settings to get a join code that works without port forwarding.')));
   }
+  const mods = st.mods || [];
+  if (mods.length) {
+    body.unshift(h('div', { class: 'callout info', style: { marginBottom: '14px' } }, icon('info'), h('div', { class: 'body small' },
+      h('p', null, h('strong', null, `This server uses the ${mods.join(', ')} mod${mods.length > 1 ? 's' : ''}. `),
+        'Install the same in Valheim first, with a mod manager such as r2modman or Gale. Console players can’t join a modded server.'))));
+  }
   return h('section', { class: 'card', 'aria-label': 'How to join' },
     h('div', { class: 'card-head' }, h('h2', null, 'How friends join'),
       h('span', { class: 'badge' }, j.crossplay ? 'Crossplay on' : 'Steam only')),

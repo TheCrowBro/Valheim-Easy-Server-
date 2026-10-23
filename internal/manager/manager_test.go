@@ -3,6 +3,7 @@ package manager
 import (
 	"fmt"
 	"math/rand"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"valheim-easy-server/internal/config"
+	"valheim-easy-server/internal/mods/modstest"
 	"valheim-easy-server/internal/steamcmd"
 	"valheim-easy-server/internal/worlds"
 )
@@ -230,6 +232,66 @@ func TestLifecycleWithFakeServer(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(env.data, "runtime.json")); err == nil {
 		t.Fatal("runtime.json left behind after stop")
+	}
+}
+
+func TestModsAtStart(t *testing.T) {
+	store := httptest.NewServer(modstest.New())
+	defer store.Close()
+	env := setup(t)
+	m := env.m
+	m.opt.ModsURL = store.URL
+	install(t, m)
+
+	s := m.Settings()
+	s.Mods = []string{"advancedportals"}
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	if st := m.Status(); len(st.Mods) != 1 || st.Mods[0] != "Advanced Portals" {
+		t.Fatalf("status mods = %v", st.Mods)
+	}
+	if err := m.StartServer(); err != nil {
+		t.Fatal(err)
+	}
+	if job := waitJob(t, m, currentJobID(m)); job.Error != "" {
+		t.Fatalf("start: %s", job.Error)
+	}
+	dir := m.Paths().Server
+	exists := func(rel ...string) bool {
+		_, err := os.Stat(filepath.Join(append([]string{dir}, rel...)...))
+		return err == nil
+	}
+	if !exists("BepInEx", "plugins", "RandyKnapp-AdvancedPortals", "AdvancedPortals.dll") || !exists("winhttp.dll") {
+		t.Fatal("the mod wasn't installed and switched on")
+	}
+	acts, _ := m.Activity(0, 0)
+	installed := false
+	for _, a := range acts {
+		installed = installed || a.Text == "Installed Advanced Portals 1.2.0."
+	}
+	if !installed {
+		t.Fatalf("no activity about the install: %+v", acts)
+	}
+
+	// Turning it off while the server runs needs a restart, which switches
+	// the mod loader off.
+	s = m.Settings()
+	s.Mods = nil
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	if !m.Status().NeedsRestart {
+		t.Fatal("NeedsRestart should be true after turning a mod off")
+	}
+	if err := m.RestartServer(); err != nil {
+		t.Fatal(err)
+	}
+	if job := waitJob(t, m, currentJobID(m)); job.Error != "" {
+		t.Fatalf("restart: %s", job.Error)
+	}
+	if exists("winhttp.dll") || !exists("winhttp.dll.off") {
+		t.Fatal("the mod loader is still on")
 	}
 }
 

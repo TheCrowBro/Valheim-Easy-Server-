@@ -10,12 +10,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"valheim-easy-server/internal/config"
 	"valheim-easy-server/internal/logparse"
+	"valheim-easy-server/internal/mods"
 	"valheim-easy-server/internal/platform"
 	"valheim-easy-server/internal/steamcmd"
 )
@@ -146,8 +148,35 @@ func argsKey(s config.Settings, saveDir string) string {
 	if err != nil {
 		return ""
 	}
-	sum := sha256.Sum256([]byte(strings.Join(args, "\x00")))
+	key := strings.Join(args, "\x00")
+	if len(s.Mods) > 0 {
+		key += "\x00mods\x00" + strings.Join(slices.Sorted(slices.Values(s.Mods)), "\x00")
+	}
+	sum := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(sum[:8])
+}
+
+// prepareMods installs, updates and switches on the mods chosen in the
+// settings, or switches the mod loader off when there are none.
+func (m *Manager) prepareMods(ctx context.Context, j *jobCtl, s config.Settings, p config.Paths) error {
+	in := &mods.Installer{Dir: p.Server, URL: m.opt.ModsURL}
+	if len(s.Mods) > 0 {
+		j.step("Getting the mods ready…", -1)
+	}
+	res, err := in.Prepare(ctx, s.Mods, s.UpdateOnStart, func(msg string) { j.step(msg, -1) })
+	for _, c := range res.Changed {
+		m.addActivity("update", "", c)
+	}
+	if res.Warning != "" {
+		m.addActivity("warning", "", res.Warning)
+	}
+	if ctx.Err() != nil {
+		return errCancelled
+	}
+	if err != nil {
+		return &ActionError{Msg: fmt.Sprintf("Couldn't get the mods ready (%v). Turn the mod off in Settings to start without it.", err), Action: "settings"}
+	}
+	return nil
 }
 
 func (m *Manager) doStart(ctx context.Context, j *jobCtl) error {
@@ -189,6 +218,9 @@ func (m *Manager) doStart(ctx context.Context, j *jobCtl) error {
 			m.addActivity("warning", "", "Couldn't check for server updates ("+err.Error()+"). Starting the version that's installed.")
 		}
 	}
+	if err := m.prepareMods(ctx, j, s, p); err != nil {
+		return err
+	}
 	j.setCancellable(false)
 	if platform.UDPPortInUse(s.Port) {
 		return fmt.Errorf("Port %d is already being used by another program, maybe another Valheim server. Close it or pick another port in Settings.", s.Port)
@@ -204,6 +236,7 @@ func (m *Manager) doStart(ctx context.Context, j *jobCtl) error {
 		return err
 	}
 	env := append(os.Environ(), "SteamAppId=892970")
+	env = append(env, mods.Env(p.Server, len(s.Mods) > 0)...)
 	j.step("Starting the Valheim server…", -1)
 	proc, err := platform.StartDetached(p.ServerExe, args, p.Server, env)
 	if err != nil {

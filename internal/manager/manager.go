@@ -49,7 +49,8 @@ type Options struct {
 	HibernateStatus func() (bool, string)
 	Sleep           func() error
 	SleepStatus     func() (bool, string)
-	NoPublicIP      bool // don't look up the public IP address
+	NoPublicIP      bool   // don't look up the public IP address
+	ModsURL         string // where mods are downloaded from; Thunderstore when empty
 	SampleInterval  time.Duration
 	RestartDelay    time.Duration // wait before restarting after a crash
 }

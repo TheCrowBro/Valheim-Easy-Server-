@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"valheim-easy-server/internal/mods"
 	"valheim-easy-server/internal/platform"
 	"valheim-easy-server/internal/steamcmd"
 )
@@ -23,6 +24,7 @@ type Status struct {
 	RunningWorld string                `json:"runningWorld"` // world of the running server
 	Players      []PlayerView          `json:"players"`
 	Join         JoinInfo              `json:"join"`
+	Mods         []string              `json:"mods,omitempty"` // names of the mods turned on
 	Version      string                `json:"version,omitempty"`
 	Build        string                `json:"build,omitempty"`
 	BuildDate    *time.Time            `json:"buildDate,omitempty"`
@@ -135,6 +137,11 @@ func (m *Manager) Status() Status {
 		}
 	}
 	st.Join = JoinInfo{Crossplay: s.Crossplay, Port: s.Port, Password: s.Password, Public: s.Public, LANAddrs: lanAddrs(s.Port)}
+	for _, id := range s.Mods {
+		if md, ok := mods.Find(id); ok {
+			st.Mods = append(st.Mods, md.Name)
+		}
+	}
 	if r := m.run; r != nil {
 		st.RunningWorld = r.info.World
 		launched := r.info.Launched

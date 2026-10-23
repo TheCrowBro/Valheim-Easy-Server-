@@ -17,6 +17,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"valheim-easy-server/internal/mods"
 )
 
 // Settings is everything stored in settings.json.
@@ -47,6 +49,9 @@ type Settings struct {
 	// WorldOptions holds difficulty settings per world name.
 	WorldOptions map[string]WorldOptions `json:"worldOptions,omitempty"`
 
+	// Mods are the mods (IDs from the mods catalog) the server runs with.
+	Mods []string `json:"mods,omitempty"`
+
 	// Advanced: other folders and extra launch options.
 	ServerDir string `json:"serverDir,omitempty"`
 	SaveDir   string `json:"saveDir,omitempty"`
@@ -59,7 +64,9 @@ type WorldOptions struct {
 	Modifiers map[string]string `json:"modifiers,omitempty"`
 	Keys      []string          `json:"keys,omitempty"`
 	// Off are keys that were turned on here and later off again. The world
-	// keeps a key it was given, so the server is told to remove these.
+	// keeps a key it was given, so while any are listed the server starts
+	// with -resetmodifiers, which clears the world's modifiers (not its boss
+	// progress) before the ones here are applied again.
 	Off []string `json:"off,omitempty"`
 }
 
@@ -114,6 +121,7 @@ func Defaults() Settings {
 // Clone returns a deep copy so callers can't share maps and slices.
 func (s Settings) Clone() Settings {
 	c := s
+	c.Mods = append([]string(nil), s.Mods...)
 	if s.WorldOptions != nil {
 		c.WorldOptions = make(map[string]WorldOptions, len(s.WorldOptions))
 		for k, v := range s.WorldOptions {
@@ -277,6 +285,12 @@ func (e FieldErrors) Error() string {
 // Validate checks every field and returns nil when all are fine.
 func (s Settings) Validate() FieldErrors {
 	errs := FieldErrors{}
+
+	for _, id := range s.Mods {
+		if _, ok := mods.Find(id); !ok {
+			errs["mods"] = fmt.Sprintf("There's no mod called %q in this app.", id)
+		}
+	}
 
 	name := strings.TrimSpace(s.ServerName)
 	switch {
@@ -487,6 +501,9 @@ func (s Settings) ServerArgs(saveDir, logFile string) ([]string, error) {
 	}
 	// Valheim wants the preset first; modifiers given after it override it.
 	if o, ok := s.WorldOptions[s.World]; ok {
+		if len(o.Off) > 0 {
+			args = append(args, "-resetmodifiers")
+		}
 		if o.Preset != "" {
 			args = append(args, "-preset", o.Preset)
 		}
@@ -498,8 +515,6 @@ func (s Settings) ServerArgs(saveDir, logFile string) ([]string, error) {
 		for _, k := range Keys {
 			if contains(o.Keys, k) {
 				args = append(args, "-setkey", k)
-			} else if contains(o.Off, k) {
-				args = append(args, "-removekey", k)
 			}
 		}
 	}

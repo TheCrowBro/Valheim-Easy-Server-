@@ -287,11 +287,23 @@ function optionsForm(current) {
     keys[k] = cb;
     return h('label', { class: 'key-option' }, cb, h('span', null, label, KEY_HELP[k] ? h('small', null, KEY_HELP[k]) : null));
   });
-  const more = h('details', { open: Object.keys(o.modifiers || {}).length || (o.keys || []).length ? true : null },
+  // Valheim keeps switches in the world, so the server takes one out again
+  // by resetting the world's difficulty (see WorldOptions.Off).
+  const resetNote = h('div', { class: 'callout info' }, icon('info'), h('div', { class: 'body small' },
+    'Valheim keeps switches in the world, so to turn one off the server resets this world’s difficulty each time it starts, then applies what’s set here. Boss progress isn’t affected.'));
+  const showReset = () => {
+    const resetting = [...(o.keys || []), ...(o.off || [])].some((k) => keys[k] && !keys[k].checked);
+    resetNote.hidden = !resetting;
+    preset.options[0].textContent = resetting ? 'Normal' : 'Keep the world’s own setting';
+  };
+  for (const cb of Object.values(keys)) cb.onchange = showReset;
+  showReset();
+  const more = h('details', { open: Object.keys(o.modifiers || {}).length || (o.keys || []).length || (o.off || []).length ? true : null },
     h('summary', { style: { cursor: 'pointer', color: 'var(--text)' } }, 'More options'),
     h('div', { class: 'stack', style: { marginTop: '12px', gap: '12px' } },
       h('div', { class: 'field-row' }, modFields),
-      h('div', { class: 'stack', style: { gap: '6px' } }, keyFields)));
+      h('div', { class: 'stack', style: { gap: '6px' } }, keyFields),
+      resetNote));
   return {
     el: [field('Difficulty', preset, 'A preset sets several options at once; the options below override it.'), more],
     value() {

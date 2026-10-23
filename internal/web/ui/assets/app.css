@@ -392,16 +392,17 @@ tr:last-child td { border-bottom: 0; }
   position: fixed; inset: 0; z-index: 50; background: rgba(5, 8, 10, .62); display: grid; place-items: center; padding: 16px;
   animation: fade .12s ease-out;
 }
+/* the title and buttons stay put; only the middle scrolls */
 .modal {
-  width: min(560px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: var(--surface);
+  width: min(560px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; overflow: hidden; background: var(--surface);
   border: 1px solid var(--line-2); border-radius: 18px; box-shadow: 0 24px 60px rgba(0, 0, 0, .5); animation: rise .15s ease-out;
 }
 .modal.wide { width: min(760px, 100%); }
-.modal-head { display: flex; align-items: center; gap: 10px; padding: 20px 22px 4px; }
+.modal-head { display: flex; align-items: center; gap: 10px; padding: 20px 22px 4px; flex: none; }
 .modal-head h2 { font-size: 18px; margin-right: auto; }
-.modal-body { padding: 14px 22px 8px; display: flex; flex-direction: column; gap: 14px; color: var(--text-2); }
+.modal-body { padding: 14px 22px 8px; display: flex; flex-direction: column; gap: 14px; color: var(--text-2); overflow-y: auto; min-height: 0; }
 .modal-body strong { color: var(--text); }
-.modal-foot { display: flex; gap: 10px; justify-content: flex-end; padding: 14px 22px 20px; flex-wrap: wrap; }
+.modal-foot { display: flex; gap: 10px; justify-content: flex-end; padding: 14px 22px 20px; flex-wrap: wrap; flex: none; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes rise { from { transform: translateY(8px); opacity: 0; } }
 
@@ -440,6 +441,25 @@ tr:last-child td { border-bottom: 0; }
 .tut-world { align-items: flex-start; gap: 12px; width: 230px; max-width: 100%; }
 .tut-world.playing { border-color: rgba(242, 163, 58, .55); }
 .tut-world .world-name { font-size: 16px; }
+.tut-menu {
+  display: flex; flex-direction: column; gap: 2px; align-self: stretch; padding: 6px; border-radius: 10px;
+  background: var(--surface-2); border: 1px solid var(--line-2);
+}
+.tut-menu span { display: flex; align-items: center; gap: 9px; padding: 6px 10px; border-radius: 7px; font-size: 14px; }
+.tut-menu .tut-press { display: flex; padding: 0; }
+.tut-menu .tut-press > span { flex: 1; background: var(--surface-3); }
+.tut-menu svg { width: 16px; height: 16px; color: var(--muted); }
+.tut-menu .tut-pointer { width: 26px; height: 26px; color: inherit; }
+.tut-dialog {
+  display: flex; flex-direction: column; gap: 9px; min-width: 190px; padding: 12px 16px 14px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--line-2); text-align: left; font-size: 14px;
+}
+.tut-select { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg); }
+.tut-select svg { width: 16px; height: 16px; color: var(--muted); }
+.tut-check { display: flex; align-items: center; gap: 8px; }
+.tut-check .box { width: 16px; height: 16px; flex: none; display: grid; place-items: center; border-radius: 4px; border: 1px solid var(--line-2); }
+.tut-check.on .box { background: var(--accent); border-color: transparent; color: var(--accent-ink); }
+.tut-check .box svg { width: 12px; height: 12px; stroke-width: 3; }
 .tut-head { display: flex; align-items: center; gap: 14px; }
 .tut-icon { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 12px; background: var(--info-soft); color: var(--info-text); }
 .tut-icon svg { width: 22px; height: 22px; }
@@ -559,6 +579,13 @@ kbd { font-family: var(--mono); font-size: 12px; background: var(--surface-3); b
   .kv { column-gap: 8px; }
   .kv dd.mono { font-size: 12.5px; }
   .console { height: calc(100vh - 260px); }
+}
+@media (max-width: 600px) {
+  /* a phone shows one step at a time on a full-height window, so Next stays put */
+  .modal.tutorial { height: calc(100vh - 32px); height: calc(100dvh - 32px); }
+  .modal.tutorial .modal-body { flex: 1 1 auto; }
+  .tut-page { grid-area: auto; }
+  .tut-page:not(.on) { display: none; }
 }
 @media (max-width: 480px) {
   .tut-dots { display: none; }

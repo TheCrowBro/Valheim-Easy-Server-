@@ -39,9 +39,18 @@ it for Start, Stop, Hibernate and Close.
 
 NEW TO THE CONTROL PANEL?
 -------------------------
-Click "Tutorial" on the Home page, right next to "Start server". In five
-short steps it shows how to start the server, join it from Valheim, stop it,
-switch worlds and let the computer rest.
+Click "Tutorial" on the Home page, right next to "Start server". In six
+short steps it shows how to set a world's difficulty, start the server,
+join it from Valheim, stop it, switch worlds and let the computer rest.
+
+
+MODS
+----
+Settings -> Mods can switch on one mod: Advanced Portals by RandyKnapp
+(portals that let metal through). The app downloads it the next time the
+server starts. Everyone who plays needs the same mod in their game
+(install it with a mod manager such as r2modman or Gale), and Xbox,
+PlayStation, Switch and Game Pass players can't join while it's on.
 
 
 ADDING A WORLD
