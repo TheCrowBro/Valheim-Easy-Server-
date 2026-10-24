@@ -144,6 +144,7 @@ func TestDiscordPostsJoinCode(t *testing.T) {
 		t.Fatal(err)
 	}
 	fake.wait(t, "has stopped", 1)
+	waitJob(t, m, currentJobID(m)) // it finishes after the post goes out
 	if n := fake.count("is online"); n != 2 {
 		t.Fatalf("posted online %d times: %q", n, fake.all())
 	}
