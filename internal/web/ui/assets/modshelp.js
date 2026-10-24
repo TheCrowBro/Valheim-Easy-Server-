@@ -10,7 +10,6 @@ const R2MODMAN = 'https://thunderstore.io/c/valheim/p/ebkr/r2modman/';
 const NEED = {
   required: ['warn', 'Needed to join'],
   recommended: ['', 'Recommended'],
-  players: ['accent', 'Just for your game'],
 };
 
 // address shows a web address people can read off the screen (through an
@@ -32,7 +31,6 @@ export function openModsHelp(list) {
   if (!list || !list.length) return;
   const many = list.length > 1;
   const it = many ? 'them' : 'it';
-  const hexium = list.filter((m) => m.source === 'hexium');
   const newWorlds = list.filter((m) => m.newWorlds);
   const optional = list.filter((m) => m.players !== 'required');
   openModal({
@@ -53,13 +51,12 @@ export function openModsHelp(list) {
             h('span', { class: `badge ${tone}` }, need),
             m.version ? h('span', { class: 'badge' }, `The server has version ${m.version}`) : null),
           h('p', null, m.summary),
-          address(m.url, m.source === 'hexium' ? 'Download page (on Hexium):' : 'Download page:'));
+          address(m.url, 'Download page:'));
       }),
       h('h3', { class: 'mod-howto' }, `How to install ${it}`),
       h('ol', { class: 'steps' },
-        h('li', null, 'Get a free mod manager, ', h('b', null, 'Gale'), hexium.length ? null : [' or ', h('b', null, 'r2modman')], ':',
-          h('div', { class: 'managers' }, address(GALE, 'Gale'), hexium.length ? null : address(R2MODMAN, 'r2modman')),
-          hexium.length ? h('div', { class: 'small text-2' }, `${names(hexium)} ${hexium.length > 1 ? 'are' : 'is'} on Hexium, which Gale can install from and r2modman can’t.`) : null),
+        h('li', null, 'Get a free mod manager, ', h('b', null, 'Gale'), ' or ', h('b', null, 'r2modman'), ':',
+          h('div', { class: 'managers' }, address(GALE, 'Gale'), address(R2MODMAN, 'r2modman'))),
         h('li', null, 'Choose Valheim and make a new profile for this server. Search for ', h('b', null, many ? 'each mod' : `“${list[0].name}”`),
           ' and install it. Anything else it needs, such as BepInEx, comes with it.'),
         h('li', null, 'Start Valheim from the mod manager (', h('b', null, 'Launch game'), ' in Gale, ', h('b', null, 'Start modded'), ' in r2modman) and join as usual.')),

@@ -1,7 +1,6 @@
 // Package mods installs BepInEx mods for the Valheim server from
-// Thunderstore, where Valheim's mod managers get them too (or from Hexium,
-// for authors who moved there), and switches the mod loader on or off
-// before the server starts.
+// Thunderstore, where Valheim's mod managers get them too, and switches the
+// mod loader on or off before the server starts.
 package mods
 
 import (
@@ -31,21 +30,14 @@ type Mod struct {
 	Author  string `json:"author"`
 	Short   string `json:"short"` // a few words, for the mods list
 	Summary string `json:"summary"`
-	URL     string `json:"url"`              // its page, where players get it
-	Source  string `json:"source,omitempty"` // Thunderstore when empty, or Hexium
-	Group   string `json:"group"`            // GroupWorld, GroupPlay or GroupLook
-	Players string `json:"players"`          // what players need: Required, Recommended or PlayersOnly
+	URL     string `json:"url"`     // its Thunderstore page, where players get it
+	Group   string `json:"group"`   // GroupWorld, GroupPlay or GroupLook
+	Players string `json:"players"` // what players need: Required or Recommended
 	// NewWorlds marks a mod that changes how the land is generated: a world
 	// is created with it and can't be played without it, nor a world made
 	// without it with it.
 	NewWorlds bool `json:"newWorlds,omitempty"`
 }
-
-// Sources.
-const (
-	Thunderstore = ""
-	Hexium       = "hexium"
-)
 
 // Groups, for showing the mods in order.
 const (
@@ -58,7 +50,6 @@ const (
 const (
 	Required    = "required"    // the server turns away players without it
 	Recommended = "recommended" // players can join without it but miss what it does
-	PlayersOnly = "players"     // it only changes players' own games; the server doesn't use it
 )
 
 // Catalog lists the mods the app offers, in the order they're shown.
@@ -84,17 +75,6 @@ var Catalog = []Mod{{
 	Group:   GroupPlay,
 	Players: Required,
 }, {
-	ID:      "azuepi",
-	Package: "Azumatt-AzuExtendedPlayerInventory",
-	Name:    "Azu Extended Player Inventory",
-	Author:  "Azumatt",
-	Short:   "Extra inventory rows, equipment slots and quick slots.",
-	Summary: "Adds extra rows to the inventory, slots for the gear you wear, up to 8 quick slots with their own keys, and saved sets of equipment. It works with existing characters.",
-	URL:     "https://valheim.hexium.gg/mods/Azumatt/AzuExtendedPlayerInventory",
-	Source:  Hexium,
-	Group:   GroupPlay,
-	Players: Required,
-}, {
 	ID:      "planteverything",
 	Package: "Advize-PlantEverything",
 	Name:    "Plant Everything",
@@ -102,16 +82,6 @@ var Catalog = []Mod{{
 	Short:   "Plant berry bushes, mushrooms, flowers and more kinds of trees.",
 	Summary: "Lets the cultivator plant berry bushes, mushrooms, thistle, dandelions, flowers and trees you normally can't, and shows how long crops have left to grow. Players need it to plant the extra things.",
 	URL:     "https://thunderstore.io/c/valheim/p/Advize/PlantEverything/",
-	Group:   GroupPlay,
-	Players: Recommended,
-}, {
-	ID:      "fueleternal",
-	Package: "Marf-FuelEternal",
-	Name:    "Fuel Eternal",
-	Author:  "Marf",
-	Short:   "Fires, torches and ovens never run out of fuel.",
-	Summary: "Campfires, hearths, torches, braziers, stone ovens and hot tubs stay lit without adding wood. Smelters, blast furnaces and the eitr refinery can be added in its settings. Fires near a player who doesn't have it can still burn down.",
-	URL:     "https://thunderstore.io/c/valheim/p/Marf/FuelEternal/",
 	Group:   GroupPlay,
 	Players: Recommended,
 }, {
@@ -144,28 +114,7 @@ var Catalog = []Mod{{
 	URL:     "https://thunderstore.io/c/valheim/p/shudnal/GammaOfNightLights/",
 	Group:   GroupLook,
 	Players: Recommended,
-}, {
-	ID:      "darkerdungeons",
-	Package: "hoskope-DarkerDungeons",
-	Name:    "Darker Dungeons",
-	Author:  "hoskope",
-	Short:   "Darker Black Forest crypts: bring a torch.",
-	Summary: "Makes Black Forest crypts darker and moodier, so torches and lanterns matter. It only changes how crypts look in each player's own game, so the server doesn't need it.",
-	URL:     "https://thunderstore.io/c/valheim/p/hoskope/DarkerDungeons/",
-	Group:   GroupLook,
-	Players: PlayersOnly,
 }}
-
-// ServerMods are the mods in ids that the server itself runs.
-func ServerMods(ids []string) []string {
-	var out []string
-	for _, id := range ids {
-		if m, ok := Find(id); ok && m.Players != PlayersOnly {
-			out = append(out, id)
-		}
-	}
-	return out
-}
 
 // Find returns the catalog entry for id.
 func Find(id string) (Mod, bool) {
@@ -184,13 +133,6 @@ const Loader = "denikson-BepInExPack_Valheim"
 // DefaultURL is Thunderstore's address.
 const DefaultURL = "https://thunderstore.io"
 
-// HexiumURL is Hexium's Valheim site. It answers the same API calls as
-// Thunderstore; its downloads come from hexiumCDN.
-const (
-	HexiumURL = "https://valheim.hexium.gg"
-	hexiumCDN = "https://cdn.hexium.gg/"
-)
-
 const (
 	proxyDLL   = "winhttp.dll" // loads BepInEx when the server starts on Windows
 	proxyOff   = "winhttp.dll.off"
@@ -204,10 +146,9 @@ var safeName = regexp.MustCompile(`^[A-Za-z0-9_]+-[A-Za-z0-9_]+$`)
 
 // Installer looks after the mods in one Valheim server folder.
 type Installer struct {
-	Dir       string       // the server folder
-	URL       string       // Thunderstore; DefaultURL when empty
-	HexiumURL string       // Hexium; HexiumURL when empty
-	Client    *http.Client // one with a timeout when nil
+	Dir    string       // the server folder
+	URL    string       // Thunderstore; DefaultURL when empty
+	Client *http.Client // one with a timeout when nil
 }
 
 // record is what this app installed, kept in the BepInEx folder.
@@ -221,8 +162,8 @@ type installed struct {
 }
 
 type pkg struct {
-	Name, Version, URL, Source string
-	Deps                       []string
+	Name, Version, URL string
+	Deps               []string
 }
 
 // Result says what Prepare did.
@@ -262,20 +203,12 @@ func (in *Installer) Prepare(ctx context.Context, ids []string, update bool, ste
 		if !ok {
 			return res, fmt.Errorf("unknown mod %q", id)
 		}
-		if m.Players != PlayersOnly { // the others are for players' own games
-			want = append(want, m.Package)
-		}
-	}
-	if len(want) == 1 {
-		if len(rec.Packages) == 0 {
-			return res, nil
-		}
-		return res, in.switchLoader(false)
+		want = append(want, m.Package)
 	}
 	if !update && in.complete(rec, want) {
 		return res, in.turnOn(rec, want)
 	}
-	step("Checking for mod updates…")
+	step("Checking the mods on Thunderstore…")
 	pkgs, err := in.resolve(ctx, want)
 	if err != nil {
 		if ctx.Err() == nil && in.complete(rec, want) {
@@ -305,6 +238,9 @@ func (in *Installer) Prepare(ctx context.Context, ids []string, update bool, ste
 // what they need, in BepInEx/plugins. BepInEx loads every plugin there, so
 // the other packages this app installed wait in BepInEx/plugins-off.
 func (in *Installer) turnOn(rec record, want []string) error {
+	if err := in.prune(rec); err != nil {
+		return err
+	}
 	need := rec.closure(want)
 	for name := range rec.Packages {
 		if name == Loader {
@@ -315,6 +251,33 @@ func (in *Installer) turnOn(rec record, want []string) error {
 		}
 	}
 	return in.switchLoader(true)
+}
+
+// prune deletes the packages this app installed for mods it no longer
+// offers, and what only they needed.
+func (in *Installer) prune(rec record) error {
+	want := []string{Loader}
+	for _, m := range Catalog {
+		want = append(want, m.Package)
+	}
+	keep := rec.closure(want)
+	changed := false
+	for name := range rec.Packages {
+		if keep[name] || !safeName.MatchString(name) {
+			continue
+		}
+		for _, dir := range []string{"plugins", parkedDir, "patchers"} {
+			if err := os.RemoveAll(filepath.Join(in.Dir, "BepInEx", dir, name)); err != nil {
+				return err
+			}
+		}
+		delete(rec.Packages, name)
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return in.write(rec)
 }
 
 // switchPlugin moves a package's plugin folder into BepInEx/plugins, or out
@@ -422,12 +385,7 @@ func (in *Installer) resolve(ctx context.Context, want []string) ([]pkg, error) 
 			continue
 		}
 		seen[name] = true
-		p, err := in.latest(ctx, name, sourceOf(name))
-		var nf *notFound
-		if errors.As(err, &nf) && sourceOf(name) == Thunderstore {
-			// A library only its Hexium mod's author publishes.
-			p, err = in.latest(ctx, name, Hexium)
-		}
+		p, err := in.latest(ctx, name)
 		if err != nil {
 			return nil, err
 		}
@@ -447,23 +405,7 @@ func (in *Installer) resolve(ctx context.Context, want []string) ([]pkg, error) 
 	return found, nil
 }
 
-// sourceOf is where a package comes from: its catalog entry's source, and
-// Thunderstore for libraries and the loader.
-func sourceOf(name string) string {
-	for _, m := range Catalog {
-		if m.Package == name {
-			return m.Source
-		}
-	}
-	return Thunderstore
-}
-
-// notFound is a package the source doesn't have.
-type notFound struct{ name, site string }
-
-func (e *notFound) Error() string { return fmt.Sprintf("%s has no package called %s", e.site, e.name) }
-
-func (in *Installer) latest(ctx context.Context, name, source string) (pkg, error) {
+func (in *Installer) latest(ctx context.Context, name string) (pkg, error) {
 	if !safeName.MatchString(name) {
 		return pkg{}, fmt.Errorf("unexpected package name %q", name)
 	}
@@ -475,16 +417,13 @@ func (in *Installer) latest(ctx context.Context, name, source string) (pkg, erro
 			Deps     []string `json:"dependencies"`
 		} `json:"latest"`
 	}
-	u := fmt.Sprintf("%s/api/experimental/package/%s/%s/", in.base(source), url.PathEscape(ns), url.PathEscape(short))
-	if err := in.getJSON(ctx, u, source, &body); err != nil {
-		if errors.Is(err, errMissing) {
-			return pkg{}, &notFound{name: Title(name), site: site(source)}
-		}
+	u := fmt.Sprintf("%s/api/experimental/package/%s/%s/", in.base(), url.PathEscape(ns), url.PathEscape(short))
+	if err := in.getJSON(ctx, u, &body); err != nil {
 		return pkg{}, err
 	}
-	p := pkg{Name: name, Version: body.Latest.Version, URL: body.Latest.Download, Source: source}
+	p := pkg{Name: name, Version: body.Latest.Version, URL: body.Latest.Download}
 	if p.Version == "" || p.URL == "" {
-		return pkg{}, fmt.Errorf("%s has no download for %s", site(source), Title(name))
+		return pkg{}, fmt.Errorf("Thunderstore has no download for %s", Title(name))
 	}
 	for _, d := range body.Latest.Deps {
 		if i := strings.LastIndex(d, "-"); i > 0 {
@@ -495,41 +434,12 @@ func (in *Installer) latest(ctx context.Context, name, source string) (pkg, erro
 	return p, nil
 }
 
-// base is the address of a source's API.
-func (in *Installer) base(source string) string {
-	if source == Hexium {
-		if in.HexiumURL != "" {
-			return strings.TrimRight(in.HexiumURL, "/")
-		}
-		return HexiumURL
-	}
+func (in *Installer) base() string {
 	if in.URL != "" {
 		return strings.TrimRight(in.URL, "/")
 	}
 	return DefaultURL
 }
-
-// downloadOK reports whether u is where the source's downloads come from.
-func (in *Installer) downloadOK(u, source string) bool {
-	if pu, err := url.Parse(u); err != nil || pu.User != nil {
-		return false
-	}
-	if strings.HasPrefix(u, in.base(source)+"/") {
-		return true
-	}
-	return source == Hexium && in.HexiumURL == "" && strings.HasPrefix(u, hexiumCDN)
-}
-
-// site is a source's name for people.
-func site(source string) string {
-	if source == Hexium {
-		return "Hexium"
-	}
-	return "Thunderstore"
-}
-
-// errMissing is a 404 from a source.
-var errMissing = errors.New("not found")
 
 func (in *Installer) client() *http.Client {
 	if in.Client != nil {
@@ -538,7 +448,7 @@ func (in *Installer) client() *http.Client {
 	return &http.Client{Timeout: 10 * time.Minute}
 }
 
-func (in *Installer) get(ctx context.Context, u, source string) (*http.Response, error) {
+func (in *Installer) get(ctx context.Context, u string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
@@ -546,22 +456,19 @@ func (in *Installer) get(ctx context.Context, u, source string) (*http.Response,
 	req.Header.Set("User-Agent", "ValheimEasyServer")
 	res, err := in.client().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("couldn't reach %s. Is the internet connection working?", site(source))
+		return nil, errors.New("couldn't reach Thunderstore. Is the internet connection working?")
 	}
 	if res.StatusCode != http.StatusOK {
 		res.Body.Close()
-		if res.StatusCode == http.StatusNotFound {
-			return nil, errMissing
-		}
-		return nil, fmt.Errorf("%s answered %s", site(source), res.Status)
+		return nil, fmt.Errorf("Thunderstore answered %s", res.Status)
 	}
 	return res, nil
 }
 
-func (in *Installer) getJSON(ctx context.Context, u, source string, v any) error {
+func (in *Installer) getJSON(ctx context.Context, u string, v any) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	res, err := in.get(ctx, u, source)
+	res, err := in.get(ctx, u)
 	if err != nil {
 		return err
 	}
@@ -571,13 +478,10 @@ func (in *Installer) getJSON(ctx context.Context, u, source string, v any) error
 
 // install downloads a package and unpacks it into the server folder.
 func (in *Installer) install(ctx context.Context, p pkg) error {
-	if !in.downloadOK(p.URL, p.Source) {
+	if u, err := url.Parse(p.URL); err != nil || !strings.HasPrefix(p.URL, in.base()+"/") || u.User != nil {
 		return fmt.Errorf("unexpected download address %q", p.URL)
 	}
-	res, err := in.get(ctx, p.URL, p.Source)
-	if errors.Is(err, errMissing) {
-		err = fmt.Errorf("%s has no download for %s", site(p.Source), Title(p.Name))
-	}
+	res, err := in.get(ctx, p.URL)
 	if err != nil {
 		return err
 	}

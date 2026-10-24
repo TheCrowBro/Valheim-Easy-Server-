@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -205,6 +206,13 @@ func (s *Settings) fillMissing() {
 		}
 		s.WorldOptions[s.World] = o
 		s.Mods = nil
+	}
+	for name, o := range s.WorldOptions { // mods this version no longer offers
+		known := slices.DeleteFunc(slices.Clone(o.Mods), func(id string) bool { _, ok := mods.Find(id); return !ok })
+		if len(known) != len(o.Mods) {
+			o.Mods = known
+			s.WorldOptions[name] = o
+		}
 	}
 	if s.Port == 0 {
 		s.Port = d.Port

@@ -217,11 +217,6 @@ func TestDiscordMessages(t *testing.T) {
 	if got := o.text(); got != want {
 		t.Errorf("online message:\n%s\nwant:\n%s", got, want)
 	}
-	inventory, _ := mods.Find("azuepi")
-	o.Mods = append(o.Mods, ModInfo{Mod: inventory})
-	if got := o.text(); !strings.HasSuffix(got, "Install the mods first with the Gale mod manager.") {
-		t.Errorf("with a mod from Hexium:\n%s", got)
-	}
 	o = onlineMessage{Server: "S", World: "W", Address: "203.0.113.5:2456"}
 	if got := o.text(); !strings.Contains(got, "Address: **203.0.113.5:2456**") || strings.Contains(got, "Password") ||
 		!strings.Contains(got, "add the server by its address") {

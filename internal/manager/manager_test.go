@@ -321,39 +321,6 @@ func TestModsAtStart(t *testing.T) {
 	if st := m.Status(); len(st.Mods) != 1 || st.Mods[0].Name != "Seasonality" || st.Mods[0].Version != "3.8.4" {
 		t.Fatalf("status mods = %+v", st.Mods)
 	}
-
-	// A mod for players' own games needs no restart and isn't installed.
-	if err := m.SetWorldMods(world, []string{"seasonality", "darkerdungeons"}); err != nil {
-		t.Fatal(err)
-	}
-	if m.Status().NeedsRestart {
-		t.Fatal("a mod only players use asked for a restart")
-	}
-	// One that comes from Hexium.
-	hexium := httptest.NewServer(modstest.NewHexium())
-	defer hexium.Close()
-	m.opt.HexiumURL = hexium.URL
-	if err := m.SetWorldMods(world, []string{"seasonality", "darkerdungeons", "azuepi"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := m.RestartServer(); err != nil {
-		t.Fatal(err)
-	}
-	if job := waitJob(t, m, currentJobID(m)); job.Error != "" {
-		t.Fatalf("restart with the inventory mod: %s", job.Error)
-	}
-	if !exists("BepInEx", "plugins", "Azumatt-AzuExtendedPlayerInventory", "AzuExtendedPlayerInventory.dll") ||
-		exists("BepInEx", "plugins", "hoskope-DarkerDungeons") || exists("BepInEx", "plugins-off", "hoskope-DarkerDungeons") {
-		t.Fatal("the inventory mod wasn't installed, or the players' mod was")
-	}
-	st := m.Status()
-	var got []string
-	for _, md := range st.Mods {
-		got = append(got, md.Name+" "+md.Version)
-	}
-	if strings.Join(got, ", ") != "Seasonality 3.8.4, Darker Dungeons , Azu Extended Player Inventory 2.6.4" {
-		t.Fatalf("status mods = %q", got)
-	}
 }
 
 func TestCrashRestartsAutomatically(t *testing.T) {

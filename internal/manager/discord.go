@@ -164,16 +164,11 @@ func (o onlineMessage) text() string {
 			list = append(list, item)
 		}
 		fmt.Fprintf(&b, "Mods: %s\n", strings.Join(list, ", "))
-		them, manager := "the mod", "the Gale or r2modman mod manager"
+		them := "the mod"
 		if len(o.Mods) > 1 {
 			them = "the mods"
 		}
-		for _, md := range o.Mods {
-			if md.Source == mods.Hexium {
-				manager = "the Gale mod manager" // r2modman can't install from Hexium
-			}
-		}
-		hint += fmt.Sprintf(" Install %s first with %s.", them, manager)
+		hint += fmt.Sprintf(" Install %s first with the Gale or r2modman mod manager.", them)
 	}
 	b.WriteString("-# " + hint)
 	return b.String()

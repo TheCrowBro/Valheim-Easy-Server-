@@ -147,6 +147,25 @@ func TestLoadMovesModsToTheSelectedWorld(t *testing.T) {
 	}
 }
 
+func TestLoadDropsModsNoLongerOffered(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	old := `{"serverName":"Viking Night","password":"fjord-1234","world":"Midgard","port":2456,
+		"worldOptions":{"Midgard":{"mods":["advancedportals","fueleternal"]},"Asgard":{"mods":["azuepi"]}}}`
+	if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, _, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(s.WorldOptions["Midgard"].Mods, []string{"advancedportals"}) || len(s.WorldOptions["Asgard"].Mods) != 0 {
+		t.Fatalf("world options = %+v", s.WorldOptions)
+	}
+	if errs := s.Validate(); errs != nil {
+		t.Fatalf("settings with a removed mod don't pass: %v", errs)
+	}
+}
+
 func TestDiscordSettings(t *testing.T) {
 	s := Defaults()
 	s.DiscordWebhook = "not a link" // kept while posting is off

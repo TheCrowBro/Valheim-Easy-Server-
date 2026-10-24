@@ -69,18 +69,15 @@ tick the mods to play it with. "Create a new world" has the same list.
   - Riverheim: new landscapes with big continents and long rivers.
     For new worlds only: pick it under "Create a new world".
   - Advanced Portals: portals that let metal through.
-  - Azu Extended Player Inventory: a bigger inventory and more slots.
   - Plant Everything: plant berry bushes, mushrooms and more trees.
-  - Fuel Eternal: fires and torches never run out of fuel.
   - Heightmap Unlimited: raise and dig the ground as far as you like.
   - Seasonality: winter, spring, summer and fall.
   - Gamma of Night Lights: darker nights with real moonlight.
-  - Darker Dungeons: darker crypts (only in players' own games).
 The app downloads a world's mods the next time the server starts it.
 
 Players install the world's mods in their own game too:
   1. Install a free mod manager: Gale or r2modman (from
-     thunderstore.io). Azu Extended Player Inventory needs Gale.
+     thunderstore.io).
   2. Choose Valheim, make a new profile for this server, search for each
      mod and install it. Anything else it needs comes with it.
   3. Start Valheim from the mod manager, then join as usual.
