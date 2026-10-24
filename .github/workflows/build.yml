@@ -50,7 +50,7 @@ jobs:
         shell: pwsh
         run: |
           $version = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}" } else { "build-${{ github.run_number }}" }
-          go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=$version" -o dist/ValheimEasyServer.exe .
+          go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=$version -X main.build=${{ github.run_number }}" -o dist/ValheimEasyServer.exe .
       - name: Smoke test the app
         shell: pwsh
         run: |
@@ -68,6 +68,66 @@ jobs:
             Get-Content (Join-Path $data "logs\app.log") -ErrorAction SilentlyContinue
             Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           }
+      - name: Self-update test (an older copy updates itself to this build, then goes back from a build that doesn't start)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $n = ${{ github.run_number }}
+          $root = Join-Path $env:RUNNER_TEMP "ves-update"
+          $site = Join-Path $root "site"
+          $data = Join-Path $root "data"
+          $exe = Join-Path $root "app\ValheimEasyServer.exe"
+          New-Item -ItemType Directory -Force $site, $data, (Split-Path $exe) | Out-Null
+          go build -trimpath -ldflags "-H=windowsgui -X main.version=build-1 -X main.build=1" -o $exe .
+          if ($LASTEXITCODE -ne 0) { throw "Couldn't build the older copy." }
+
+          # A stand-in for GitHub's releases list and downloads.
+          function Publish([int]$build, [string]$program) {
+            $tag = "build-$build"
+            $dir = Join-Path $site $tag
+            New-Item -ItemType Directory -Force $dir | Out-Null
+            Copy-Item $program (Join-Path $dir "ValheimEasyServer.exe")
+            $hash = (Get-FileHash (Join-Path $dir "ValheimEasyServer.exe") -Algorithm SHA256).Hash.ToLower()
+            Set-Content -NoNewline -Path (Join-Path $dir "ValheimEasyServer.exe.sha256") -Value "$hash  ValheimEasyServer.exe"
+            $assets = "ValheimEasyServer.exe", "ValheimEasyServer.exe.sha256" | ForEach-Object { @{ name = $_; browser_download_url = "http://127.0.0.1:18500/$tag/$_" } }
+            $api = Join-Path $site "repos/TheCrowBro/Valheim-Easy-Server-"
+            New-Item -ItemType Directory -Force $api | Out-Null
+            ConvertTo-Json -InputObject @(@{ tag_name = $tag; body = "Test build $build"; assets = @($assets) }) -Depth 5 | Set-Content (Join-Path $api "releases")
+          }
+          function WaitFor([scriptblock]$cond, [string]$what) {
+            $deadline = (Get-Date).AddSeconds(120)
+            while ((Get-Date) -lt $deadline) {
+              $s = try { Invoke-RestMethod http://127.0.0.1:18457/api/status -TimeoutSec 5 } catch { $null }
+              if ($s -and (& $cond $s)) { return $s }
+              Start-Sleep -Seconds 2
+            }
+            throw "Timed out waiting for $what."
+          }
+          function Update {
+            Invoke-RestMethod -Method Post -Uri http://127.0.0.1:18457/api/app/update -Headers @{ "X-VES" = "1" } -ContentType "application/json" -Body '{"install":true}' | Out-Null
+          }
+
+          $web = Start-Process -FilePath python -ArgumentList "-m", "http.server", "18500", "--bind", "127.0.0.1", "--directory", $site -PassThru
+          try {
+            Publish $n "dist\ValheimEasyServer.exe"
+            Start-Process -FilePath $exe -ArgumentList "--no-window", "--data", $data, "--port", "18457", "--dev-fake-github", "http://127.0.0.1:18500"
+            WaitFor { param($s) $s.app.build -eq 1 } "build 1 to start" | Out-Null
+            Update
+            $s = WaitFor { param($s) $s.app.build -eq $n } "the update to build $n"
+            if (-not ($s.activity | Where-Object { $_.text -like "The app was updated to build $n*" })) { throw "The activity list doesn't mention the update." }
+            if (-not (Test-Path "$exe.old")) { throw "The previous version wasn't kept." }
+            Write-Host "Build 1 updated itself to build $n."
+
+            # whoami.exe stands in for a build that doesn't start.
+            Publish ($n + 1) "$env:SystemRoot\System32\whoami.exe"
+            Update
+            WaitFor { param($s) $s.app.build -eq $n -and $s.app.failed -eq ($n + 1) } "the app to go back to build $n" | Out-Null
+            Write-Host "Build $($n + 1) didn't start, and the app went back to build $n."
+          } finally {
+            Get-Content (Join-Path $data "logs\app.log") -ErrorAction SilentlyContinue
+            Get-Process ValheimEasyServer -ErrorAction SilentlyContinue | Stop-Process -Force
+            Stop-Process -Id $web.Id -Force -ErrorAction SilentlyContinue
+          }
       - name: Package
         shell: pwsh
         run: Copy-Item "docs/READ-ME-FIRST.txt" dist/
@@ -79,7 +139,10 @@ jobs:
 
   release:
     name: Publish release
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Every build of the main branch that passes the tests becomes a release
+    # (build-N), which installed copies of the app update themselves to.
+    # Version tags (v1.0) get a release too.
+    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || github.ref == format('refs/heads/{0}', github.event.repository.default_branch))
     needs: [linux, windows]
     runs-on: ubuntu-latest
     permissions:
@@ -89,9 +152,35 @@ jobs:
         with:
           name: ValheimEasyServer-windows
           path: dist
-      - name: Zip
-        run: cd dist && zip -r ../ValheimEasyServer-windows.zip .
-      - uses: softprops/action-gh-release@v2
+      - name: Zip, checksum and notes
+        env:
+          MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          (cd dist && zip -r ../ValheimEasyServer-windows.zip .)
+          cp dist/ValheimEasyServer.exe .
+          sha256sum ValheimEasyServer.exe > ValheimEasyServer.exe.sha256
+          # The notes are the commit message without its trailers; the app
+          # shows their first line as what changed.
+          { printf '%s\n' "$MESSAGE" | sed '/^Co-Authored-By:/d; /^Claude-Session:/d'; echo; echo "SHA-256 of ValheimEasyServer.exe: $(cut -d' ' -f1 ValheimEasyServer.exe.sha256)"; } > notes.md
+      - name: Publish the build
+        if: github.ref_type == 'branch'
+        uses: softprops/action-gh-release@v2
         with:
-          files: ValheimEasyServer-windows.zip
+          tag_name: build-${{ github.run_number }}
+          name: Build ${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          body_path: notes.md
+          make_latest: true
+          files: |
+            ValheimEasyServer-windows.zip
+            ValheimEasyServer.exe
+            ValheimEasyServer.exe.sha256
+      - name: Publish the version
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
           generate_release_notes: true
+          files: |
+            ValheimEasyServer-windows.zip
+            ValheimEasyServer.exe
+            ValheimEasyServer.exe.sha256

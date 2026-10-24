@@ -1,13 +1,14 @@
 // Settings: one form for the server, automation, resting and waking up,
 // backups and folders, plus maintenance.
 
-import { h, icon, api, toast, confirmDialog, toggle } from './dom.js';
+import { h, icon, api, toast, confirmDialog, toggle, ago } from './dom.js';
 
 let view = null;    // last loaded settings response
 let draft = null;   // edited copy of view.settings
 let errors = {};
 let saving = false;
 let testing = false;
+let checking = false;
 let appRef = null;
 
 async function load() {
@@ -176,6 +177,38 @@ function foldersSection() {
         h('button', { class: 'btn btn-sm', 'data-action': 'open-folder', 'data-which': 'data' }, icon('folder'), 'App folder'))));
 }
 
+// updatesSection is about this app updating itself from GitHub.
+function updatesSection(app) {
+  const a = (app.status && app.status.app) || {};
+  let line;
+  let button = null;
+  if (!a.build) {
+    line = `This copy (${view.version}) doesn’t update itself. Copies downloaded from GitHub do.`;
+  } else if (a.updating) {
+    line = `Updating to build ${a.latest ? a.latest.build : ''}… The panel reconnects by itself in a few seconds.`;
+  } else if (a.failed > a.build && (!a.latest || a.latest.build === a.failed)) {
+    line = `Build ${a.failed} didn’t start on this computer, so the app went back to build ${a.build}. It won’t install build ${a.failed} by itself.`;
+    button = h('button', { class: 'btn btn-sm', 'data-action': 'app-update', 'data-install': '1' }, icon('refresh'), 'Try again');
+  } else if (a.latest) {
+    line = [h('strong', null, `Build ${a.latest.build} is ready`), a.latest.title ? `: ${a.latest.title}` : '.'];
+    button = h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'app-update', 'data-install': '1' }, icon('download'), 'Update now');
+  } else if (a.error) {
+    line = `Couldn’t check for updates: ${a.error}`;
+  } else if (a.checkedAt) {
+    line = `Up to date (build ${a.build}). Checked ${ago(a.checkedAt)}.`;
+  } else {
+    line = `Build ${a.build}. It looks for updates a couple of minutes after it starts.`;
+  }
+  if (a.build && !button && !a.updating) {
+    button = h('button', { class: 'btn btn-sm', 'data-action': 'app-update', disabled: checking }, icon('refresh'), checking ? 'Checking…' : 'Check now');
+  }
+  return h('section', { class: 'card' },
+    h('div', { class: 'card-head' }, h('h2', null, 'App updates')),
+    a.build ? switchRow('autoUpdate', 'Update this app automatically',
+      'Every hour it checks GitHub for a newer version and installs it when nothing is in progress. The Valheim server keeps running while the app restarts, so nobody is disconnected.') : null,
+    h('div', { class: `row update-row${a.build ? ' ruled' : ''}` }, h('p', { class: 'grow text-2' }, line), button));
+}
+
 function maintenanceSection(app) {
   const st = app.status;
   const running = st && st.state !== 'stopped' && st.state !== 'not_installed';
@@ -211,6 +244,7 @@ export default {
       restSection(app),
       backupSection(),
       foldersSection(),
+      updatesSection(app),
       maintenanceSection(app),
       changed ? h('div', { class: 'savebar', role: 'region', 'aria-label': 'Unsaved changes' },
         h('span', null, 'You have unsaved changes.'),
@@ -256,6 +290,25 @@ export default {
       } finally {
         testing = false;
         app.render();
+      }
+    };
+    A['app-update'] = async (d) => {
+      const install = d.install === '1';
+      checking = !install;
+      app.render();
+      try {
+        await api('/api/app/update', { method: 'POST', body: { install } });
+        if (install) {
+          toast('Updating the app. The panel reconnects in a few seconds.', 'good', 8000);
+        } else {
+          const st = await api('/api/status');
+          toast(st.app && st.app.latest ? `Build ${st.app.latest.build} is ready.` : 'The app is up to date.', 'good');
+        }
+      } catch (e) {
+        toast(e.message, 'bad', 8000);
+      } finally {
+        checking = false;
+        app.poll();
       }
     };
     A['settings-discard'] = () => { draft = structuredClone(view.settings); errors = {}; app.render(); };

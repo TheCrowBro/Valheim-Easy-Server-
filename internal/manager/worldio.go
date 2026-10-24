@@ -45,8 +45,15 @@ func (m *Manager) NewUpload() (*worlds.Upload, error) {
 		return nil, err
 	}
 	m.mu.Lock()
-	m.uploads[u.ID] = u
+	updating := m.app.updating // the app is about to restart
+	if !updating {
+		m.uploads[u.ID] = u
+	}
 	m.mu.Unlock()
+	if updating {
+		os.RemoveAll(u.Dir)
+		return nil, errUpdatingBusy
+	}
 	return u, nil
 }
 

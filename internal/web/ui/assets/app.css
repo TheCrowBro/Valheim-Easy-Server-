@@ -231,6 +231,8 @@ p.discord-line { display: flex; align-items: center; gap: 6px; margin-top: 12px;
 p.discord-line svg { width: 15px; height: 15px; flex: none; }
 .callout.discord-line { margin-top: 14px; }
 .discord-form { gap: 14px; margin-bottom: -12px; }
+.update-row { gap: 12px; }
+.update-row.ruled { padding-top: 12px; border-top: 1px solid var(--line); }
 .discord-form details.where .steps { margin-top: 0; }
 
 /* lists */

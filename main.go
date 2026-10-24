@@ -13,25 +13,35 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"valheim-easy-server/internal/config"
 	"valheim-easy-server/internal/manager"
 	"valheim-easy-server/internal/platform"
+	"valheim-easy-server/internal/selfupdate"
 	"valheim-easy-server/internal/steamcmd"
 	"valheim-easy-server/internal/tray"
 	"valheim-easy-server/internal/web"
 )
 
-// version is set at build time with -ldflags "-X main.version=…".
-var version = "dev"
+// version and build are set at build time with
+// -ldflags "-X main.version=… -X main.build=…". build is the number of the
+// GitHub build; copies with a number update themselves to newer builds.
+var (
+	version = "dev"
+	build   = "0"
+)
 
 const appName = "Valheim Easy Server"
 
@@ -42,10 +52,12 @@ func main() {
 	panelPort := flag.Int("port", web.DefaultPort, "port for the control panel (it only listens on this computer)")
 	devServer := flag.String("dev-fake-server", "", "development only: install this program instead of downloading the real server")
 	devDiscord := flag.String("dev-fake-discord", "", "development only: send Discord messages to this address instead of Discord")
+	devGitHub := flag.String("dev-fake-github", "", "development only: look for app updates at this address instead of GitHub")
 	flag.Parse()
 
 	exe, _ := os.Executable()
 	exe, _ = filepath.EvalSymlinks(exe)
+	selfupdate.CleanUp(exe) // a download an update didn't finish
 	dataDir, err := resolveDataDir(*dataFlag, exe)
 	if err != nil {
 		platform.ShowError(appName, "Can't find a folder to keep the server's files in:\n"+err.Error())
@@ -69,7 +81,13 @@ func main() {
 		return
 	}
 
-	opt := manager.Options{DataDir: dataDir, AppExe: exe, Logger: logger, DiscordURL: *devDiscord}
+	opt := manager.Options{DataDir: dataDir, AppExe: exe, Logger: logger, DiscordURL: *devDiscord, AppVersion: version}
+	var closeApp func(stopServer, restart bool)
+	var restart atomic.Bool // start the updated program once this one has closed
+	if n, _ := strconv.Atoi(build); n > 0 && runtime.GOOS == "windows" {
+		opt.AppBuild, opt.Updater = n, &selfupdate.Updater{API: *devGitHub}
+		opt.Relaunch = func() { closeApp(false, true) }
+	}
 	if *devServer != "" {
 		src, _ := filepath.Abs(*devServer)
 		opt.NewInstaller = func(p config.Paths) steamcmd.Installer {
@@ -88,8 +106,9 @@ func main() {
 
 	done := make(chan struct{})
 	var quitOnce sync.Once
-	quit := func(stopServer bool) {
+	closeApp = func(stopServer, restartApp bool) {
 		quitOnce.Do(func() {
+			restart.Store(restartApp)
 			go func() {
 				if stopServer {
 					stopAndWait(m, logger)
@@ -98,6 +117,7 @@ func main() {
 			}()
 		})
 	}
+	quit := func(stopServer bool) { closeApp(stopServer, false) }
 
 	srv := web.New(web.Options{Manager: m, Logger: logger, Version: version, Quit: quit})
 	if err := srv.Listen(*panelPort); err != nil {
@@ -134,10 +154,14 @@ func main() {
 	go func() {
 		<-done
 		logger.Printf("closing")
+		port := srv.Port()
 		srv.Close()
 		m.Close()
 		os.Remove(filepath.Join(dataDir, ".instance.json"))
 		release()
+		if restart.Load() {
+			startUpdated(exe, relaunchArgs(os.Args[1:], port), dataDir, logger)
+		}
 		closeLog()
 		os.Exit(0)
 	}()
@@ -184,6 +208,99 @@ func main() {
 	}, done)
 	<-done
 	select {} // the closing goroutine exits the program
+}
+
+// relaunchArgs are the updated app's arguments: the same, but on the same
+// port and without opening another window (an open control panel
+// reconnects by itself).
+func relaunchArgs(args []string, port int) []string {
+	var out []string
+	window := true
+	for i := 0; i < len(args); i++ {
+		name, value, hasValue := strings.Cut(strings.TrimLeft(args[i], "-"), "=")
+		if strings.HasPrefix(args[i], "-") {
+			switch {
+			case name == "port":
+				if !hasValue {
+					i++ // the port is the next argument
+				}
+				continue
+			case (name == "background" || name == "no-window") && value != "false":
+				window = false
+			}
+		}
+		out = append(out, args[i])
+	}
+	if window {
+		out = append(out, "--background")
+	}
+	return append(out, fmt.Sprintf("--port=%d", port))
+}
+
+// startUpdated starts the updated program and waits for its control panel.
+// If it doesn't start, the previous version is put back and started
+// instead, which tells the panel what happened.
+func startUpdated(exe string, args []string, dataDir string, logger *log.Logger) {
+	logger.Printf("starting the updated app")
+	err := waitStarted(exec.Command(exe, args...), dataDir, time.Minute)
+	if err == nil {
+		return
+	}
+	logger.Printf("the updated app didn't start (%v): going back to the previous version", err)
+	if err := selfupdate.Restore(exe); err != nil {
+		logger.Printf("putting the previous version back: %v", err)
+		return
+	}
+	if err := exec.Command(exe, args...).Start(); err != nil {
+		logger.Printf("starting the previous version: %v", err)
+	}
+}
+
+// waitStarted starts cmd, a copy of this app, and waits until its control
+// panel answers. If it closes first or the panel doesn't answer in time,
+// it's stopped.
+func waitStarted(cmd *exec.Cmd, dataDir string, limit time.Duration) error {
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	exited := make(chan error, 1)
+	go func() { exited <- cmd.Wait() }()
+	deadline := time.After(limit)
+	for !panelAnswers(dataDir) {
+		select {
+		case err := <-exited:
+			if panelAnswers(dataDir) {
+				return nil // another copy was started meanwhile
+			}
+			if err == nil {
+				err = errors.New("it closed")
+			}
+			return err
+		case <-deadline:
+			cmd.Process.Kill()
+			<-exited
+			return errors.New("its control panel didn't open")
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+	return nil
+}
+
+// panelAnswers reports whether the control panel noted in the data folder
+// answers.
+func panelAnswers(dataDir string) bool {
+	b, err := os.ReadFile(filepath.Join(dataDir, ".instance.json"))
+	var info instanceInfo
+	if err != nil || json.Unmarshal(b, &info) != nil || info.Port == 0 {
+		return false
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	res, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/api/status", info.Port))
+	if err != nil {
+		return false
+	}
+	res.Body.Close()
+	return res.StatusCode == http.StatusOK
 }
 
 // restWords gives the tray's menu label and question for resting the

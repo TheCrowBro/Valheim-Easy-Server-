@@ -74,6 +74,12 @@ async function poll() {
 }
 
 function onStatus(st) {
+  // After the app has updated itself, load the new version of this page.
+  if (st.app && app.appVersion && st.app.version !== app.appVersion) {
+    location.reload();
+    return;
+  }
+  if (st.app) app.appVersion = st.app.version;
   const job = st.job;
   // Report each job that finishes after the page loaded, even quick ones
   // that start and end between two refreshes.

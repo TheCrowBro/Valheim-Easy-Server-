@@ -27,6 +27,7 @@ type Status struct {
 	Mods         []ModInfo             `json:"mods,omitempty"` // the mods players need
 	Discord      *DiscordInfo          `json:"discord,omitempty"`
 	Reminder     []string              `json:"reminder,omitempty"` // what players need to do before joining
+	App          AppInfo               `json:"app"`
 	Version      string                `json:"version,omitempty"`
 	Build        string                `json:"build,omitempty"`
 	BuildDate    *time.Time            `json:"buildDate,omitempty"`
@@ -127,6 +128,7 @@ func (m *Manager) Status() Status {
 		Machine:    m.machine,
 		Now:        time.Now(),
 		Warnings:   []string{},
+		App:        m.appInfoLocked(),
 	}
 	if m.job != nil {
 		j := *m.job

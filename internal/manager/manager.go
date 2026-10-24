@@ -21,6 +21,7 @@ import (
 	"valheim-easy-server/internal/logparse"
 	"valheim-easy-server/internal/mods"
 	"valheim-easy-server/internal/platform"
+	"valheim-easy-server/internal/selfupdate"
 	"valheim-easy-server/internal/stats"
 	"valheim-easy-server/internal/steamcmd"
 	"valheim-easy-server/internal/worlds"
@@ -53,6 +54,10 @@ type Options struct {
 	NoPublicIP      bool   // don't look up the public IP address
 	ModsURL         string // where mods are downloaded from; Thunderstore when empty
 	DiscordURL      string // where Discord webhook links are sent instead of Discord, for tests
+	AppVersion      string // this program's version, as people see it
+	AppBuild        int    // its build number; 0 for development builds, which don't update themselves
+	Updater         *selfupdate.Updater
+	Relaunch        func() // closes the app and starts the program at AppExe, after an update
 	SampleInterval  time.Duration
 	RestartDelay    time.Duration // wait before restarting after a crash
 }
@@ -99,6 +104,7 @@ type Manager struct {
 	checks         checkCache
 	modVersions    map[string]string // installed mod packages and their versions
 	lastPlayed     *played           // what players last played with; nil until someone has
+	app            appUpdate         // what the last check for an app update found
 	subs           []func()
 }
 
@@ -226,6 +232,7 @@ func New(opt Options) (*Manager, error) {
 		m.byPlayers = stats.NewByPlayers()
 	}
 	m.loadHistory()
+	m.loadActivity()
 	m.loadKnown()
 	m.loadPlayed()
 	m.machine = platform.Machine()
@@ -240,10 +247,14 @@ func (m *Manager) Start() {
 	m.sys = platform.NewSysSampler()
 	m.awake = platform.NewKeepAwake("Valheim server is running")
 	m.library().CleanUploads(time.Hour)
+	if m.canUpdate() {
+		m.noteUpdate()
+	}
 	m.adoptRunning()
 	m.go_(m.sampleLoop)
 	m.go_(m.checksLoop)
 	m.go_(m.discordLoop)
+	m.go_(m.updateLoop)
 
 	m.mu.Lock()
 	autoStart := m.settings.StartWithApp && m.run == nil && m.installedLocked()
@@ -417,6 +428,31 @@ func (m *Manager) saveData() {
 	if b, err := json.Marshal(day); err == nil {
 		config.WriteFileAtomic(m.dataFile("history.json"), b, 0o644)
 	}
+	// And the activity feed, which a restart (say, to update the app)
+	// would otherwise empty.
+	acts, _ := m.activity.all()
+	if b, err := json.Marshal(acts); err == nil {
+		config.WriteFileAtomic(m.dataFile("activity.json"), b, 0o644)
+	}
+}
+
+func (m *Manager) loadActivity() {
+	b, err := os.ReadFile(m.dataFile("activity.json"))
+	if err != nil {
+		return
+	}
+	var saved []Activity
+	if json.Unmarshal(b, &saved) != nil {
+		return
+	}
+	var acts []Activity
+	var seqs []int64
+	for _, a := range saved {
+		if len(seqs) == 0 || a.Seq > seqs[len(seqs)-1] {
+			acts, seqs = append(acts, a), append(seqs, a.Seq)
+		}
+	}
+	m.activity.restore(acts, seqs)
 }
 
 func (m *Manager) loadHistory() {

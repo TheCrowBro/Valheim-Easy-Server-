@@ -65,6 +65,28 @@ func (r *ring[T]) after(seq int64, limit int) ([]T, int64) {
 	return append([]T(nil), items...), r.next - 1
 }
 
+// all returns every item and its sequence number, oldest first.
+func (r *ring[T]) all() ([]T, []int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]T(nil), r.items...), append([]int64(nil), r.seqs...)
+}
+
+// restore puts back items saved earlier, with their increasing sequence
+// numbers.
+func (r *ring[T]) restore(items []T, seqs []int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if drop := len(items) - r.max; drop > 0 {
+		items, seqs = items[drop:], seqs[drop:]
+	}
+	r.items = append([]T(nil), items...)
+	r.seqs = append([]int64(nil), seqs...)
+	if n := len(seqs); n > 0 {
+		r.next = seqs[n-1] + 1
+	}
+}
+
 // last returns the newest n items, newest first.
 func (r *ring[T]) last(n int) []T {
 	r.mu.Lock()

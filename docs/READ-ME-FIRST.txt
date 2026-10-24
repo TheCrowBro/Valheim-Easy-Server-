@@ -140,6 +140,19 @@ cable. If Wake-on-LAN doesn't wake it from hibernation, choose "Sleep"
 there instead.
 
 
+UPDATES
+-------
+The app keeps itself up to date. Every hour it checks for a newer version
+on GitHub and installs it when nothing is in progress. The Valheim server
+keeps running while the app restarts, so nobody is disconnected, and the
+control panel window reconnects by itself a few seconds later.
+
+Settings, under "App updates", shows which version you have, with
+"Check now" and "Update now". If a new version ever fails to start, the
+app goes back to the previous one by itself. That previous version is also
+kept next to the app as ValheimEasyServer.exe.old.
+
+
 MORE HELP
 ---------
 https://github.com/TheCrowBro/Valheim-Easy-Server-

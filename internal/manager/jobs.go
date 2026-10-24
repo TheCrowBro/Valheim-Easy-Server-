@@ -83,6 +83,10 @@ func (m *Manager) startJob(kind, title string, cancellable bool, fn func(ctx con
 		m.mu.Unlock()
 		return 0, &BusyError{Title: lowerFirst(t)}
 	}
+	if m.app.updating { // the app is about to restart
+		m.mu.Unlock()
+		return 0, errUpdatingBusy
+	}
 	m.jobSeq++
 	parent := m.ctx
 	if parent == nil {

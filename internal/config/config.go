@@ -38,6 +38,7 @@ type Settings struct {
 	BackupLongMinutes   int `json:"backupLongMinutes"`
 
 	UpdateOnStart  bool `json:"updateOnStart"`
+	AutoUpdate     bool `json:"autoUpdate"` // the app updates itself from GitHub
 	AutoRestart    bool `json:"autoRestart"`
 	StartWithApp   bool `json:"startWithApp"`
 	StartAfterWake bool `json:"startAfterWake"`
@@ -128,6 +129,7 @@ func Defaults() Settings {
 		BackupShortMinutes:  120,
 		BackupLongMinutes:   720,
 		UpdateOnStart:       true,
+		AutoUpdate:          true,
 		AutoRestart:         true,
 		StartAfterWake:      true,
 		IdleMinutes:         60,

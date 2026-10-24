@@ -18,6 +18,7 @@ Run a Valheim dedicated server on a spare Windows PC, such as an old Mac Pro run
 - **Stats.** CPU, memory, GPU and network use for the Valheim server and the whole computer, over 15 minutes to 24 hours. A breakdown by number of players estimates what each extra player costs.
 - **Players.** See who's online and everyone who has played, with total play time. Make someone an admin or ban them with one click, without hunting for Steam IDs.
 - **Looks after itself.** It updates the server through Steam before each start, so friends never get a "version mismatch". It restarts the server after a crash and keeps Windows from falling asleep while people play. Closing the window doesn't stop the server, and the app picks it back up when it starts again.
+- **Keeps itself up to date.** Every hour the app checks this project on GitHub for a newer version and installs it once nothing is in progress. The Valheim server keeps running while the app restarts, so nobody is disconnected.
 - **Only on this computer.** The control panel only works on the server computer itself, so there's no password to set up and nothing for strangers to reach. Friends use it through an IP KVM or remote desktop, the same way they'd use the computer.
 
 | Tutorial | Worlds | Adding a world | Stats | Players |
@@ -26,8 +27,10 @@ Run a Valheim dedicated server on a spare Windows PC, such as an old Mac Pro run
 
 ## Getting it
 
-1. Open the [Actions tab](../../actions), click the newest successful **Build and test** run, and download **ValheimEasyServer-windows** at the bottom. Or use a [release](../../releases) if there is one.
+1. Open the [newest release](../../releases/latest) and download **ValheimEasyServer-windows.zip**.
 2. Unzip it. You get `ValheimEasyServer.exe` and `READ-ME-FIRST.txt`.
+
+You only do this once: after that, the app [updates itself](#app-updates).
 
 ## Setting up the server computer (once)
 
@@ -156,6 +159,17 @@ The **Stats** page shows the Valheim server's own CPU and memory use next to the
 
 The dedicated server runs without graphics, so GPU usage stays low; that's normal. GPU readings need a reasonably recent graphics driver (WDDM 2.0 or later). If the GPU tile says "not available", the driver is too old to report it.
 
+## App updates
+
+Every change to this project that passes its tests on GitHub becomes a new [release](../../releases) (Build 14, Build 15 and so on), and the app installs it by itself:
+
+- A couple of minutes after it starts, and then every hour, the app checks for a newer build. It downloads it, checks it against the release's SHA-256 checksum, and restarts into it once no job (such as a backup or starting the server) and no world upload is in progress.
+- The Valheim server keeps running while the app restarts, so nobody playing is disconnected. The panel window reconnects by itself a few seconds later, and the Home page's activity list says what changed.
+- If a new build doesn't start, the app puts the previous version back by itself, says so on the Home page, and won't install that build by itself again. The previous version also stays next to the app as `ValheimEasyServer.exe.old` until the next update.
+- **Settings → App updates** shows which build you have, with **Check now** and **Update now**. Turn off **Update this app automatically** to update only when you click **Update now**.
+- A copy from before automatic updates existed (its Settings page has no **App updates** section) doesn't update itself. Replace it once: right-click the shield icon and click **Close app (server keeps running)**, put the `ValheimEasyServer.exe` from the [newest release](../../releases/latest) in its place, and double-click it. It takes over the running server.
+- Updates only come from this project's GitHub releases, so whoever can change the project decides what runs on the server computer.
+
 ## Troubleshooting
 
 | Problem | What to do |
@@ -171,6 +185,8 @@ The dedicated server runs without graphics, so GPU usage stays low; that's norma
 | Shutting down or restarting Windows | Stop the server first (or use Hibernate), so the world is saved. Windows doesn't give the server time to save when it shuts down. |
 | Wake-on-LAN doesn't wake the computer | Check that **Settings → Resting and waking up** says the network adapter may wake the computer, that the KVM uses the MAC address shown there, and that the computer is on a cable, not Wi-Fi. If it still won't wake from hibernation, choose **Sleep**, and restart the computer once. |
 | The join code doesn't appear in Discord | The **How friends join** card says why. In **Settings → Discord**, click **Send a test**. If Discord says the link doesn't work, the webhook was deleted: make a new one and paste its link. |
+| The app doesn't update itself | **Settings → App updates** says why. The computer needs internet access to github.com, and the app's folder must be one it can write to, like `C:\Valheim Server` (not Program Files). A copy without **App updates** in Settings needs replacing once (see [App updates](#app-updates)). |
+| The app doesn't open after an update | It normally puts the previous version back by itself. If not, delete `ValheimEasyServer.exe`, rename `ValheimEasyServer.exe.old` to `ValheimEasyServer.exe`, and double-click it. |
 | Mods (BepInEx) | Install them into the server folder (**Settings → Folders → Open**); the app starts the server the same way. Use **Repair server files** to undo. |
 
 The app's own log is in `logs\app.log` inside its folder, and the server's logs are next to it.
@@ -185,6 +201,7 @@ The app's own log is in `logs\app.log` inside its folder, and the server's logs 
 - understands both Valheim world formats: 1.0 world folders (`_main.N.fwl2`, `.db2`, `.chunk` files) and the older `.fwl` + `.db` pairs;
 - serves the control panel from inside the app to this computer only (127.0.0.1) and opens it in a Microsoft Edge app window. It turns away requests that other websites open in a browser could make: it checks the address the browser used, the browser's own "which site is asking" header, and an anti-forgery header on every change;
 - posts in Discord, when that's turned on, by sending each message to the channel's webhook link;
+- updates itself from this project's GitHub releases. It checks the download's SHA-256 checksum, renames the running program to `ValheimEasyServer.exe.old` (Windows allows renaming a running program), puts the new one in its place and starts it on the same port. If the new one's panel doesn't answer within a minute, the old one goes back;
 - reads CPU, GPU, memory and network usage from Windows' performance counters, the same source Task Manager uses;
 - hibernates with `shutdown /h` or sleeps through Windows' own sleep call, and sets up Wake-on-LAN with `powercfg /deviceenablewake` and the network adapter's power settings (magic packet on, pattern wake off).
 
@@ -199,7 +216,7 @@ go test ./...
 GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o ValheimEasyServer.exe .
 ```
 
-For the program icon, run `go run github.com/tc-hib/go-winres@v0.3.3 make --in winres/winres.json --arch amd64` before building. GitHub Actions does all of this on every push: it runs the tests on Linux and Windows, including stopping a server with Ctrl+C on real Windows, and publishes the `.exe`.
+For the program icon, run `go run github.com/tc-hib/go-winres@v0.3.3 make --in winres/winres.json --arch amd64` before building. GitHub Actions does all of this on every push: it runs the tests on Linux and Windows, including stopping a server with Ctrl+C on real Windows, and publishes the `.exe`. Each build of the main branch that passes becomes a release tagged `build-N`, built with `-X main.build=N`; installed copies update themselves to it. A copy built without a build number doesn't update itself.
 
 To try the app without the real server, use the stand-in server in `cmd/fakevalheim`. It writes Valheim-style logs and world folders and simulates players:
 
