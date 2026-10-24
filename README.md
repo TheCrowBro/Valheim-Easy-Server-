@@ -70,9 +70,11 @@ Each time the server is online, the channel gets a message like this:
 > 🟢 **Valheim with Friends** is online<br>
 > World: Midgard<br>
 > Join code: **482913**<br>
-> Mods: [Advanced Portals](https://thunderstore.io/c/valheim/p/RandyKnapp/AdvancedPortals/) 1.2.0<br>
-> <sub>In Valheim, go to Join Game and join by code. Install the mod first with the r2modman or Gale mod manager.</sub>
+> Mods: [Advanced Portals](https://thunderstore.io/c/valheim/p/RandyKnapp/AdvancedPortals/) 1.2.1<br>
+> 📢 **Before you join:** update Valheim to 1.0.21, update Advanced Portals to 1.2.1.<br>
+> <sub>In Valheim, go to Join Game and join by code. Install the mod first with the Gale or r2modman mod manager.</sub>
 
+- **Before you join** appears when something changed since your friends last played: a newer Valheim, an updated mod, a mod added to or dropped from the world, or a new password. It says what to do, and stays until someone has joined since.
 - **Include the password** adds the password, hidden as a spoiler until it's clicked. Only turn it on if the channel is just for your friends.
 - **Also post when the server stops** (on by default) says when the server stops, restarts, crashes or the computer goes to rest, so nobody tries a code that no longer works.
 - The **How friends join** card shows when the code was posted, or why it couldn't be. If Discord can't be reached, the app tries again for a couple of minutes.
@@ -124,7 +126,7 @@ How it works:
   2. Choose Valheim, make a new profile for this server, search for each mod and install it. Anything else it needs, such as BepInEx, comes with it.
   3. Start Valheim from the mod manager (**Launch game** in Gale, **Start modded** in r2modman), then join as usual.
 
-  The mods marked "Needed to join" check this when someone joins and turn away players who don't have them. If joining fails because the versions don't match, the player updates the mods in their mod manager: the server keeps them up to date. Players who also play Riverheim-free worlds use a separate profile for those.
+  The mods marked "Needed to join" check this when someone joins and turn away players who don't have them. If joining fails because the versions don't match, the player updates the mods in their mod manager: the server keeps them up to date. When the server updates Valheim or a mod, or the world's mods change, the **How friends join** card and the Discord post remind friends what to do before joining, for example "update Seasonality to 3.8.6". Players who also play Riverheim-free worlds use a separate profile for those.
 
   While a modded world is selected or running, the **How friends join** card on the Home page has a **Which mods do I need?** button. It opens a pop-up with each mod, whether it's needed, its version on the server, its download page and these steps. A world card's **Player instructions** link opens the same pop-up, and so does adding mods. Xbox, PlayStation, Switch and Game Pass players can't use mods, so they can't join a world with a mod that's needed to join.
 - Reports differ on whether crossplay join codes work with a modded server. If friends on PC can't join with the code, turn **Crossplay** off in Settings and join by address (friends outside your home then need UDP ports 2456–2457 forwarded on your router).

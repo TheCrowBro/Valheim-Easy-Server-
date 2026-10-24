@@ -248,7 +248,7 @@ func (m *Manager) doStart(ctx context.Context, j *jobCtl) error {
 		return fmt.Errorf("Couldn't start the Valheim server: %v", err)
 	}
 	info := runInfo{PID: proc.PID(), Started: proc.StartTime(), Launched: time.Now(), LogPath: logPath,
-		World: s.World, ArgsKey: argsKey(s, p.Save), Exe: p.ServerExe}
+		World: s.World, ArgsKey: argsKey(s, p.Save), Exe: p.ServerExe, Played: m.startedWith(s)}
 	run := m.attach(proc, info, false)
 	m.addActivity("starting", "", fmt.Sprintf("Starting the server with the world %q.", s.World))
 	m.pruneLogs()
@@ -629,17 +629,22 @@ func (m *Manager) handleLine(run *serverRun, line string) {
 	}
 	post, announce := m.announceLocked(run)
 	replaying := run.replaying
+	savePlayed := false
 	if !replaying {
 		for _, a := range acts {
 			m.notePlayerLocked(a, sinceByName[a.Name])
 			if a.Kind == "join" {
 				m.idleSince = time.Now()
+				savePlayed = m.notePlayedLocked(run) || savePlayed
 			}
 		}
 	}
 	changed := before != m.stateLocked()
 	m.mu.Unlock()
 
+	if savePlayed {
+		m.savePlayed()
+	}
 	if announce {
 		m.queueDiscord(post)
 		m.saveRunInfo(run)

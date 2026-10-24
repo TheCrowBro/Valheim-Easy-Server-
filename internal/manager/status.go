@@ -26,6 +26,7 @@ type Status struct {
 	Join         JoinInfo              `json:"join"`
 	Mods         []ModInfo             `json:"mods,omitempty"` // the mods players need
 	Discord      *DiscordInfo          `json:"discord,omitempty"`
+	Reminder     []string              `json:"reminder,omitempty"` // what players need to do before joining
 	Version      string                `json:"version,omitempty"`
 	Build        string                `json:"build,omitempty"`
 	BuildDate    *time.Time            `json:"buildDate,omitempty"`
@@ -161,6 +162,7 @@ func (m *Manager) Status() Status {
 		}
 		st.Join.Code = r.tracker.JoinCode
 		st.Join.PublicAddr = r.tracker.PublicAddr
+		st.Reminder = m.reminderLocked(r)
 		if s.Discord {
 			st.Discord = &DiscordInfo{Error: r.discordErr}
 			if !r.discordAt.IsZero() {

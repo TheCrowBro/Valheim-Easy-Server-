@@ -60,6 +60,9 @@ join code in Discord" and paste the channel's webhook link. To get it:
      save.
 You can also have it post the password (hidden as a spoiler: only for a
 channel that's just for your friends) and say when the server stops.
+When something changed since your friends last played, the post also
+says what to do first, for example "Before you join: update Valheim to
+1.0.21, install Plant Everything".
 
 
 MODS
@@ -73,7 +76,8 @@ tick the mods to play it with. "Create a new world" has the same list.
   - Heightmap Unlimited: raise and dig the ground as far as you like.
   - Seasonality: winter, spring, summer and fall.
   - Gamma of Night Lights: darker nights with real moonlight.
-The app downloads a world's mods the next time the server starts it.
+The app downloads a world's mods the next time the server starts it, and
+with "Update the server before it starts" on, it keeps them up to date.
 
 Players install the world's mods in their own game too:
   1. Install a free mod manager: Gale or r2modman (from
@@ -86,65 +90,10 @@ join without, and where to download each one. If joining fails because
 the versions don't match, update the mods in the mod manager.
 Xbox, PlayStation, Switch and Game Pass players can't use mods.
 
-
-ADDING A WORLD below). Otherwise the server makes a new one.
-
-5. Click "Start server". When it says "Online", friends can join with the
-   join code and password shown under "How friends join".
-
-6. Finish the checklist under "Setup on this computer" on the Home page:
-   - Allow it through Windows Firewall (click Yes when Windows asks)
-   - Turn on hibernation
-   - Turn on Wake-on-LAN (so your IP KVM can wake the computer)
-   - Start this app with Windows
-
-Closing the window doesn't stop anything: the app stays next to the clock
-(the shield icon). Click the icon to open the control panel again. Right-click
-it for Start, Stop, Hibernate and Close.
-
-
-NEW TO THE CONTROL PANEL?
--------------------------
-Click "Tutorial" on the Home page, right next to "Start server". In six
-short steps it shows how to set a world's difficulty and mods, start the
-server, join it from Valheim, stop it, switch worlds and let the computer
-rest.
-
-
-THE JOIN CODE IN DISCORD
-------------------------
-The join code changes each time the server starts. The app can post it in
-a Discord channel for you: in Settings, under Discord, turn on "Post the
-join code in Discord" and paste the channel's webhook link. To get it:
-  1. In Discord, click the gear next to the channel's name (Edit Channel).
-  2. Open Integrations and click Create Webhook (or Webhooks, then New
-     Webhook).
-  3. Click the new webhook, name it (for example Valheim) and click
-     Copy Webhook URL.
-  4. Paste it in Settings, click "Send a test", look in the channel and
-     save.
-You can also have it post the password (hidden as a spoiler: only for a
-channel that's just for your friends) and say when the server stops.
-
-
-MODS
-----
-Each world's card on the Worlds page has switches for two mods:
-  - Advanced Portals by RandyKnapp: portals that let metal through.
-  - Seasonality by RustyMods: winter, spring, summer and fall.
-The app downloads a world's mods the next time the server starts it.
-
-Everyone who plays that world needs the mod in their own game too:
-  1. Install a free mod manager: r2modman or Gale (from thunderstore.io).
-  2. Choose Valheim, search for the mod ("Advanced Portals" or
-     "Seasonality") and install it ("Download" in r2modman). Anything
-     else it needs, such as BepInEx, comes with it.
-  3. Start Valheim from the mod manager ("Start modded" in r2modman),
-     then join as usual.
-If joining fails because the versions don't match, update the mod in the
-mod manager. On the Home page, "Which mod do I need?" shows these steps
-with the mod's download page.
-Xbox, PlayStation, Switch and Game Pass players can't use mods.
+When something changed since your friends last played (a Valheim or mod
+update, a new or dropped mod, a new password), the Home page and the
+Discord post say what to do before joining, such as "update Seasonality
+to 3.8.6". The reminder stays until someone has joined.
 
 
 ADDING A WORLD

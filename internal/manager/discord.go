@@ -68,7 +68,7 @@ func (m *Manager) announceLocked(run *serverRun) (p discordPost, ok bool) {
 	run.info.Announced = key
 	run.discordAt, run.discordErr = time.Time{}, ""
 
-	msg := onlineMessage{Server: s.ServerName, World: run.info.World, Code: code}
+	msg := onlineMessage{Server: s.ServerName, World: run.info.World, Code: code, Reminder: m.reminderLocked(run)}
 	if s.DiscordPassword {
 		msg.Password = s.Password
 	}
@@ -135,6 +135,7 @@ type onlineMessage struct {
 	Address       string // internet address, when there's no join code
 	Password      string // empty to leave it out
 	Mods          []ModInfo
+	Reminder      []string // what players need to do first, such as "update Valheim to 1.0.21"
 }
 
 func (o onlineMessage) text() string {
@@ -169,6 +170,9 @@ func (o onlineMessage) text() string {
 			them = "the mods"
 		}
 		hint += fmt.Sprintf(" Install %s first with the Gale or r2modman mod manager.", them)
+	}
+	if len(o.Reminder) > 0 {
+		fmt.Fprintf(&b, "📢 **Before you join:** %s.\n", strings.Join(o.Reminder, ", "))
 	}
 	b.WriteString("-# " + hint)
 	return b.String()

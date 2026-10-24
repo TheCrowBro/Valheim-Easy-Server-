@@ -98,6 +98,7 @@ type Manager struct {
 	net            netInfo
 	checks         checkCache
 	modVersions    map[string]string // installed mod packages and their versions
+	lastPlayed     *played           // what players last played with; nil until someone has
 	subs           []func()
 }
 
@@ -152,6 +153,7 @@ type runInfo struct {
 	// Announced is the join code posted in Discord ("online" when there's
 	// no code), so it's posted once even if the app restarts.
 	Announced string `json:"announced,omitempty"`
+	Played    played `json:"played"` // the mods and password it started with
 }
 
 // New loads settings and saved data. Call Start to begin.
@@ -225,6 +227,7 @@ func New(opt Options) (*Manager, error) {
 	}
 	m.loadHistory()
 	m.loadKnown()
+	m.loadPlayed()
 	m.machine = platform.Machine()
 	m.idleSince = time.Now()
 	return m, nil

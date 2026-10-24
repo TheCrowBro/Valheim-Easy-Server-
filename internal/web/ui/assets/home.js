@@ -151,10 +151,21 @@ function joinCard(app) {
   body.push(discordLine(st));
   const mods = st.mods || [];
   if (mods.length) body.unshift(modsNotice(mods));
+  if (st.state === 'online' && (st.reminder || []).length) body.unshift(reminderNotice(st));
   return h('section', { class: 'card', 'aria-label': 'How to join' },
     h('div', { class: 'card-head' }, h('h2', null, 'How friends join'),
       h('span', { class: 'badge' }, j.crossplay ? 'Crossplay on' : 'Steam only')),
     body);
+}
+
+// reminderNotice says what friends need to do before joining, because
+// something changed since they last played.
+function reminderNotice(st) {
+  const r = st.reminder;
+  const text = r.join(', ');
+  return h('div', { class: 'callout warn reminder' }, icon('alert'), h('div', { class: 'body small' },
+    h('p', null, h('strong', null, 'Before your friends join: '), text[0].toUpperCase() + text.slice(1) + '.'),
+    h('p', { class: 'text-2' }, 'Things changed since they last played. ', st.discord ? 'The Discord post says this too.' : 'Let them know.')));
 }
 
 // discordLine says whether the join code made it to the Discord channel.

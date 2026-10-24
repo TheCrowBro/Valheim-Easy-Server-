@@ -11,6 +11,7 @@
 //	                          (seconds after the server is ready)
 //	FAKE_VALHEIM_SPEED=60     run save and backup timers this many times faster
 //	FAKE_VALHEIM_CRASH=10     exit with an error after this many seconds
+//	FAKE_VALHEIM_VERSION=1.0.21  the Valheim version it says it is (1.0.20)
 package main
 
 import (
@@ -117,7 +118,11 @@ func main() {
 		s.shutdown()
 	}()
 
-	s.log("Valheim version: l-1.0.20 (network version 41)")
+	version := os.Getenv("FAKE_VALHEIM_VERSION")
+	if version == "" {
+		version = "1.0.20"
+	}
+	s.log("Valheim version: l-" + version + " (network version 41)")
 	s.log("Using savedir: " + s.saveDir)
 	s.log(fmt.Sprintf("Fake server %q starting on port %d", s.name, s.port))
 	s.ballast = append(s.ballast, touch(150<<20)) // a server uses memory even when empty
