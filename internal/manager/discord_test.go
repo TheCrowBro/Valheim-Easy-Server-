@@ -213,9 +213,14 @@ func TestDiscordMessages(t *testing.T) {
 		"Join code: **123456**\n" +
 		"Password: ||a\\|b||\n" +
 		"Mods: [Advanced Portals](" + portals.URL + ") 1.2.0, [Seasonality](" + seasons.URL + ")\n" +
-		"-# In Valheim, go to Join Game and join by code. Install the mods first with the r2modman or Gale mod manager."
+		"-# In Valheim, go to Join Game and join by code. Install the mods first with the Gale or r2modman mod manager."
 	if got := o.text(); got != want {
 		t.Errorf("online message:\n%s\nwant:\n%s", got, want)
+	}
+	inventory, _ := mods.Find("azuepi")
+	o.Mods = append(o.Mods, ModInfo{Mod: inventory})
+	if got := o.text(); !strings.HasSuffix(got, "Install the mods first with the Gale mod manager.") {
+		t.Errorf("with a mod from Hexium:\n%s", got)
 	}
 	o = onlineMessage{Server: "S", World: "W", Address: "203.0.113.5:2456"}
 	if got := o.text(); !strings.Contains(got, "Address: **203.0.113.5:2456**") || strings.Contains(got, "Password") ||

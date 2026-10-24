@@ -279,11 +279,28 @@ p.discord-line svg { width: 15px; height: 15px; flex: none; }
 .world .meta dt { color: var(--muted); }
 .world .meta dd { margin: 0; color: var(--text-2); overflow-wrap: anywhere; }
 .world .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; }
-.world-mod { display: flex; align-items: center; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
-.world-mod .grow { flex: 1; min-width: 0; }
-.world-mod .title { font-weight: 600; font-size: 14px; }
-.world-mod .title span { font-weight: 400; }
-.world-mod .help { color: var(--muted); font-size: 13px; }
+.world-mods { display: flex; align-items: center; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.world-mods .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.world-mods .title { font-weight: 600; font-size: 14px; }
+.world-mods .help { color: var(--muted); font-size: 13px; }
+.world-mods .link-button { font-size: 13px; }
+.mod-group { border: 0; padding: 0; margin: 4px 0 6px; min-width: 0; }
+.mod-group legend { padding: 0; margin-bottom: 8px; font-size: 12.5px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.mod-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+.mod-option {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2);
+}
+.mod-option:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.mod-option input { margin: 3px 0 0; accent-color: var(--accent); flex: none; }
+.mod-option .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mod-option-name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-weight: 600; color: var(--text); }
+.mod-option small { color: var(--text-2); font-size: 13px; }
+.mod-option small.mod-option-players { color: var(--muted); font-size: 12.5px; }
+.mod-warn { margin-top: 6px; padding: 8px 10px; gap: 8px; }
+.mod-warn > svg { width: 16px; height: 16px; }
+.new-world-mods { margin-top: 2px; }
+.new-world-mods .mod-group:first-of-type { margin-top: 10px; }
 
 /* menus */
 .menu { position: relative; display: inline-block; }

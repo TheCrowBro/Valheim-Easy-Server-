@@ -1,7 +1,7 @@
 // Worlds: add worlds (the Add a world section), pick which world the server
 // plays, create new ones, download them, and manage backups.
 
-import { h, icon, api, toast, openModal, confirmDialog, fmtBytes, ago, dateTime, field, toggle } from './dom.js';
+import { h, icon, api, toast, openModal, confirmDialog, fmtBytes, ago, dateTime, field } from './dom.js';
 import { uploadSection, recent } from './upload.js';
 import { saveZip, downloads, today } from './download.js';
 import { openModsHelp } from './modshelp.js';
@@ -11,7 +11,6 @@ let loadedAt = 0;
 let loading = false;
 let openMenu = null;
 let appRef = null;
-let pendingMod = null; // { name, mod, on } while its question is open
 
 const PRESET_LABELS = {
   normal: 'Normal', casual: 'Casual', easy: 'Easy', hard: 'Hard', hardcore: 'Hardcore',
@@ -31,6 +30,14 @@ const KEY_LABELS = {
 const KEY_HELP = {
   fire: 'Fire spreads to wood everywhere, not just in the Ashlands, so buildings can burn down.',
 };
+// The mods are shown in these groups, and say what players need.
+const MOD_GROUPS = [['world', 'How the land is made'], ['play', 'Gameplay'], ['look', 'Look and feel']];
+const PLAYERS_NEED = {
+  required: 'Players need it to join',
+  recommended: 'Players can join without it, but should have it',
+  players: 'Only for players’ own games: the server doesn’t use it',
+};
+
 const MODIFIERS = {
   combat: ['veryeasy', 'easy', 'hard', 'veryhard'],
   deathpenalty: ['casual', 'veryeasy', 'easy', 'hard', 'hardcore'],
@@ -94,7 +101,7 @@ function worldCard(app, w) {
       h('dt', null, 'Size'), h('dd', null, fmtBytes(w.size)),
       h('dt', null, 'Last saved'), h('dd', null, w.modified ? ago(w.modified) : '–'),
       opts ? h('dt', null, 'Difficulty') : null, opts ? h('dd', null, opts) : null),
-    modRows(w, busy),
+    modsLine(w.name, busy),
     h('div', { class: 'actions' },
       playBtn,
       downloadButton(w),
@@ -104,19 +111,78 @@ function worldCard(app, w) {
         menu)));
 }
 
-// modRows are the switches for the mods a world can be played with.
-function modRows(w, busy) {
-  const on = (data.options[w.name] || {}).mods || [];
-  return (data.mods || []).map((m) => {
-    const checked = pendingMod && pendingMod.name === w.name && pendingMod.mod === m.id ? pendingMod.on : on.includes(m.id);
-    return h('div', { class: 'world-mod', 'data-key': m.id },
-      h('div', { class: 'grow' },
-        h('div', { class: 'title' }, m.name, h('span', { class: 'muted' }, ' mod')),
-        on.includes(m.id)
-          ? h('div', { class: 'help' }, 'On. Everyone who plays this world needs it too. ',
-            h('button', { class: 'link-button', type: 'button', 'data-action': 'world-mod-help', 'data-mod': m.id }, 'Player instructions'))
-          : h('div', { class: 'help' }, m.short)),
-      toggle({ 'data-action': 'world-mod', 'data-name': w.name, 'data-mod': m.id, checked, disabled: busy, 'aria-label': `${m.name} mod for ${w.name}` }));
+// worldMods are the mods a world is played with, from the catalog.
+function worldMods(name) {
+  const ids = (data.options[name] || {}).mods || [];
+  return (data.mods || []).filter((m) => ids.includes(m.id));
+}
+
+// modsLine lists a world's mods, with buttons to change them and to see
+// what players need.
+function modsLine(name, busy) {
+  const on = worldMods(name);
+  return h('div', { class: 'world-mods' },
+    h('div', { class: 'grow' },
+      h('div', { class: 'title' }, 'Mods'),
+      h('div', { class: 'help' }, on.length ? on.map((m) => m.name).join(', ') : 'None: plain Valheim.'),
+      on.length ? h('button', { class: 'link-button small', type: 'button', 'data-action': 'world-mod-help', 'data-name': name }, 'Player instructions') : null),
+    h('button', { class: 'btn btn-sm', 'data-action': 'world-mods', 'data-name': name, disabled: busy }, icon(on.length ? 'edit' : 'plus'), on.length ? 'Change' : 'Add mods'));
+}
+
+// modChecklist is the list of mods to tick, grouped. For an existing world
+// (named in existing), changing a mod that makes the land warns first.
+function modChecklist(selected, existing) {
+  const boxes = [];
+  const groups = MOD_GROUPS.map(([group, title]) => {
+    const list = (data.mods || []).filter((m) => m.group === group);
+    if (!list.length) return null;
+    return h('fieldset', { class: 'mod-group' }, h('legend', null, title),
+      h('div', { class: 'mod-options' }, list.map((m) => {
+        const was = selected.includes(m.id);
+        const warn = h('div', { class: 'callout warn small mod-warn', hidden: true }, icon('alert'), h('div', { class: 'body' }, was
+          ? `“${existing}” won’t load without ${m.name} if it was created with it. Only turn it off if the world was made without it.`
+          : `Only for a world created with ${m.name}, for example in your own game. “${existing}” won’t load with it if it was made without it: to play ${m.name}, create a new world.`));
+        const cb = h('input', { type: 'checkbox', checked: was });
+        if (m.newWorlds && existing) cb.onchange = () => { warn.hidden = cb.checked === was; };
+        boxes.push([m.id, cb]);
+        return h('label', { class: 'mod-option', 'data-mod': m.id }, cb,
+          h('span', { class: 'grow' },
+            h('span', { class: 'mod-option-name' }, m.name, m.newWorlds ? h('span', { class: 'badge accent' }, 'New worlds') : null),
+            h('small', null, m.short),
+            h('small', { class: 'mod-option-players' }, PLAYERS_NEED[m.players] || ''),
+            m.newWorlds && existing ? warn : null));
+      })));
+  });
+  return { el: groups, value: () => boxes.filter(([, cb]) => cb.checked).map(([id]) => id) };
+}
+
+// modsModal changes the mods a world is played with.
+function modsModal(app, name) {
+  const before = (data.options[name] || {}).mods || [];
+  const existing = data.worlds.some((w) => w.name === name);
+  const list = modChecklist(before, existing ? name : '');
+  const running = data.running === name;
+  const forServer = (ids) => ids.filter((id) => { const m = data.mods.find((x) => x.id === id); return m && m.players !== 'players'; }).sort().join();
+  openModal({
+    title: `Mods for “${name}”`,
+    wide: true,
+    body: [
+      h('p', { class: 'text-2' }, 'Tick the mods to play this world with. The server downloads them when it starts this world, and only uses them for this world.'),
+      list.el,
+    ],
+    actions: [{ label: 'Cancel' }, {
+      label: 'Save', kind: 'primary', icon: 'check', onClick: async () => {
+        const ids = list.value();
+        await api('/api/worlds/mods', { method: 'POST', body: { name, mods: ids } });
+        const restart = running && forServer(ids) !== forServer(before);
+        toast(`Mods for “${name}” saved.${restart ? ' Restart the server to use them.' : ''}`, 'good');
+        await load(true);
+        app.render();
+        app.poll();
+        const added = data.mods.filter((m) => ids.includes(m.id) && !before.includes(m.id));
+        if (added.length) setTimeout(() => openModsHelp(added), 50); // what to tell the players, once this window has closed
+      },
+    }],
   });
 }
 
@@ -137,6 +203,7 @@ function pendingCard(name) {
     h('div', { class: 'row' }, h('div', { class: 'world-name' }, name), h('span', { class: 'spacer' }), h('span', { class: 'badge accent' }, 'Selected')),
     h('p', { class: 'text-2' }, 'This world doesn’t exist yet. The server creates it, with a new random seed, the first time it starts.'),
     optionsSummary(data.options[name]) ? h('p', { class: 'small muted' }, 'Difficulty: ' + optionsSummary(data.options[name])) : null,
+    modsLine(name, false),
     h('div', { class: 'actions' }, h('button', { class: 'btn btn-sm', 'data-action': 'world-options', 'data-name': name }, icon('gauge'), 'Difficulty')));
 }
 
@@ -168,7 +235,7 @@ export default {
         h('p', { class: 'text-2', style: { flex: '1 1 320px' } },
           'The server plays the ', h('b', null, 'selected'), ' world. Switching worlds restarts the server, and your other worlds stay safe here. ',
           h('b', null, 'Download'), ' saves a copy of a world, for example on a USB stick or in a cloud-drive folder.'),
-        h('button', { class: 'btn', 'data-action': 'world-new', disabled: busy }, icon('plus'), 'New world'),
+        h('button', { class: 'btn btn-primary', 'data-action': 'world-new', disabled: busy }, icon('plus'), 'Create a new world'),
         h('button', { class: 'btn', 'data-action': 'world-local', disabled: busy }, icon('folder'), 'Import from this PC')),
       h('div', { class: 'world-grid' },
         exists ? null : pendingCard(data.selected),
@@ -237,42 +304,8 @@ function registerActions(app) {
     load(true);
     app.poll();
   };
-  A['world-mod'] = async (d, el) => {
-    const m = data.mods.find((x) => x.id === d.mod);
-    const on = el.checked;
-    const running = data.running === d.name;
-    pendingMod = { name: d.name, mod: d.mod, on };
-    const ok = await confirmDialog(on ? {
-      title: `Play “${d.name}” with ${m.name}?`,
-      message: h('div', { class: 'stack', style: { gap: '10px' } },
-        h('p', null, m.summary),
-        h('p', null, h('strong', null, 'Everyone who plays this world needs the mod too, '),
-          'installed with a mod manager such as r2modman or Gale. Xbox, PlayStation, Switch and Game Pass players can’t join while it’s on.'),
-        h('p', null, `The server downloads the mod from Thunderstore the next time it starts this world${running ? ', so restart it to use the mod' : ''}.`)),
-      confirm: 'Turn on',
-    } : {
-      title: `Turn ${m.name} off for “${d.name}”?`,
-      message: `Players can join without the mod again. Portals built with it won’t work while it’s off.${running ? ' Restart the server to apply this.' : ''}`,
-      confirm: 'Turn off',
-    });
-    let done = false;
-    if (ok) {
-      const others = ((data.options[d.name] || {}).mods || []).filter((x) => x !== d.mod);
-      try {
-        await api('/api/worlds/mods', { method: 'POST', body: { name: d.name, mods: on ? [...others, d.mod] : others } });
-        toast(`${m.name} is ${on ? 'on' : 'off'} for “${d.name}”.${running ? ' Restart the server to use the change.' : ''}`, 'good');
-        done = true;
-      } catch (e) {
-        toast(e.message, 'bad');
-      }
-    }
-    pendingMod = null;
-    await load(true);
-    app.render();
-    app.poll();
-    if (done && on) openModsHelp([m]); // what to tell the players
-  };
-  A['world-mod-help'] = (d) => openModsHelp(data.mods.filter((m) => m.id === d.mod));
+  A['world-mods'] = (d) => modsModal(app, d.name);
+  A['world-mod-help'] = (d) => openModsHelp(worldMods(d.name));
   A['world-download'] = (d) => {
     const st = app.status;
     let note = 'There’s a note inside on how to play it on another PC.';
@@ -390,15 +423,17 @@ function newWorldModal(app) {
   const form = optionsForm(null);
   const running = serverRunning(app);
   const now = h('input', { type: 'checkbox', checked: !running });
-  const modBoxes = (data.mods || []).map((m) => ({ id: m.id, cb: h('input', { type: 'checkbox' }), name: m.name }));
+  const modList = modChecklist([], '');
   openModal({
-    title: 'New world',
+    title: 'Create a new world',
+    wide: true,
     body: [
       field('World name', name, 'Up to 40 characters. Avoid \\ / : * ? " < > |'),
       ...form.el,
-      modBoxes.length ? h('div', { class: 'field' }, h('div', { class: 'label' }, 'Mods'),
-        modBoxes.map((x) => h('label', { class: 'key-option' }, x.cb,
-          h('span', null, `Play with ${x.name}`, h('small', null, 'Everyone who plays this world then needs the mod too.'))))) : null,
+      (data.mods || []).length ? h('details', { class: 'where new-world-mods' },
+        h('summary', null, 'Mods (optional)'),
+        h('p', { class: 'small text-2' }, 'Tick any mods to play this world with. Players install most of them too. You can change them later, except Riverheim, which makes the land and has to be chosen now.'),
+        modList.el) : null,
       h('label', { class: 'row', style: { gap: '8px', cursor: 'pointer', color: 'var(--text)' } }, now,
         running ? 'Restart the server and switch to it now' : 'Start the server with it now'),
       h('div', { class: 'callout info' }, icon('info'), h('div', { class: 'body small' },
@@ -406,12 +441,14 @@ function newWorldModal(app) {
     ],
     actions: [{ label: 'Cancel' }, {
       label: 'Create world', kind: 'primary', icon: 'plus', onClick: async () => {
-        const options = { ...form.value(), mods: modBoxes.filter((x) => x.cb.checked).map((x) => x.id) };
+        const options = { ...form.value(), mods: modList.value() };
         await api('/api/worlds/create', { method: 'POST', body: { name: name.value.trim(), options, restart: running && now.checked } });
         if (!running && now.checked) await api('/api/server/start', { method: 'POST', body: {} });
         toast(`“${name.value.trim()}” is now the selected world.`, 'good');
         load(true);
         app.poll();
+        const chosen = data.mods.filter((m) => options.mods.includes(m.id));
+        if (chosen.length) setTimeout(() => openModsHelp(chosen), 50); // what to tell the players
       },
     }],
   });

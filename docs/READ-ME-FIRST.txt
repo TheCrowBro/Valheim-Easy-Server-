@@ -21,7 +21,76 @@ SETTING UP (once, on the server computer)
    from Steam (about 1 GB). You don't need to own Valheim on this computer.
 
 4. Already have a world? Open "Worlds" and drop it on "Add a world"
-   (see ADDING A WORLD below). Otherwise the server makes a new one.
+   (see ADDING A WORLD below). Otherwise the server makes a new one, or
+   click "Create a new world" there to name it and pick its mods.
+
+5. Click "Start server". When it says "Online", friends can join with the
+   join code and password shown under "How friends join".
+
+6. Finish the checklist under "Setup on this computer" on the Home page:
+   - Allow it through Windows Firewall (click Yes when Windows asks)
+   - Turn on hibernation
+   - Turn on Wake-on-LAN (so your IP KVM can wake the computer)
+   - Start this app with Windows
+
+Closing the window doesn't stop anything: the app stays next to the clock
+(the shield icon). Click the icon to open the control panel again. Right-click
+it for Start, Stop, Hibernate and Close.
+
+
+NEW TO THE CONTROL PANEL?
+-------------------------
+Click "Tutorial" on the Home page, right next to "Start server". In six
+short steps it shows how to set a world's difficulty and mods, start the
+server, join it from Valheim, stop it, switch worlds and let the computer
+rest.
+
+
+THE JOIN CODE IN DISCORD
+------------------------
+The join code changes each time the server starts. The app can post it in
+a Discord channel for you: in Settings, under Discord, turn on "Post the
+join code in Discord" and paste the channel's webhook link. To get it:
+  1. In Discord, click the gear next to the channel's name (Edit Channel).
+  2. Open Integrations and click Create Webhook (or Webhooks, then New
+     Webhook).
+  3. Click the new webhook, name it (for example Valheim) and click
+     Copy Webhook URL.
+  4. Paste it in Settings, click "Send a test", look in the channel and
+     save.
+You can also have it post the password (hidden as a spoiler: only for a
+channel that's just for your friends) and say when the server stops.
+
+
+MODS
+----
+On the Worlds page, click "Add mods" (or "Change") on a world's card and
+tick the mods to play it with. "Create a new world" has the same list.
+  - Riverheim: new landscapes with big continents and long rivers.
+    For new worlds only: pick it under "Create a new world".
+  - Advanced Portals: portals that let metal through.
+  - Azu Extended Player Inventory: a bigger inventory and more slots.
+  - Plant Everything: plant berry bushes, mushrooms and more trees.
+  - Fuel Eternal: fires and torches never run out of fuel.
+  - Heightmap Unlimited: raise and dig the ground as far as you like.
+  - Seasonality: winter, spring, summer and fall.
+  - Gamma of Night Lights: darker nights with real moonlight.
+  - Darker Dungeons: darker crypts (only in players' own games).
+The app downloads a world's mods the next time the server starts it.
+
+Players install the world's mods in their own game too:
+  1. Install a free mod manager: Gale or r2modman (from
+     thunderstore.io). Azu Extended Player Inventory needs Gale.
+  2. Choose Valheim, make a new profile for this server, search for each
+     mod and install it. Anything else it needs comes with it.
+  3. Start Valheim from the mod manager, then join as usual.
+On the Home page, "Which mods do I need?" shows which ones players can't
+join without, and where to download each one. If joining fails because
+the versions don't match, update the mods in the mod manager.
+Xbox, PlayStation, Switch and Game Pass players can't use mods.
+
+
+ADDING A WORLD below). Otherwise the server makes a new one.
 
 5. Click "Start server". When it says "Online", friends can join with the
    join code and password shown under "How friends join".

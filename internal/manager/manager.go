@@ -52,6 +52,7 @@ type Options struct {
 	SleepStatus     func() (bool, string)
 	NoPublicIP      bool   // don't look up the public IP address
 	ModsURL         string // where mods are downloaded from; Thunderstore when empty
+	HexiumURL       string // where Hexium's mods are downloaded from, for tests
 	DiscordURL      string // where Discord webhook links are sent instead of Discord, for tests
 	SampleInterval  time.Duration
 	RestartDelay    time.Duration // wait before restarting after a crash

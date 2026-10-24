@@ -240,6 +240,7 @@ A['dismiss-job'] = (d) => {
 };
 A['show-log'] = () => go('log');
 A['show-settings'] = () => go('settings');
+A['show-worlds'] = () => go('worlds');
 A.tutorial = () => openTutorial(app);
 A['mods-help'] = () => openModsHelp(app.status && app.status.mods);
 A.reveal = (d, el) => {

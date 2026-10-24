@@ -186,6 +186,91 @@ func TestPrepareOffline(t *testing.T) {
 	}
 }
 
+func TestPrepareNewMods(t *testing.T) {
+	in, _, _ := setup(t)
+	hex := modstest.NewHexium()
+	hsrv := httptest.NewServer(hex)
+	t.Cleanup(hsrv.Close)
+	in.HexiumURL = hsrv.URL
+	ctx := context.Background()
+	all := []string{"riverheim", "azuepi", "planteverything", "fueleternal", "heightmapunlimited", "gammaofnightlights", "darkerdungeons"}
+	res, err := in.Prepare(ctx, all, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plugin := func(rel ...string) []string { return append([]string{"BepInEx", "plugins"}, rel...) }
+	for _, f := range [][]string{
+		plugin("Gurebu-Riverheim", "Riverheim.dll"),                                    // BepInEx/plugins/ in its zip
+		plugin("Azumatt-AzuExtendedPlayerInventory", "AzuExtendedPlayerInventory.dll"), // from Hexium
+		plugin("Advize-PlantEverything", "Advize_PlantEverything.dll"),
+		plugin("Marf-FuelEternal", "FuelEternal.dll"),
+		plugin("Digitalroot-Heightmap_Unlimited_JvL", "Digitalroot.HeightmapUnlimitedJvL.dll"),
+		plugin("ValheimModding-Jotunn", "Jotunn.dll"),
+		plugin("shudnal-GammaOfNightLights", "GammaOfNightLights.dll"),
+		plugin("shudnal-ConditionalConfigSync", "ConditionalConfigSync.Plugin.dll"),
+	} {
+		if !exists(in.Dir, f...) {
+			t.Errorf("missing %s", filepath.Join(f...))
+		}
+	}
+	if exists(in.Dir, plugin("Gurebu-Riverheim", "BepInEx")...) || exists(in.Dir, plugin("Gurebu-Riverheim", "CHANGELOG.md")...) {
+		t.Error("Riverheim's zip was unpacked as it is")
+	}
+	if exists(in.Dir, plugin("hoskope-DarkerDungeons")...) {
+		t.Error("a mod for players' own games was installed on the server")
+	}
+	if got := read(t, in.Dir, "winhttp.dll"); got != "doorstop 5.4.2351" {
+		t.Errorf("loader %q", got)
+	}
+	if n := hex.Requests.Load(); n != 2 {
+		t.Errorf("Hexium was asked %d times, want 2: the inventory mod and its download (BepInEx comes from Thunderstore)", n)
+	}
+	if !strings.Contains(strings.Join(res.Changed, " "), "Azu Extended Player Inventory 2.6.4") {
+		t.Errorf("changed %q", res.Changed)
+	}
+	if v := in.Installed()[modstest.Inventory]; v != "2.6.4" {
+		t.Errorf("installed inventory %q", v)
+	}
+
+	// A library only Hexium has comes from there.
+	hex.AddPackage("Azumatt-AzuLib", "1.0.0")
+	hex.AddFile("Azumatt-AzuLib", "AzuLib.dll", "lib")
+	hex.AddPackage(modstest.Inventory, "2.6.5", "Azumatt-AzuLib-1.0.0")
+	if _, err := in.Prepare(ctx, []string{"azuepi"}, true, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !exists(in.Dir, plugin("Azumatt-AzuLib")...) || exists(in.Dir, plugin("Gurebu-Riverheim")...) {
+		t.Error("the library wasn't installed, or another world's mod stayed on")
+	}
+
+	// A world with only Darker Dungeons gives the server nothing to run.
+	if _, err := in.Prepare(ctx, []string{"darkerdungeons"}, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if exists(in.Dir, "winhttp.dll") || !exists(in.Dir, "winhttp.dll.off") {
+		t.Error("the loader stayed on for a world with only a mod for players")
+	}
+	if got := ServerMods([]string{"darkerdungeons", "riverheim", "nope"}); len(got) != 1 || got[0] != "riverheim" {
+		t.Errorf("ServerMods = %v", got)
+	}
+}
+
+func TestCatalog(t *testing.T) {
+	ids := map[string]bool{}
+	for _, m := range Catalog {
+		if ids[m.ID] || !safeName.MatchString(m.Package) || m.Name == "" || m.Short == "" || m.Summary == "" || !strings.HasPrefix(m.URL, "https://") {
+			t.Errorf("bad catalog entry %+v", m)
+		}
+		ids[m.ID] = true
+		switch {
+		case m.Group != GroupWorld && m.Group != GroupPlay && m.Group != GroupLook,
+			m.Players != Required && m.Players != Recommended && m.Players != PlayersOnly,
+			m.Source != Thunderstore && m.Source != Hexium:
+			t.Errorf("%s: group %q, players %q, source %q", m.ID, m.Group, m.Players, m.Source)
+		}
+	}
+}
+
 func TestPrepareRefusesUnsafeFiles(t *testing.T) {
 	in, fake, _ := setup(t)
 	fake.AddFile(modstest.Portal, "plugins/../../../valheim_server.exe", "evil")

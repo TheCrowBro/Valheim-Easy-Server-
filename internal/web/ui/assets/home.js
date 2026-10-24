@@ -32,6 +32,7 @@ const ACTION_BUTTONS = {
   install: ['install', 'Install the server', 'primary'],
   enable_hibernate: ['enable-hibernate', 'Turn on hibernation', 'primary'],
   settings: ['show-settings', 'Open settings', ''],
+  worlds: ['show-worlds', 'Open Worlds', ''],
   log: ['show-log', 'Open the log', ''],
 };
 
@@ -174,9 +175,11 @@ function discordLine(st) {
 // which ones and where to download them.
 function modsNotice(mods) {
   const many = mods.length > 1;
+  const what = mods.length > 3 ? `${mods.length} mods`
+    : `the ${mods.map((m) => m.name).join(mods.length > 2 ? ', ' : ' and ').replace(/, ([^,]*)$/, ' and $1')} mod${many ? 's' : ''}`;
   return h('div', { class: 'callout info mods-help' }, icon('info'), h('div', { class: 'body small' },
-    h('p', null, h('strong', null, `This world needs the ${mods.map((m) => m.name).join(' and ')} mod${many ? 's' : ''}. `),
-      `Every player installs ${many ? 'them' : 'it'} once on their own PC.`),
+    h('p', null, h('strong', null, `This world is played with ${what}. `),
+      `Players install ${many ? 'them' : 'it'} once on their own PC.`),
     h('div', { class: 'actions' },
       h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'mods-help' }, icon('help'), many ? 'Which mods do I need?' : 'Which mod do I need?'))));
 }

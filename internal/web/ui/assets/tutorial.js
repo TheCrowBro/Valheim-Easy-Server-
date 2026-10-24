@@ -36,13 +36,13 @@ function joinPicture(crossplay) {
 const worldCard = (name, playing, extra) =>
   h('div', { class: `tut-world${playing ? ' playing' : ''}` }, h('span', { class: 'world-name' }, name), extra);
 
-// The world card's ⋯ menu and mod switch, and the Difficulty window.
+// The world card's ⋯ menu and mods line, and the Difficulty window.
 const worldMenu = () => worldCard('Midgard', false, [
   h('div', { class: 'tut-menu' },
     h('span', null, icon('archive'), 'Backups'),
     press(h('span', null, icon('gauge'), 'Difficulty')),
     h('span', null, icon('trash'), 'Delete…')),
-  h('div', { class: 'tut-mod' }, h('span', null, 'Advanced Portals'), h('span', { class: 'switch' }, h('span'))),
+  h('div', { class: 'tut-mod' }, h('span', null, 'Mods'), h('span', { class: 'btn btn-sm' }, icon('plus'), 'Add mods')),
 ]);
 
 const check = (on, label) => h('span', { class: `tut-check${on ? ' on' : ''}` }, h('span', { class: 'box' }, on ? icon('check') : null), label);
@@ -66,8 +66,8 @@ function steps(st) {
         [difficultyWindow(), 'Pick a preset and switches']),
       text: [
         ['Best done before a world is first played, but you can change it any time. Open ', b('Worlds'), ', click ', b('⋯'), ' on the world’s card and choose ', b('Difficulty'), '. Pick a preset such as Casual or Hard, and under ', b('More options'), ' change combat, resources, raids and portals, or tick switches like ', b('No map'), ' or ', b('Fire hazard'), '.'],
-        ['To play a world with a mod, such as ', b('Advanced Portals'), ' or ', b('Seasonality'), ', turn on its switch on the world’s card. Everyone who plays that world then needs the mod too.'],
-        ['A new world gets the same choices under ', b('New world'), '. Changes apply the next time the server starts the world.'],
+        ['To play a world with mods, such as ', b('Plant Everything'), ' or ', b('Seasonality'), ', click ', b('Add mods'), ' on the world’s card and tick them. Players install most of them too: ', b('Player instructions'), ' says which.'],
+        ['A new world gets the same choices under ', b('Create a new world'), '. That’s also where to pick ', b('Riverheim'), ', which makes the land and only works for new worlds. Changes apply the next time the server starts the world.'],
       ],
     },
     {
@@ -125,7 +125,7 @@ function steps(st) {
         [worldCard('Midgard', true, h('span', { class: 'badge good' }, 'Running now')), 'The world it plays now'],
         [worldCard('Ashlands Run', false, press(fakeButton('btn-primary btn-sm', 'play', 'Switch to this world'))), 'Click to play this one']),
       text: [
-        ['The server plays one world at a time. To change it, open ', b('Worlds'), ' and click ', b('Play this world'), ' on the one you want.'],
+        ['The server plays one world at a time. To change it, open ', b('Worlds'), ' and click ', b('Play this world'), ' on the one you want. To start a fresh one, click ', b('Create a new world'), '.'],
         ['While the server is running, that button says ', b('Switch to this world'), '. The server saves the current world and restarts with the new one, which takes about a minute.'],
       ],
     },
