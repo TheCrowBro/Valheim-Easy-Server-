@@ -34,7 +34,7 @@ You only do this once: after that, the app [updates itself](#app-updates).
 
 ## Setting up the server computer (once)
 
-1. Make a folder such as `C:\Valheim Server` and put `ValheimEasyServer.exe` in it. Everything goes in that folder: the server, worlds, backups and logs. To move or back up the whole setup, copy the folder.
+1. Make a folder such as `C:\Valheim Server` and put `ValheimEasyServer.exe` in it. Everything goes in that folder: the server, worlds, backups and logs. To move or back up the whole setup, copy the folder. If other people have their own Windows accounts on this computer, use a folder inside your own user folder instead (such as `C:\Users\you\Valheim Server`): every account can change a folder made directly on `C:\`.
 2. Double-click `ValheimEasyServer.exe`. If Windows shows **"Windows protected your PC"**, click **More info → Run anyway**. The app isn't code-signed, so Windows doesn't recognise it yet.
 3. The control panel opens in its own window. Click **Install the server**. It downloads the free Valheim dedicated server from Steam with Valve's SteamCMD tool, about 1 GB. You don't need to own Valheim on this PC.
 4. Go to **Settings** and set the server name and password. A password is generated for you, and friends need it to join.
@@ -191,6 +191,16 @@ Every change to this project that passes its tests on GitHub becomes a new [rele
 
 The app's own log is in `logs\app.log` inside its folder, and the server's logs are next to it.
 
+## Security
+
+- **Only the server computer can use the control panel.** It only answers on that computer (127.0.0.1) and turns away anything other websites open in a browser there could send, including links that try to open the panel. Anyone who can use the computer's screen and keyboard, for example through the IP KVM, can use the panel, so keep the KVM's own login safe.
+- **Players can't reach the panel or the computer.** The server's log contains things players choose, such as their character's name and their game's version. The app only ever reads those as what they are, so a player can't make the panel or Discord show a fake join code. Anyone can give their character any name, so before making someone an admin or banning them, the panel shows which account it is.
+- **Use a strong server password.** **Settings → New** makes one like `raven-fjord-4821`. Someone who keeps trying to join can guess a short one.
+- **Worlds and mods you add are checked.** Their files can only go into their own folders, and the app refuses ones too big to be what they claim.
+- **Updates come only from this project.** The app checks the repository by its permanent number, and only downloads that release's own files, over HTTPS. Each download must match its SHA-256 checksum. Releases are built by GitHub Actions, with every action pinned to an exact version and a check for known vulnerabilities. Whoever can push to this repository decides what installed copies run, so protect the GitHub account with two-factor authentication and don't give anyone else write access.
+- **Mods run inside the server.** They come from Thunderstore and are kept up to date, so a mod author losing control of their account would affect your server. Only turn on mods you want.
+- **Admin rights.** Allowing the server through the firewall and turning on Wake-on-LAN show a Windows PowerShell admin prompt. The commands go to Windows directly, never through a file another program could change.
+
 ## How it works
 
 `ValheimEasyServer.exe` is a single program with no installer and nothing else to download. It:
@@ -201,7 +211,7 @@ The app's own log is in `logs\app.log` inside its folder, and the server's logs 
 - understands both Valheim world formats: 1.0 world folders (`_main.N.fwl2`, `.db2`, `.chunk` files) and the older `.fwl` + `.db` pairs;
 - serves the control panel from inside the app to this computer only (127.0.0.1) and opens it in a Microsoft Edge app window. It turns away requests that other websites open in a browser could make: it checks the address the browser used, the browser's own "which site is asking" header, and an anti-forgery header on every change;
 - posts in Discord, when that's turned on, by sending each message to the channel's webhook link;
-- updates itself from this project's GitHub releases. It checks the download's SHA-256 checksum, renames the running program to `ValheimEasyServer.exe.old` (Windows allows renaming a running program), puts the new one in its place and starts it on the same port. If the new one's panel doesn't answer within a minute, the old one goes back;
+- updates itself from this project's GitHub releases (see [Security](#security)). It checks the download's SHA-256 checksum, renames the running program to `ValheimEasyServer.exe.old` (Windows allows renaming a running program), puts the new one in its place and starts it on the same port. If the new one's panel doesn't answer within a minute, the old one goes back;
 - reads CPU, GPU, memory and network usage from Windows' performance counters, the same source Task Manager uses;
 - hibernates with `shutdown /h` or sleeps through Windows' own sleep call, and sets up Wake-on-LAN with `powercfg /deviceenablewake` and the network adapter's power settings (magic packet on, pattern wake off).
 
@@ -209,7 +219,7 @@ Its folder holds `settings.json`, `server\` (the Valheim server), `saves\worlds_
 
 ## Building from source
 
-You need [Go](https://go.dev/dl/) 1.24 or newer.
+You need [Go](https://go.dev/dl/) 1.27 or newer.
 
 ```sh
 go test ./...

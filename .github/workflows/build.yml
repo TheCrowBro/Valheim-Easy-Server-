@@ -1,5 +1,12 @@
 name: Build and test
 
+# Every build of the main branch that passes becomes a release, build-N, and
+# installed copies update themselves to a higher N. N is this workflow's run
+# number, which starts again at 1 if this file is renamed: don't rename it.
+#
+# Actions are pinned to exact commits, since the release job can publish
+# what every installed copy runs.
+
 on:
   push:
   pull_request:
@@ -13,8 +20,8 @@ jobs:
     name: Tests (Linux)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
       - name: Check formatting
@@ -29,6 +36,13 @@ jobs:
             cp "$f" "$RUNNER_TEMP/check.mjs"
             node --check "$RUNNER_TEMP/check.mjs" || { echo "Syntax error in $f"; exit 1; }
           done
+      - name: Known vulnerabilities in Go and the libraries used
+        run: |
+          # Built with the project's Go, so it can read the code; then run
+          # for this computer and for the Windows build.
+          GOTOOLCHAIN=$(go env GOVERSION) GOBIN="$RUNNER_TEMP/bin" go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          "$RUNNER_TEMP/bin/govulncheck" ./...
+          GOOS=windows "$RUNNER_TEMP/bin/govulncheck" ./...
       - name: Test
         run: go test -race ./...
 
@@ -36,8 +50,8 @@ jobs:
     name: Tests and app (Windows)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
       - name: Windows features (Ctrl+C to the server, CPU/GPU/RAM counters, power)
@@ -48,9 +62,13 @@ jobs:
         run: go run github.com/tc-hib/go-winres@v0.3.3 make --in winres/winres.json --arch amd64
       - name: Build ValheimEasyServer.exe
         shell: pwsh
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
-          $version = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}" } else { "build-${{ github.run_number }}" }
-          go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=$version -X main.build=${{ github.run_number }}" -o dist/ValheimEasyServer.exe .
+          $version = if ($env:REF_TYPE -eq "tag") { $env:REF_NAME } else { "build-$env:RUN_NUMBER" }
+          go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=$version -X main.build=$env:RUN_NUMBER" -o dist/ValheimEasyServer.exe .
       - name: Smoke test the app
         shell: pwsh
         run: |
@@ -70,9 +88,11 @@ jobs:
           }
       - name: Self-update test (an older copy updates itself to this build, then goes back from a build that doesn't start)
         shell: pwsh
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
           $ErrorActionPreference = "Stop"
-          $n = ${{ github.run_number }}
+          $n = [int]$env:RUN_NUMBER
           $root = Join-Path $env:RUNNER_TEMP "ves-update"
           $site = Join-Path $root "site"
           $data = Join-Path $root "data"
@@ -92,6 +112,8 @@ jobs:
             $assets = "ValheimEasyServer.exe", "ValheimEasyServer.exe.sha256" | ForEach-Object { @{ name = $_; browser_download_url = "http://127.0.0.1:18500/$tag/$_" } }
             $api = Join-Path $site "repos/TheCrowBro/Valheim-Easy-Server-"
             New-Item -ItemType Directory -Force $api | Out-Null
+            # The repository itself (Python serves a folder's index.html).
+            ConvertTo-Json -InputObject @{ id = 1430331409; full_name = "TheCrowBro/Valheim-Easy-Server-" } | Set-Content (Join-Path $api "index.html")
             ConvertTo-Json -InputObject @(@{ tag_name = $tag; body = "Test build $build"; assets = @($assets) }) -Depth 5 | Set-Content (Join-Path $api "releases")
           }
           function WaitFor([scriptblock]$cond, [string]$what) {
@@ -140,7 +162,7 @@ jobs:
       - name: Package
         shell: pwsh
         run: Copy-Item "docs/READ-ME-FIRST.txt" dist/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ValheimEasyServer-windows
           path: dist/
@@ -157,7 +179,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ValheimEasyServer-windows
           path: dist
@@ -171,25 +193,25 @@ jobs:
           # The notes are the commit message without its trailers; the app
           # shows their first line as what changed.
           { printf '%s\n' "$MESSAGE" | sed '/^Co-Authored-By:/d; /^Claude-Session:/d'; echo; echo "SHA-256 of ValheimEasyServer.exe: $(cut -d' ' -f1 ValheimEasyServer.exe.sha256)"; } > notes.md
+      # With GitHub's own command-line tool, so no outside code handles the
+      # files every installed copy will run.
       - name: Publish the build
         if: github.ref_type == 'branch'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: build-${{ github.run_number }}
-          name: Build ${{ github.run_number }}
-          target_commitish: ${{ github.sha }}
-          body_path: notes.md
-          make_latest: true
-          files: |
-            ValheimEasyServer-windows.zip
-            ValheimEasyServer.exe
-            ValheimEasyServer.exe.sha256
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_NUMBER: ${{ github.run_number }}
+          SHA: ${{ github.sha }}
+        run: |
+          tag="build-$RUN_NUMBER"
+          files="ValheimEasyServer-windows.zip ValheimEasyServer.exe ValheimEasyServer.exe.sha256"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$tag" $files --repo "$GITHUB_REPOSITORY" --clobber # a re-run
+          else
+            gh release create "$tag" $files --repo "$GITHUB_REPOSITORY" --target "$SHA" --title "Build $RUN_NUMBER" --notes-file notes.md --latest
+          fi
       - name: Publish the version
         if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: |
-            ValheimEasyServer-windows.zip
-            ValheimEasyServer.exe
-            ValheimEasyServer.exe.sha256
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" ValheimEasyServer-windows.zip ValheimEasyServer.exe ValheimEasyServer.exe.sha256 --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes

@@ -13,7 +13,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -54,6 +56,12 @@ func main() {
 	devDiscord := flag.String("dev-fake-discord", "", "development only: send Discord messages to this address instead of Discord")
 	devGitHub := flag.String("dev-fake-github", "", "development only: look for app updates at this address instead of GitHub")
 	flag.Parse()
+	for _, dev := range []string{*devDiscord, *devGitHub} {
+		if dev != "" && !loopbackURL(dev) {
+			platform.ShowError(appName, "The --dev-fake-* options only take an address on this computer, such as http://127.0.0.1:8460.")
+			os.Exit(2)
+		}
+	}
 
 	exe, _ := os.Executable()
 	exe, _ = filepath.EvalSymlinks(exe)
@@ -208,6 +216,20 @@ func main() {
 	}, done)
 	<-done
 	select {} // the closing goroutine exits the program
+}
+
+// loopbackURL reports whether s is a web address on this computer: the
+// development stand-ins for Discord and GitHub can't be anywhere else.
+func loopbackURL(s string) bool {
+	u, err := url.Parse(s)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil {
+		return false
+	}
+	if strings.EqualFold(u.Hostname(), "localhost") {
+		return true
+	}
+	ip := net.ParseIP(u.Hostname())
+	return ip != nil && ip.IsLoopback()
 }
 
 // relaunchArgs are the updated app's arguments: the same, but on the same

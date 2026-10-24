@@ -25,6 +25,8 @@ func TestAppUpdates(t *testing.T) {
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/repos/" + selfupdate.Repo:
+			json.NewEncoder(w).Encode(map[string]any{"id": selfupdate.RepoID, "full_name": selfupdate.Repo})
 		case "/repos/" + selfupdate.Repo + "/releases":
 			asset := func(name string) map[string]string {
 				return map[string]string{"name": name, "browser_download_url": srv.URL + "/build-5/" + name}

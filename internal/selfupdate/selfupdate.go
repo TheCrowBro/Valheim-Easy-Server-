@@ -13,16 +13,21 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// Where the releases are.
+// Where the releases are. The repository is checked by its number, which
+// stays the same if it's renamed and which a look-alike repository can't
+// have.
 const (
 	Repo       = "TheCrowBro/Valheim-Easy-Server-"
+	RepoID     = 1430331409
 	DefaultAPI = "https://api.github.com"
 	ExeName    = "ValheimEasyServer.exe"
 	maxExe     = 200 << 20
@@ -35,20 +40,54 @@ type Release struct {
 	Published time.Time `json:"published"`
 	exeURL    string
 	sumURL    string
+	files     string // where this release's files must be
 }
 
 // Updater finds and downloads new builds.
 type Updater struct {
 	API    string       // GitHub's API; DefaultAPI when empty
 	Repo   string       // owner/name; Repo when empty
+	RepoID int64        // RepoID when 0
 	Client *http.Client // one with a timeout when nil
 }
 
-var reBuild = regexp.MustCompile(`^build-(\d+)$`)
+var (
+	reBuild    = regexp.MustCompile(`^build-(\d{1,9})$`)
+	reFullName = regexp.MustCompile(`^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$`)
+)
+
+// checkRepo looks the repository up and checks it's this project's, returning
+// its current owner/name.
+func (u *Updater) checkRepo(ctx context.Context) (string, error) {
+	res, err := u.get(ctx, fmt.Sprintf("%s/repos/%s", u.api(), u.repo()), "application/vnd.github+json")
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	var r struct {
+		ID       int64  `json:"id"`
+		FullName string `json:"full_name"`
+	}
+	if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&r); err != nil {
+		return "", fmt.Errorf("GitHub's answer couldn't be read: %v", err)
+	}
+	want := u.RepoID
+	if want == 0 {
+		want = RepoID
+	}
+	if r.ID != want || !reFullName.MatchString(r.FullName) {
+		return "", errors.New("the app's GitHub repository isn't the one it came from, so it won't update from it")
+	}
+	return r.FullName, nil
+}
 
 // Latest returns the newest build that has the program and its checksum;
 // ok is false when there's none.
 func (u *Updater) Latest(ctx context.Context) (rel Release, ok bool, err error) {
+	full, err := u.checkRepo(ctx)
+	if err != nil {
+		return rel, false, err
+	}
 	var list []struct {
 		Tag        string    `json:"tag_name"`
 		Body       string    `json:"body"`
@@ -60,7 +99,7 @@ func (u *Updater) Latest(ctx context.Context) (rel Release, ok bool, err error) 
 			URL  string `json:"browser_download_url"`
 		} `json:"assets"`
 	}
-	res, err := u.get(ctx, fmt.Sprintf("%s/repos/%s/releases?per_page=30", u.api(), u.repo()), "application/vnd.github+json")
+	res, err := u.get(ctx, fmt.Sprintf("%s/repos/%s/releases?per_page=30", u.api(), full), "application/vnd.github+json")
 	if err != nil {
 		return rel, false, err
 	}
@@ -73,9 +112,15 @@ func (u *Updater) Latest(ctx context.Context) (rel Release, ok bool, err error) 
 		if m == nil || r.Draft || r.Prerelease {
 			continue
 		}
-		n, _ := strconv.Atoi(m[1])
-		c := Release{Build: n, Title: firstLine(r.Body), Published: r.Published}
+		n, err := strconv.Atoi(m[1])
+		if err != nil {
+			continue
+		}
+		c := Release{Build: n, Title: firstLine(r.Body), Published: r.Published, files: u.downloads(full) + r.Tag + "/"}
 		for _, a := range r.Assets {
+			if !strings.EqualFold(a.URL, c.files+a.Name) {
+				continue // only the release's own files
+			}
 			switch a.Name {
 			case ExeName:
 				c.exeURL = a.URL
@@ -94,7 +139,7 @@ func (u *Updater) Latest(ctx context.Context) (rel Release, ok bool, err error) 
 // published checksum, and removes it again if it doesn't match.
 func (u *Updater) Download(ctx context.Context, rel Release, path string) error {
 	for _, link := range []string{rel.exeURL, rel.sumURL} {
-		if !strings.HasPrefix(strings.ToLower(link), strings.ToLower(u.downloads())) {
+		if !under(link, rel.files) {
 			return fmt.Errorf("unexpected download address %q", link)
 		}
 	}
@@ -214,14 +259,45 @@ func (u *Updater) repo() string {
 	return Repo
 }
 
-// downloads is where the release files must be: GitHub's release downloads
+// downloads is where release files must be: GitHub's release downloads
 // for the repository (they redirect to GitHub's file servers), or the test
 // server in tests.
-func (u *Updater) downloads() string {
-	if u.API != "" && u.API != DefaultAPI {
+func (u *Updater) downloads(fullName string) string {
+	if u.custom() {
 		return strings.TrimRight(u.API, "/") + "/"
 	}
-	return "https://github.com/" + u.repo() + "/releases/download/"
+	return "https://github.com/" + fullName + "/releases/download/"
+}
+
+func (u *Updater) custom() bool { return u.API != "" && u.API != DefaultAPI }
+
+// under reports whether link is a plain address inside prefix, with nothing
+// (such as "..") that would make it point somewhere else.
+func under(link, prefix string) bool {
+	p, err := url.Parse(link)
+	if prefix == "" || err != nil || p.User != nil || p.RawQuery != "" || p.Fragment != "" ||
+		path.Clean(p.Path) != p.Path || strings.Contains(p.Path, `\`) {
+		return false
+	}
+	return strings.HasPrefix(strings.ToLower(link), strings.ToLower(prefix))
+}
+
+var errRedirect = errors.New("GitHub sent the download to an unexpected address")
+
+// redirect lets GitHub send a download on to its file servers, and nowhere
+// else (and never from https to http).
+func (u *Updater) redirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 5 {
+		return errors.New("too many redirects")
+	}
+	if u.custom() {
+		return nil // a stand-in for GitHub, in tests
+	}
+	h := req.URL.Hostname()
+	if req.URL.Scheme != "https" || !(h == "github.com" || h == "api.github.com" || strings.HasSuffix(h, ".githubusercontent.com")) {
+		return fmt.Errorf("%w (%s)", errRedirect, req.URL.Host)
+	}
+	return nil
 }
 
 func (u *Updater) get(ctx context.Context, link, accept string) (*http.Response, error) {
@@ -231,14 +307,19 @@ func (u *Updater) get(ctx context.Context, link, accept string) (*http.Response,
 	}
 	req.Header.Set("User-Agent", "ValheimEasyServer")
 	req.Header.Set("Accept", accept)
-	client := u.Client
-	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Minute}
+	client := &http.Client{Timeout: 10 * time.Minute}
+	if u.Client != nil {
+		c := *u.Client
+		client = &c
 	}
+	client.CheckRedirect = u.redirect
 	res, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
+		}
+		if errors.Is(err, errRedirect) {
+			return nil, err
 		}
 		return nil, errors.New("couldn't reach GitHub. Is the internet connection working?")
 	}

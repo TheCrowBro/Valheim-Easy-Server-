@@ -22,7 +22,11 @@ func fakeGitHub(t *testing.T, files map[string]string, releases func(base string
 			http.Error(w, "GitHub wants a User-Agent", http.StatusForbidden)
 			return
 		}
-		if r.URL.Path == "/repos/"+Repo+"/releases" {
+		switch r.URL.Path {
+		case "/repos/" + Repo:
+			json.NewEncoder(w).Encode(map[string]any{"id": RepoID, "full_name": Repo})
+			return
+		case "/repos/" + Repo + "/releases":
 			json.NewEncoder(w).Encode(releases(srv.URL))
 			return
 		}
@@ -99,17 +103,65 @@ func TestLatestAndDownload(t *testing.T) {
 		t.Fatalf("not a program: %v", err)
 	}
 
-	// GitHub may spell the repository's name differently.
-	if !strings.HasPrefix(strings.ToLower(rel.exeURL), strings.ToLower(u.downloads())) {
-		t.Fatal("test setup")
+	// GitHub may spell the repository's name with other capitals.
+	if !under(strings.Replace(rel.exeURL, "build-5", "BUILD-5", 1), rel.files) {
+		t.Fatal("capitals made a difference")
 	}
 	// Downloads only come from where the releases are.
 	rel.exeURL = "https://example.com/" + ExeName
 	if err := u.Download(context.Background(), rel, path); err == nil || !strings.Contains(err.Error(), "unexpected download address") {
 		t.Fatalf("another site: %v", err)
 	}
-	if got := (&Updater{}).downloads(); got != "https://github.com/"+Repo+"/releases/download/" {
+	if got := (&Updater{}).downloads(Repo); got != "https://github.com/"+Repo+"/releases/download/" {
 		t.Fatalf("downloads = %q", got)
+	}
+	for _, link := range []string{
+		"https://github.com/" + Repo + "/releases/download/build-5/../../../../evil/x.exe",
+		"https://github.com/" + Repo + "/releases/download/build-5/%2e%2e/x.exe",
+		"https://someone@github.com/" + Repo + "/releases/download/build-5/" + ExeName,
+		"https://github.com/" + Repo + "/releases/download/build-5/" + ExeName + "?x=1",
+	} {
+		if under(link, "https://github.com/"+Repo+"/releases/download/build-5/") {
+			t.Errorf("accepted %q", link)
+		}
+	}
+}
+
+// Only this project's repository, and only each release's own files, count.
+func TestLatestChecks(t *testing.T) {
+	srv := fakeGitHub(t, nil, func(base string) any {
+		elsewhere := release(base, "build-8", "Files from elsewhere", ExeName, ExeName+".sha256")
+		for _, a := range elsewhere["assets"].([]map[string]string) {
+			a["browser_download_url"] = base + "/build-7/" + a["name"]
+		}
+		return []any{
+			release(base, "build-99999999999999999999", "A number too big", ExeName, ExeName+".sha256"),
+			elsewhere,
+			release(base, "build-4", "Fine", ExeName, ExeName+".sha256"),
+		}
+	})
+	rel, ok, err := (&Updater{API: srv.URL}).Latest(context.Background())
+	if err != nil || !ok || rel.Build != 4 {
+		t.Fatalf("latest = %+v %v %v", rel, ok, err)
+	}
+	if _, _, err := (&Updater{API: srv.URL, RepoID: 12345}).Latest(context.Background()); err == nil || !strings.Contains(err.Error(), "isn't the one") {
+		t.Fatalf("another repository: %v", err)
+	}
+}
+
+func TestRedirects(t *testing.T) {
+	u := &Updater{}
+	for link, ok := range map[string]bool{
+		"https://objects.githubusercontent.com/x":        true,
+		"https://release-assets.githubusercontent.com/x": true,
+		"http://objects.githubusercontent.com/x":         false,
+		"https://evil.example/x":                         false,
+		"https://githubusercontent.com.evil.example/x":   false,
+	} {
+		req, _ := http.NewRequest("GET", link, nil)
+		if err := u.redirect(req, nil); (err == nil) != ok {
+			t.Errorf("redirect to %s: %v", link, err)
+		}
 	}
 }
 

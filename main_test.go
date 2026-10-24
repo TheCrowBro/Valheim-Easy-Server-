@@ -55,6 +55,22 @@ func TestRelaunchArgs(t *testing.T) {
 	}
 }
 
+func TestLoopbackURL(t *testing.T) {
+	for s, want := range map[string]bool{
+		"http://127.0.0.1:8460":            true,
+		"http://localhost:18500/x":         true,
+		"http://[::1]:8460":                true,
+		"https://discord.com/api/webhooks": false,
+		"http://127.0.0.1.evil.example":    false,
+		"http://user@127.0.0.1:8460":       false,
+		"file:///C:/x":                     false,
+	} {
+		if got := loopbackURL(s); got != want {
+			t.Errorf("loopbackURL(%q) = %v", s, got)
+		}
+	}
+}
+
 func TestWaitStarted(t *testing.T) {
 	for _, c := range []struct {
 		mode string
