@@ -525,32 +525,23 @@ func TestFailedReplacePutsOldCopyBack(t *testing.T) {
 func TestExportWaitsForSaves(t *testing.T) {
 	old := exportRetryDelay
 	exportRetryDelay = 10 * time.Millisecond
-	t.Cleanup(func() { exportRetryDelay = old })
+	t.Cleanup(func() { exportRetryDelay, exportCopied = old, nil })
 	l := newLib(t)
 	makeFolderWorld(t, l.Worlds, "Midgard", "S")
-	// The "server" keeps saving: the world never stays the same while it is
-	// being zipped, so no half-and-half copy may be handed out.
-	stop := make(chan struct{})
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for i := 0; ; i++ {
-			select {
-			case <-stop:
-				return
-			default:
-			}
-			os.WriteFile(filepath.Join(l.Worlds, "Midgard", "_main.1.db2"), bytes.Repeat([]byte{byte(i)}, 1000+i%7), 0o644)
-			time.Sleep(time.Millisecond)
-		}
-	}()
+	// The "server" saves while each copy is being zipped, so no
+	// half-and-half copy may be handed out. Each save has a new size, which
+	// shows even where file times are coarse.
+	saves := 0
+	exportCopied = func() {
+		saves++
+		os.WriteFile(filepath.Join(l.Worlds, "Midgard", "_main.1.db2"), bytes.Repeat([]byte{byte(saves)}, 1000+saves), 0o644)
+	}
 	_, err := l.ExportFile("Midgard", t.TempDir())
-	close(stop)
-	<-done
-	if err == nil || !strings.Contains(err.Error(), "kept saving") {
-		t.Fatalf("err = %v", err)
+	if err == nil || !strings.Contains(err.Error(), "kept saving") || saves != 3 {
+		t.Fatalf("err = %v after %d saves", err, saves)
 	}
 	// Once it settles, the export works.
+	exportCopied = nil
 	if _, err := l.ExportFile("Midgard", t.TempDir()); err != nil {
 		t.Fatal(err)
 	}

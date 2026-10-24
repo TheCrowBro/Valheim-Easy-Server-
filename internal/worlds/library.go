@@ -533,6 +533,9 @@ func (l *Library) ExportFile(name, dir string) (string, error) {
 			return "", err
 		}
 		err = writeZipNotes(f, files, notes)
+		if exportCopied != nil {
+			exportCopied()
+		}
 		if cerr := f.Close(); err == nil {
 			err = cerr
 		}
@@ -551,6 +554,9 @@ func (l *Library) ExportFile(name, dir string) (string, error) {
 }
 
 var exportRetryDelay = 2 * time.Second
+
+// exportCopied, when set, runs after each copy is zipped (for tests).
+var exportCopied func()
 
 // fingerprint summarises files' names, sizes and times, to notice changes.
 func fingerprint(files map[string]string) string {
