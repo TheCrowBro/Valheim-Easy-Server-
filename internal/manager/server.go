@@ -463,7 +463,8 @@ func (m *Manager) onExit(run *serverRun, code int) {
 	for _, p := range run.tracker.Players() {
 		m.notePlayerLocked(logparse.Activity{Kind: "leave", Time: now, Name: p.Name, PlatformID: p.PlatformID}, p.Since)
 	}
-	run.tracker.Reset(now)
+	noteEventsLocked(run, run.tracker.Reset(now))
+	archived := m.archiveRunLocked(run)
 	m.run = nil
 	m.idleSince = now
 	exit := &ExitInfo{At: now, Code: code, Expected: expected, World: run.info.World,
@@ -527,6 +528,9 @@ func (m *Manager) onExit(run *serverRun, code int) {
 		})
 	}
 	m.saveData()
+	if archived {
+		m.saveRecords()
+	}
 	m.notify()
 }
 
@@ -626,6 +630,7 @@ func (m *Manager) handleLine(run *serverRun, line string) {
 		sinceByName[p.Name] = p.Since
 	}
 	acts := run.tracker.Apply(ev, time.Now())
+	noteEventsLocked(run, acts)
 	if run.tracker.Ready && !run.ready {
 		run.ready = true
 		close(run.readyCh)

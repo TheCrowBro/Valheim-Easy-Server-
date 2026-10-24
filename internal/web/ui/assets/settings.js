@@ -86,7 +86,9 @@ function discordSection() {
       switchRow('discordPassword', 'Include the password',
         'Hidden as a spoiler until it’s clicked. Only turn this on if the channel is just for your friends.'),
       switchRow('discordStopped', 'Also post when the server stops',
-        'So nobody tries a join code that no longer works.')) : null);
+        'So nobody tries a join code that no longer works.'),
+      switchRow('discordDaily', 'Post who died the most each day',
+        'At 23:59, if anyone played that day. If the computer is off or resting then, it’s posted once it’s back.')) : null);
 }
 
 function automationSection() {

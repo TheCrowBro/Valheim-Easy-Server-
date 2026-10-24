@@ -66,6 +66,7 @@ func (s *Server) routes() http.Handler {
 	a("GET /api/lists", s.getLists)
 	a("POST /api/lists", s.saveList)
 	a("GET /api/players", s.players)
+	a("GET /api/records", s.records)
 
 	a("GET /api/stats", s.stats)
 	a("POST /api/stats/reset", s.act(func(r *http.Request) error { s.m.ResetStats(); return nil }))
@@ -556,6 +557,20 @@ func (s *Server) saveList(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) players(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"players": s.m.KnownPlayers()})
+}
+
+// records are for "today", "week" or "all" (the default).
+func (s *Server) records(w http.ResponseWriter, r *http.Request) {
+	period := r.URL.Query().Get("period")
+	if period == "" {
+		period = "all"
+	}
+	sum, err := s.m.Records(period)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, sum)
 }
 
 // --- stats & logs -------------------------------------------------------

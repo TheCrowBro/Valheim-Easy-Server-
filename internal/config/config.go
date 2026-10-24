@@ -55,6 +55,7 @@ type Settings struct {
 	DiscordWebhook  string `json:"discordWebhook,omitempty"`
 	DiscordPassword bool   `json:"discordPassword"` // put the password in the message too
 	DiscordStopped  bool   `json:"discordStopped"`  // also say when the server stops
+	DiscordDaily    bool   `json:"discordDaily"`    // and who died the most each day
 
 	// WorldOptions holds difficulty settings per world name.
 	WorldOptions map[string]WorldOptions `json:"worldOptions,omitempty"`
@@ -135,6 +136,7 @@ func Defaults() Settings {
 		IdleMinutes:         60,
 		RestMode:            RestHibernate,
 		DiscordStopped:      true,
+		DiscordDaily:        true,
 	}
 }
 

@@ -227,3 +227,18 @@ func TestMissingBackupIsAnError(t *testing.T) {
 		t.Fatalf("a missing backup downloaded: %d %q", rec.Code, rec.Header().Get("Content-Type"))
 	}
 }
+
+func TestRecords(t *testing.T) {
+	ts := newTestServer(t)
+	rec := ts.do("GET", "/api/records?period=week", "127.0.0.1", nil, nil)
+	var sum struct {
+		Players []any `json:"players"`
+		Records []any `json:"records"`
+	}
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &sum) != nil || sum.Players == nil || sum.Records == nil {
+		t.Fatalf("records = %d %s", rec.Code, rec.Body)
+	}
+	if rec := ts.do("GET", "/api/records?period=forever", "127.0.0.1", nil, nil); rec.Code != http.StatusBadRequest {
+		t.Fatalf("an unknown period = %d", rec.Code)
+	}
+}

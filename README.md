@@ -12,11 +12,12 @@ Run a Valheim dedicated server on a spare Windows PC, such as an old Mac Pro run
 - **Several worlds.** Switch worlds with one click, create new ones (with Valheim's difficulty presets and world modifiers, Fire hazard included), rename old ones, and delete worlds. Deleted worlds keep a backup.
 - **Add a world by dropping it in.** Drop a world onto the app (a Valheim 1.0 world folder, an older `.fwl` + `.db` pair, or a zip of either) and it goes into the server's worlds folder by itself. The app only asks when the server already has a world with that name: replace it (keeping a backup) or keep both. Replacing the world that's running restarts the server with the new copy. Any world can be downloaded as a zip, and "Import from this PC" copies worlds from the Valheim game installed on the server computer.
 - **Mods per world.** Pick from six mods for each world, among them Riverheim's new landscapes, Seasonality and Plant Everything, all kept up to date for Valheim 1.0 and downloaded from Thunderstore. The app downloads them with what they need when that world starts and keeps them up to date; worlds without mods run plain Valheim. A pop-up tells players which mods they need and where to download them.
-- **Join code in Discord.** Each time the server is online, it can post the join code in your Discord channel, and say when the server stops.
+- **Join code in Discord.** Each time the server is online, it can post the join code in your Discord channel, and say when the server stops. At the end of each day it says who died the most.
 - **Backups.** Valheim's own automatic backups and the app's backups are listed together, and each one can be restored or downloaded. The app makes a backup before anything is replaced, restored over or deleted.
 - **Hibernate or sleep, and wake with Wake-on-LAN.** Saves the world, stops the server and hibernates the computer (or puts it to sleep). Wake it from an IP KVM's Wake-on-LAN, or with the power button, and the server starts again. It can also rest on its own when nobody has played for a while.
 - **Stats.** CPU, memory, GPU and network use for the Valheim server and the whole computer, over 15 minutes to 24 hours. A breakdown by number of players estimates what each extra player costs.
 - **Players.** See who's online and everyone who has played, with total play time. Make someone an admin or ban them with one click, without hunting for Steam IDs.
+- **Records.** Who died the most, who lasted the longest without dying, the quickest death, the night owl and more, for today, this week or all time.
 - **Looks after itself.** It updates the server through Steam before each start, so friends never get a "version mismatch". It restarts the server after a crash and keeps Windows from falling asleep while people play. Closing the window doesn't stop the server, and the app picks it back up when it starts again.
 - **Keeps itself up to date.** Every hour the app checks this project on GitHub for a newer version and installs it once nothing is in progress. The Valheim server keeps running while the app restarts, so nobody is disconnected.
 - **Only on this computer.** The control panel only works on the server computer itself, so there's no password to set up and nothing for strangers to reach. Friends use it through an IP KVM or remote desktop, the same way they'd use the computer.
@@ -80,6 +81,12 @@ Each time the server is online, the channel gets a message like this:
 - **Before you join** appears when something changed since your friends last played: a newer Valheim, an updated mod, a mod added to or dropped from the world, or a new password. It says what to do, and stays until someone has joined since.
 - **Include the password** adds the password, hidden as a spoiler until it's clicked. Only turn it on if the channel is just for your friends.
 - **Also post when the server stops** (on by default) says when the server stops, restarts, crashes or the computer goes to rest, so nobody tries a code that no longer works.
+- **Post who died the most each day** (on by default) ends the day with a message like this, at 23:59, if anyone played that day:
+
+  > 💀 **Bjorn** died the most today: 5 times<br>
+  > <sub>Also died: Astrid 3, Sigrid 1 · Longest life: Astrid, 2 h 10 min</sub>
+
+  When nobody died, it says so. If the computer was off or resting at 23:59, the message comes once it's back, about "yesterday".
 - The **How friends join** card shows when the code was posted, or why it couldn't be. If Discord can't be reached, the app tries again for a couple of minutes.
 - Turning it on while the server is online posts the code straight away. If the app is closed and opened again while the server runs, the code isn't posted twice.
 - With Crossplay off, the message has the server's internet address instead of a join code. Nobody gets pinged by the message.
@@ -159,6 +166,23 @@ The **Stats** page shows the Valheim server's own CPU and memory use next to the
 
 The dedicated server runs without graphics, so GPU usage stays low; that's normal. GPU readings need a reasonably recent graphics driver (WDDM 2.0 or later). If the GPU tile says "not available", the driver is too old to report it.
 
+## Player records
+
+The **Players** page has a **Records** card for today, this week or all time:
+
+![Records](docs/screenshots/records.png)
+
+- **Died the most**, and **Dies the most often**: the fewest minutes played per death, for players with at least two deaths and half an hour played.
+- **Longest life**: the most time in the game without dying. A life carries on when a player leaves and comes back.
+- **Quickest death**: the shortest time from arriving or respawning to dying.
+- **Most time played**, **Longest session**, **Most days played** and **First to arrive** (first on the server on the most days).
+- **Night owl** and **Early bird**: the latest anyone stayed on at night, and the earliest anyone arrived in the morning.
+- A table lists each player's deaths, how often they die, their longest life and their time played.
+
+The records come from the server's log, which shows who joins, leaves and dies. Crafting, eating, damage and arrow hits happen in each player's own game, so the server never hears about them and they can't be counted.
+
+The joins, leaves and deaths are kept in `records.json`, so the records outlast the server logs (the app keeps the newest 30). The first time this version runs, it reads the logs that are still there.
+
 ## App updates
 
 Every change to this project that passes its tests on GitHub becomes a new [release](../../releases) (Build 14, Build 15 and so on), and the app installs it by itself:
@@ -206,7 +230,7 @@ The app's own log is in `logs\app.log` inside its folder, and the server's logs 
 `ValheimEasyServer.exe` is a single program with no installer and nothing else to download. It:
 
 - runs `valheim_server.exe` hidden in the background with the settings from the panel. To stop it, it sends Ctrl+C to the server's hidden console, which is how Valheim expects to be stopped, so the world is saved;
-- reads the server's log to see who joins, leaves and dies, the join code, saves and errors;
+- reads the server's log to see who joins, leaves and dies, the join code, saves and errors, and keeps the joins, leaves and deaths in `records.json` for the player records;
 - installs and updates the server with Valve's SteamCMD (`app_update 896660`);
 - understands both Valheim world formats: 1.0 world folders (`_main.N.fwl2`, `.db2`, `.chunk` files) and the older `.fwl` + `.db` pairs;
 - serves the control panel from inside the app to this computer only (127.0.0.1) and opens it in a Microsoft Edge app window. It turns away requests that other websites open in a browser could make: it checks the address the browser used, the browser's own "which site is asking" header, and an anti-forgery header on every change;

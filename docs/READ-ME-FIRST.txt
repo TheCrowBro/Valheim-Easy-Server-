@@ -60,6 +60,7 @@ join code in Discord" and paste the channel's webhook link. To get it:
      save.
 You can also have it post the password (hidden as a spoiler: only for a
 channel that's just for your friends) and say when the server stops.
+At 23:59 it posts who died the most that day (if anyone played).
 When something changed since your friends last played, the post also
 says what to do first, for example "Before you join: update Valheim to
 1.0.21, install Plant Everything".
@@ -118,6 +119,15 @@ TO PLAY
 -------
 Open Valheim, go to Join Game and enter the join code (or the address) and
 the password from the control panel.
+
+
+PLAYER RECORDS
+--------------
+The Players page shows who died the most, who lived the longest without
+dying, the quickest death, who played the most, the night owl and more,
+for today, this week or all time. The server only sees who joins, leaves
+and dies: crafting, damage and arrows happen in each player's own game,
+so they can't be counted.
 
 
 TAKING A COPY OF A WORLD

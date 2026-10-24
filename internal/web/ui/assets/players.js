@@ -1,5 +1,5 @@
-// Players: who's online, everyone who has played, and the admin / banned /
-// allowed lists.
+// Players: who's online, the records (who died the most and so on),
+// everyone who has played, and the admin / banned / allowed lists.
 
 import { h, icon, api, toast, confirmDialog, dur, ago, clock, initials } from './dom.js';
 
@@ -16,6 +16,8 @@ function accountNote(d, text) {
 
 let known = null;
 let lists = null;
+let recs = null;
+let period = 'all';
 let appRef = null;
 let timer = null;
 
@@ -32,6 +34,17 @@ async function load() {
     lists = l;
   } catch (e) {
     if (!known) toast(e.message, 'bad');
+  }
+  await loadRecords();
+}
+
+async function loadRecords() {
+  const want = period;
+  try {
+    const r = await api(`/api/records?period=${want}`);
+    if (want === period) recs = { ...r, period: want };
+  } catch (e) {
+    if (!recs) recs = { error: e.message };
   }
   if (appRef && appRef.page.id === 'players') appRef.render();
 }
@@ -92,6 +105,63 @@ function knownCard(app) {
       })))) : h('div', { class: 'empty' }, 'Players appear here after they join the server.'));
 }
 
+const PERIODS = [['today', 'Today'], ['week', 'This week'], ['all', 'All time']];
+
+function day(t) { return new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric' }); }
+function times(n, one, many) { return n === 1 ? `1 ${one}` : `${n} ${many}`; }
+
+// RECORDS gives each record its title, icon and what its value means.
+const RECORDS = {
+  deaths: ['Died the most', 'skull', (r) => times(r.value, 'death', 'deaths')],
+  dangerous: ['Dies the most often', 'zap', (r) => `a death every ${dur(r.value)}`],
+  longestLife: ['Longest life', 'heart', (r) => `${dur(r.value)} without dying`],
+  quickestDeath: ['Quickest death', 'timer', (r) => `dead ${dur(r.value)} into a life`],
+  playTime: ['Most time played', 'clock', (r) => `${dur(r.value)} played`],
+  longestSession: ['Longest session', 'hourglass', (r) => `${dur(r.value)} in one go`],
+  days: ['Most days played', 'calendar', (r) => `played on ${r.value} days`],
+  firstIn: ['First to arrive', 'trophy', (r, p) => (p === 'today' ? 'first in today' : `first on ${times(r.value, 'day', 'days')}`)],
+  nightOwl: ['Night owl', 'moon', (r, p) => `still on at ${clock(r.at)}` + (p === 'today' ? '' : `, ${day(r.at)}`)],
+  earlyBird: ['Early bird', 'sun', (r, p) => `on at ${clock(r.at)}` + (p === 'today' ? '' : `, ${day(r.at)}`)],
+};
+
+function names(list) {
+  return list.length > 1 ? `${list.slice(0, -1).join(', ')} & ${list[list.length - 1]}` : list[0];
+}
+
+function recordsCard(app) {
+  const head = h('div', { class: 'card-head wrap' }, icon('trophy'), h('h2', null, 'Records'),
+    h('div', { class: 'segmented', role: 'group', 'aria-label': 'Records for' },
+      PERIODS.map(([id, label]) => h('button', { class: period === id ? 'on' : '', 'data-action': 'records-period', 'data-period': id, 'aria-pressed': String(period === id) }, label))));
+  const note = h('p', { class: 'small muted', style: { marginTop: '12px' } },
+    'From what the server sees: who joins, leaves and dies. Crafting, food, damage and arrows stay in each player’s own game, so they can’t be counted.',
+    app.status && app.status.discord && app.status.discord.daily ? ' Who died the most is posted in Discord at 23:59 each day.' : null);
+  if (!recs) return h('section', { class: 'card', 'data-key': 'records' }, head, h('p', { class: 'muted' }, 'Loading…'));
+  if (recs.error) return h('section', { class: 'card', 'data-key': 'records' }, head, h('p', { class: 'muted' }, recs.error));
+  const p = recs.period;
+  const tiles = recs.records.filter((r) => RECORDS[r.id]).map((r) => {
+    const [title, ic, what] = RECORDS[r.id];
+    return h('div', { class: 'tile record', 'data-key': r.id },
+      h('div', { class: 'label' }, icon(ic), title),
+      h('div', { class: 'value', title: r.names.join(', ') }, r.names.length > 3 ? `${r.names.length} players tie` : names(r.names)),
+      h('div', { class: 'sub' }, what(r, p)));
+  });
+  const when = { today: 'today', week: 'this week', all: 'yet' }[p];
+  return h('section', { class: 'card', 'data-key': 'records' }, head,
+    recs.players.length ? [
+      h('div', { class: 'tiles' }, tiles),
+      h('div', { class: 'table-wrap', style: { marginTop: '16px' } }, h('table', { class: 'nowrap' },
+        h('thead', null, h('tr', null, h('th', null, 'Player'), h('th', { class: 'num' }, 'Deaths'), h('th', { class: 'num' }, 'Dies every'),
+          h('th', { class: 'num' }, 'Longest life'), h('th', { class: 'num' }, 'Time played'))),
+        h('tbody', null, recs.players.map((x) => h('tr', { 'data-key': x.name },
+          h('td', null, h('b', null, x.name)),
+          h('td', { class: 'num' }, x.deaths),
+          h('td', { class: 'num' }, x.deaths ? dur(x.playSeconds / x.deaths) : '–'),
+          h('td', { class: 'num' }, x.longestLife >= 60 ? dur(x.longestLife) : '–'),
+          h('td', { class: 'num' }, x.playSeconds >= 60 ? dur(x.playSeconds) : '–')))))),
+    ] : h('div', { class: 'empty' }, icon('trophy'), `Nobody has played ${when}. Records fill in as people play: who dies the most, who lasts the longest without dying, and more.`),
+    note);
+}
+
 function listCard(kind) {
   const [title, ic, help] = LIST_INFO[kind];
   const ids = (lists && lists[kind]) || [];
@@ -118,6 +188,7 @@ export default {
         h('p', { class: 'text-2 small' }, 'Valheim identifies players by an ID such as ', h('span', { class: 'mono' }, 'Steam_76561198012345678'),
           '. This page fills them in for you as people join, so you can make someone an admin or ban them with one click.'),
         h('p', { class: 'text-2 small', style: { marginTop: '8px' } }, 'Players can also see their own ID in Valheim by pressing ', h('kbd', null, 'F2'), '. Changes to these lists apply the next time the server starts.'))),
+      recordsCard(app),
       knownCard(app),
       h('div', { class: 'grid grid-3' }, listCard('admins'), listCard('banned'), listCard('permitted')));
   },
@@ -126,6 +197,11 @@ export default {
     load();
     timer = setInterval(load, 20000);
     const A = app.actions;
+    A['records-period'] = (d) => {
+      period = d.period;
+      app.render();
+      loadRecords();
+    };
     A['list-add'] = (d) => {
       const input = document.querySelector(`[data-list-input="${d.kind}"]`);
       const id = input.value.trim();

@@ -180,6 +180,9 @@ func (m *Manager) Status() Status {
 	if s.Discord && st.Discord == nil {
 		st.Discord = &DiscordInfo{}
 	}
+	if st.Discord != nil {
+		st.Discord.Daily = s.DiscordDaily
+	}
 	if st.Join.PublicAddr == "" && m.net.public != "" {
 		st.Join.PublicAddr = net.JoinHostPort(m.net.public, strconv.Itoa(s.Port))
 	}

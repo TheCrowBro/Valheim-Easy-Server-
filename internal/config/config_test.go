@@ -169,7 +169,7 @@ func TestLoadMovesModsToTheSelectedWorld(t *testing.T) {
 	if !reflect.DeepEqual(s.WorldMods(), []string{"advancedportals"}) {
 		t.Fatalf("WorldMods = %v", s.WorldMods())
 	}
-	if s.Discord || !s.DiscordStopped {
+	if s.Discord || !s.DiscordStopped || !s.DiscordDaily {
 		t.Fatalf("an older file should get the Discord defaults: %+v", s)
 	}
 }

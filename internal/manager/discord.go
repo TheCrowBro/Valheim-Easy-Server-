@@ -33,6 +33,7 @@ type discordPost struct {
 type DiscordInfo struct {
 	Posted *time.Time `json:"posted,omitempty"`
 	Error  string     `json:"error,omitempty"`
+	Daily  bool       `json:"daily,omitempty"` // who died the most is posted each night
 }
 
 // Why the server stopped, for the Discord message.

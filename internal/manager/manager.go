@@ -21,6 +21,7 @@ import (
 	"valheim-easy-server/internal/logparse"
 	"valheim-easy-server/internal/mods"
 	"valheim-easy-server/internal/platform"
+	"valheim-easy-server/internal/records"
 	"valheim-easy-server/internal/selfupdate"
 	"valheim-easy-server/internal/stats"
 	"valheim-easy-server/internal/steamcmd"
@@ -105,6 +106,7 @@ type Manager struct {
 	modVersions    map[string]string // installed mod packages and their versions
 	lastPlayed     *played           // what players last played with; nil until someone has
 	app            appUpdate         // what the last check for an app update found
+	recs           recordsData       // past runs' joins, leaves and deaths
 	subs           []func()
 }
 
@@ -142,8 +144,9 @@ type serverRun struct {
 	cancelTail context.CancelFunc
 	cpuPrev    time.Duration
 	cpuPrevAt  time.Time
-	discordAt  time.Time // when the join code was posted in Discord
-	discordErr string    // why posting it didn't work
+	discordAt  time.Time       // when the join code was posted in Discord
+	discordErr string          // why posting it didn't work
+	events     []records.Event // joins, leaves and deaths, for the records
 }
 
 // runInfo is saved to runtime.json so the app can find a server that is
@@ -236,6 +239,7 @@ func New(opt Options) (*Manager, error) {
 	m.loadActivity()
 	m.loadKnown()
 	m.loadPlayed()
+	m.loadRecords()
 	m.machine = platform.Machine()
 	m.idleSince = time.Now()
 	return m, nil
@@ -256,6 +260,8 @@ func (m *Manager) Start() {
 	m.go_(m.checksLoop)
 	m.go_(m.discordLoop)
 	m.go_(m.updateLoop)
+	m.go_(m.backfillRecords)
+	m.go_(m.dailyLoop)
 
 	m.mu.Lock()
 	autoStart := m.settings.StartWithApp && m.run == nil && m.installedLocked()
