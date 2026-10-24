@@ -3,6 +3,17 @@
 
 import { h, icon, api, toast, confirmDialog, dur, ago, clock, initials } from './dom.js';
 
+// accountNote says which account a change is for: anyone can give their
+// character any name, so the account is what counts.
+function accountNote(d, text) {
+  const steam = /^Steam_(\d+)$/.exec(d.id);
+  return h('div', null,
+    h('p', null, text),
+    h('p', { class: 'small muted' }, 'Account: ', h('code', null, d.id),
+      steam ? [' (', h('a', { href: `https://steamcommunity.com/profiles/${steam[1]}`, target: '_blank', rel: 'noopener noreferrer' }, 'Steam profile'), ')'] : null,
+      '. Anyone can give their character any name, so check this is the right person.'));
+}
+
 let known = null;
 let lists = null;
 let appRef = null;
@@ -128,13 +139,14 @@ export default {
       saveList(d.kind, [...lists[d.kind], id]);
     };
     A['list-remove'] = (d) => saveList(d.kind, lists[d.kind].filter((x) => x !== d.id));
-    A['player-admin'] = (d) => {
+    A['player-admin'] = async (d) => {
       const has = inList('admins', d.id);
+      if (!has && !await confirmDialog({ title: `Make ${d.name} an admin?`, message: accountNote(d, `${d.name} will be able to use server commands such as kick and ban once the server restarts.`), confirm: 'Make admin', icon: 'shield' })) return;
       saveList('admins', has ? lists.admins.filter((x) => x !== d.id) : [...lists.admins, d.id]);
     };
     A['player-ban'] = async (d) => {
       const has = inList('banned', d.id);
-      if (!has && !await confirmDialog({ title: `Ban ${d.name}?`, message: `${d.name} won’t be able to join once the server restarts. If they’re online now, an admin can kick them in the game (F5, then “kick ${d.name}”).`, confirm: 'Ban', kind: 'danger', icon: 'ban' })) return;
+      if (!has && !await confirmDialog({ title: `Ban ${d.name}?`, message: accountNote(d, `${d.name} won’t be able to join once the server restarts. If they’re online now, an admin can kick them in the game (F5, then “kick ${d.name}”).`), confirm: 'Ban', kind: 'danger', icon: 'ban' })) return;
       saveList('banned', has ? lists.banned.filter((x) => x !== d.id) : [...lists.banned, d.id]);
     };
     document.addEventListener('keydown', onEnter);

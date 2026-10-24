@@ -158,8 +158,9 @@ type runInfo struct {
 	Exe      string    `json:"exe"`
 	// Announced is the join code posted in Discord ("online" when there's
 	// no code), so it's posted once even if the app restarts.
-	Announced string `json:"announced,omitempty"`
-	Played    played `json:"played"` // the mods and password it started with
+	Announced   string `json:"announced,omitempty"`
+	Played      played `json:"played"`                // the mods and password it started with
+	NoCrossplay bool   `json:"noCrossplay,omitempty"` // started without crossplay, so no join code
 }
 
 // New loads settings and saved data. Call Start to begin.
@@ -497,6 +498,9 @@ func (m *Manager) notePlayerLocked(a logparse.Activity, since time.Time) {
 		m.known[a.Name] = p
 	}
 	if a.PlatformID != "" {
+		if a.Kind == "join" && p.PlatformID != "" && p.PlatformID != a.PlatformID {
+			m.addActivity("warning", a.Name, fmt.Sprintf("%s joined from a different account than before (%s, before %s). Anyone can pick any name, so check it's really them before making them an admin.", a.Name, a.PlatformID, p.PlatformID))
+		}
 		p.PlatformID = a.PlatformID
 	}
 	p.LastSeen = a.Time

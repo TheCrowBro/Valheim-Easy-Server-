@@ -38,7 +38,13 @@ type Tracker struct {
 	Ready      bool
 	LastSave   time.Time
 	Stopping   bool
+	StoppingAt time.Time // when the server said it was shutting down
 	lowStreak  int
+
+	// NoJoinCode is set for a server started without crossplay, which has
+	// no join code: a line claiming one was made up by a player.
+	NoJoinCode bool
+	session    string // the server's session name, from its first join code line
 }
 
 // Players returns a copy of everyone online, in join order.
@@ -71,6 +77,17 @@ func (t *Tracker) Apply(ev Event, now time.Time) []Activity {
 			return []Activity{act("online", "", "", "The server is online and ready for players.")}
 		}
 	case JoinCode:
+		// The server registers its session before anyone can connect, so
+		// a later line about another session was made up by a player.
+		if t.NoJoinCode {
+			return nil
+		}
+		if t.session == "" {
+			t.session = ev.Session
+		}
+		if ev.Session != t.session {
+			return nil
+		}
 		if ev.Code != "" {
 			t.JoinCode = ev.Code
 		}
@@ -127,7 +144,9 @@ func (t *Tracker) Apply(ev Event, now time.Time) []Activity {
 		}
 		return []Activity{act("bad_version", "", "", text)}
 	case Version:
-		t.Version = ev.Version
+		if t.Version == "" { // logged once at startup, before anyone can connect
+			t.Version = ev.Version
+		}
 	case WorldSaved:
 		// Valheim can log a save in several lines; report it once.
 		repeat := !t.LastSave.IsZero() && at.Sub(t.LastSave) < 10*time.Second
@@ -145,7 +164,9 @@ func (t *Tracker) Apply(ev Event, now time.Time) []Activity {
 	case BadPasswordConfig:
 		return []Activity{act("bad_password_config", "", "", "Valheim rejected the server password. It can't be part of the server name, the world name or the seed. Change it in Settings.")}
 	case Shutdown:
-		t.Stopping = true
+		if !t.Stopping {
+			t.Stopping, t.StoppingAt = true, at
+		}
 	}
 	return nil
 }
@@ -164,22 +185,23 @@ func (t *Tracker) reconcile(count int, at time.Time) []Activity {
 	if count < 0 {
 		return nil
 	}
-	if count == 0 {
-		t.pending = nil
-		t.lowStreak = 0
-		return t.removeAll(at)
-	}
 	if count >= len(t.players) {
 		t.lowStreak = 0
+		if count == 0 {
+			t.pending = nil
+		}
 		return nil
 	}
-	// Ask for two readings in a row so a join or leave racing the count
-	// line doesn't remove the wrong person.
+	// Ask for two readings in a row, so a join or leave racing the count
+	// line (or a line a player made up) doesn't remove anyone.
 	t.lowStreak++
 	if t.lowStreak < 2 {
 		return nil
 	}
 	t.lowStreak = 0
+	if count == 0 {
+		t.pending = nil
+	}
 	var out []Activity
 	for len(t.players) > count {
 		i := 0

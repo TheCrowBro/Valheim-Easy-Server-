@@ -248,7 +248,7 @@ func (m *Manager) doStart(ctx context.Context, j *jobCtl) error {
 		return fmt.Errorf("Couldn't start the Valheim server: %v", err)
 	}
 	info := runInfo{PID: proc.PID(), Started: proc.StartTime(), Launched: time.Now(), LogPath: logPath,
-		World: s.World, ArgsKey: argsKey(s, p.Save), Exe: p.ServerExe, Played: m.startedWith(s)}
+		World: s.World, ArgsKey: argsKey(s, p.Save), Exe: p.ServerExe, Played: m.startedWith(s), NoCrossplay: !s.Crossplay}
 	run := m.attach(proc, info, false)
 	m.addActivity("starting", "", fmt.Sprintf("Starting the server with the world %q.", s.World))
 	m.pruneLogs()
@@ -372,6 +372,7 @@ func (m *Manager) attach(proc *platform.Proc, info runInfo, adopted bool) *serve
 	ctx, cancel := context.WithCancel(m.ctx)
 	run := &serverRun{proc: proc, info: info, done: make(chan struct{}), readyCh: make(chan struct{}),
 		cancelTail: cancel, replaying: adopted}
+	run.tracker.NoJoinCode = info.NoCrossplay
 	m.mu.Lock()
 	m.run = run
 	m.idleSince = time.Now()
@@ -405,7 +406,7 @@ func (m *Manager) adopt(pi platform.ProcInfo, saved runInfo) bool {
 	if info.PID != pi.PID {
 		m.mu.Lock()
 		info = runInfo{PID: pi.PID, Started: pi.Started, Launched: pi.Started, World: m.settings.World,
-			LogPath: newestLog(m.paths.Logs), Exe: pi.Exe}
+			LogPath: newestLog(m.paths.Logs), Exe: pi.Exe, NoCrossplay: !m.settings.Crossplay}
 		m.mu.Unlock()
 	}
 	if info.Launched.IsZero() {
@@ -456,7 +457,9 @@ func (m *Manager) onExit(run *serverRun, code int) {
 		m.mu.Unlock()
 		return
 	}
-	expected := run.stopping || run.tracker.Stopping
+	// A shutdown line only counts shortly before the exit: a player can
+	// make one up, which mustn't hide a later crash.
+	expected := run.stopping || (run.tracker.Stopping && now.Sub(run.tracker.StoppingAt) < 5*time.Minute)
 	for _, p := range run.tracker.Players() {
 		m.notePlayerLocked(logparse.Activity{Kind: "leave", Time: now, Name: p.Name, PlatformID: p.PlatformID}, p.Since)
 	}

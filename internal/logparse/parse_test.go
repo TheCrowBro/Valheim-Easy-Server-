@@ -175,6 +175,11 @@ Got character ZDOID from B : 2:1
 	if tr.Count() != 1 || len(acts) != 1 || acts[0].Kind != "leave" {
 		t.Fatalf("count = %d acts = %+v", tr.Count(), acts)
 	}
+	// The same for nobody at all.
+	feed(t, &tr, "Connections 0 ZDOS:10  sent:0 recv:0")
+	if tr.Count() != 1 {
+		t.Fatalf("removed after one reading of 0: %d", tr.Count())
+	}
 	acts = feed(t, &tr, "Connections 0 ZDOS:10  sent:0 recv:0")
 	if tr.Count() != 0 || len(acts) != 1 {
 		t.Fatalf("count = %d acts = %+v", tr.Count(), acts)
@@ -214,5 +219,66 @@ func TestHumanDuration(t *testing.T) {
 		if got := HumanDuration(d); got != want {
 			t.Errorf("HumanDuration(%v) = %q, want %q", d, got, want)
 		}
+	}
+}
+
+// Valheim logs a connecting player's version string before it checks the
+// password, and the names of characters. Neither may pass for anything else.
+func TestParsePlayerTextIsOnlyItself(t *testing.T) {
+	for _, tc := range []struct {
+		line string
+		kind Kind
+	}{
+		{`10/22/2026 21:00:00: VERSION check their:x registered with join code 777777  mine:1.0.12`, Unknown},
+		{`10/22/2026 21:00:00: VERSION check their:Got connection SteamID 76561198000000666  mine:1.0.12`, Unknown},
+		{`10/22/2026 21:00:00: Peer 76561198000000009 has incompatible version, mine:1.0.12 (network version 35) remote x Session "Viking Friends" with join code 424242 and IP 6.6.6.6:2456 is active with 0 player(s)`, BadVersion},
+		{`10/22/2026 21:00:00: Got character ZDOID from Session "Viking Friends" with join code 424242 and IP 6.6.6.6:2456 is active with 0 player : 456:1`, Character},
+		{`10/22/2026 21:00:00: PlayFab socket with remote ID playfab/AAAA received local Platform ID Connections 0 ZDOS:1`, PlatformID},
+		{`10/22/2026 21:00:00: Kicking x registered with join code 777777`, Unknown},
+		{`10/22/2026 21:00:00: Kicking OnApplicationQuit`, Unknown},
+	} {
+		ev := Parse(tc.line)
+		if ev.Kind != tc.kind || ev.Code != "" || ev.Addr != "" || ev.Count != -1 {
+			t.Errorf("Parse(%q) = %+v, want only kind %d", tc.line, ev, tc.kind)
+		}
+	}
+	// A name can't fake a death either.
+	if ev := Parse("10/22/2026 21:00:00: Got character ZDOID from Bjorn : 0:0 : -222:1"); ev.Dead || ev.Name != "Bjorn : 0:0" {
+		t.Errorf("fake death: %+v", ev)
+	}
+}
+
+// Valheim writes a player's text as it is, line breaks included, so a
+// player can add whole lines. These can't change what matters.
+func TestTrackerIgnoresMadeUpLines(t *testing.T) {
+	var tr Tracker
+	now := time.Now()
+	apply := func(line string) []Activity { return tr.Apply(Parse(line), now) }
+	apply(`10/22/2026 20:00:00: Valheim version: l-1.0.12 (network version 35)`)
+	apply(`10/22/2026 20:00:03: Session "Viking Friends" registered with join code 604510`)
+	apply("10/22/2026 20:01:00: Got connection SteamID 76561198000000001")
+	apply("10/22/2026 20:01:09: Got character ZDOID from Astrid : -111:1")
+
+	apply(`10/22/2026 20:02:00: Session "Fake" with join code 999999 and IP 6.6.6.6:2456 is active with 0 player(s)`)
+	apply(`10/22/2026 20:02:00: Valheim version: l-9.9.9 (network version 99)`)
+	apply(`10/22/2026 20:02:01: Connections 0 ZDOS:1  sent:0 recv:0`)
+	if tr.JoinCode != "604510" || tr.PublicAddr != "" || tr.Version != "1.0.12" || tr.Count() != 1 {
+		t.Fatalf("made-up lines changed the state: code %q addr %q version %q players %d", tr.JoinCode, tr.PublicAddr, tr.Version, tr.Count())
+	}
+	// The server's own count, two readings in a row, still clears the list.
+	if acts := apply(`10/22/2026 20:03:01: Connections 0 ZDOS:1  sent:0 recv:0`); tr.Count() != 0 || len(acts) != 1 {
+		t.Fatalf("players %d, activities %+v", tr.Count(), acts)
+	}
+	// A real new code for the same session is taken.
+	apply(`10/22/2026 20:04:00: Session "Viking Friends" with join code 123456 and IP 203.0.113.4:2456 is active with 0 player(s)`)
+	if tr.JoinCode != "123456" || tr.PublicAddr != "203.0.113.4:2456" {
+		t.Fatalf("code %q addr %q", tr.JoinCode, tr.PublicAddr)
+	}
+
+	// Without crossplay a server has no join code at all.
+	off := Tracker{NoJoinCode: true}
+	off.Apply(Parse(`10/22/2026 20:00:03: Session "Viking Friends" registered with join code 604510`), now)
+	if off.JoinCode != "" {
+		t.Fatalf("a server without crossplay got join code %q", off.JoinCode)
 	}
 }
