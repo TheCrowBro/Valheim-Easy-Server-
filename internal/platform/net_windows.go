@@ -5,9 +5,7 @@ package platform
 import (
 	"bufio"
 	"bytes"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"unsafe"
 
@@ -100,8 +98,8 @@ func wakeArmed() map[string]bool {
 // nobody playing is cut off; a few drivers only use the change after the
 // computer restarts. Windows asks for admin permission on the screen; this
 // returns before that is answered.
-func EnableWakeOnLAN(scriptDir string) error {
-	lines := []string{
+func EnableWakeOnLAN() error {
+	return runElevatedPowerShell(strings.Join([]string{
 		"$ErrorActionPreference = 'SilentlyContinue'",
 		"Get-NetAdapter -Physical | Where-Object { $_.MediaType -eq '802.3' } | ForEach-Object {",
 		"  Set-NetAdapterPowerManagement -Name $_.Name -WakeOnMagicPacket Enabled -WakeOnPattern Disabled -NoRestart",
@@ -109,14 +107,5 @@ func EnableWakeOnLAN(scriptDir string) error {
 		"  Set-NetAdapterAdvancedProperty -Name $_.Name -RegistryKeyword '*WakeOnPattern' -RegistryValue 0 -NoRestart",
 		"  powercfg /deviceenablewake \"$($_.InterfaceDescription)\"",
 		"}",
-	}
-	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
-		return err
-	}
-	script := filepath.Join(scriptDir, "enable-wake-on-lan.ps1")
-	if err := os.WriteFile(script, []byte(strings.Join(lines, "\r\n")+"\r\n"), 0o644); err != nil {
-		return err
-	}
-	return runElevated(system32(`WindowsPowerShell\v1.0\powershell.exe`),
-		`-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "`+script+`"`)
+	}, "\n"))
 }

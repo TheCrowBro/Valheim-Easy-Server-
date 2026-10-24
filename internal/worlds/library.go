@@ -189,7 +189,7 @@ func (l *Library) scan() (scanResult, error) {
 		if _, err := os.Stat(p + ".db"); err != nil {
 			w.NeverSaved = true
 		}
-		if data, err := os.ReadFile(p + ".fwl"); err == nil {
+		if data, err := readMeta(p + ".fwl"); err == nil {
 			if meta, err := ParseMeta(data); err == nil {
 				w.Seed = meta.SeedName
 			}
@@ -243,7 +243,7 @@ func folderMeta(dir string) (Meta, bool) {
 	if best == "" {
 		return Meta{}, false
 	}
-	data, err := os.ReadFile(filepath.Join(dir, best))
+	data, err := readMeta(filepath.Join(dir, best))
 	if err != nil {
 		return Meta{}, false
 	}
@@ -723,7 +723,7 @@ func (l *Library) Rename(name, newName string) error {
 	}
 	src := filepath.Join(l.Worlds, name)
 	dst := filepath.Join(l.Worlds, newName)
-	data, err := os.ReadFile(src + ".fwl")
+	data, err := readMeta(src + ".fwl")
 	if err != nil {
 		return err
 	}

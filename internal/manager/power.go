@@ -95,7 +95,7 @@ func (m *Manager) restStatus(sleep bool) (bool, string) {
 // EnableWakeOnLAN lets the wired network adapters wake the computer
 // (Windows asks for admin permission on the screen).
 func (m *Manager) EnableWakeOnLAN() error {
-	err := platform.EnableWakeOnLAN(m.opt.DataDir)
+	err := platform.EnableWakeOnLAN()
 	m.recheckSoon()
 	return err
 }

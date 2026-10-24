@@ -140,21 +140,14 @@ func FirewallReady() bool {
 // itself needs no rule; any left by older versions are removed. Windows
 // asks for admin permission on the screen; this returns before that is
 // answered.
-func FixFirewall(serverExe, appExe, scriptDir string) error {
-	lines := []string{
-		"@echo off",
-		fmt.Sprintf(`netsh advfirewall firewall delete rule name=all program="%s"`, serverExe),
-		fmt.Sprintf(`netsh advfirewall firewall add rule name="%s" dir=in action=allow program="%s" enable=yes profile=any`, fwGameRule, serverExe),
-		fmt.Sprintf(`netsh advfirewall firewall delete rule name=all program="%s"`, appExe),
-	}
-	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
-		return err
-	}
-	script := filepath.Join(scriptDir, "fix-firewall.cmd")
-	if err := os.WriteFile(script, []byte(strings.Join(lines, "\r\n")+"\r\n"), 0o644); err != nil {
-		return err
-	}
-	return runElevated(system32("cmd.exe"), `/c "`+script+`"`)
+func FixFirewall(serverExe, appExe string) error {
+	return runElevatedPowerShell(strings.Join([]string{
+		"$server = " + psQuote(serverExe),
+		"$app = " + psQuote(appExe),
+		`netsh advfirewall firewall delete rule name=all "program=$server"`,
+		`netsh advfirewall firewall add rule "name=` + fwGameRule + `" dir=in action=allow "program=$server" enable=yes profile=any`,
+		`netsh advfirewall firewall delete rule name=all "program=$app"`,
+	}, "\n"))
 }
 
 // SingleInstance makes sure only one copy of the app runs per data folder.

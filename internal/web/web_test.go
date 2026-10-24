@@ -92,9 +92,17 @@ func TestBlocksOtherSites(t *testing.T) {
 	if rec := ts.do("GET", "/api/worlds/download?name=Midgard", "127.0.0.1", nil, map[string]string{"Sec-Fetch-Site": "same-site"}); rec.Code != http.StatusForbidden {
 		t.Fatalf("same-site download = %d", rec.Code)
 	}
-	// …but a link to the panel itself still opens it.
-	if rec := ts.do("GET", "/", "127.0.0.1", nil, map[string]string{"Sec-Fetch-Site": "cross-site"}); rec.Code != http.StatusOK {
+	// …or open the panel from a link: it opens from the app (or the address
+	// typed in), not from another site.
+	if rec := ts.do("GET", "/", "127.0.0.1", nil, map[string]string{"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate"}); rec.Code != http.StatusForbidden {
 		t.Fatalf("cross-site link to the page = %d", rec.Code)
+	}
+	if rec := ts.do("GET", "/", "127.0.0.1", nil, map[string]string{"Sec-Fetch-Site": "none", "Sec-Fetch-Mode": "navigate"}); rec.Code != http.StatusOK {
+		t.Fatalf("opening the page from the app = %d", rec.Code)
+	}
+	// A browser only sends a port number after the address.
+	if rec := ts.do("GET", "/api/status", "127.0.0.1", nil, map[string]string{"Host": "127.0.0.1:8456.evil.example"}); rec.Code != http.StatusForbidden {
+		t.Fatalf("odd Host = %d", rec.Code)
 	}
 	if rec := ts.do("GET", "/api/status", "127.0.0.1", nil, map[string]string{"Sec-Fetch-Site": "same-origin"}); rec.Code != http.StatusOK {
 		t.Fatalf("the panel's own request = %d", rec.Code)
@@ -209,5 +217,13 @@ func TestStaticAndHeaders(t *testing.T) {
 		if rec := ts.do("GET", f, "127.0.0.1", nil, nil); rec.Code != http.StatusOK {
 			t.Fatalf("%s = %d", f, rec.Code)
 		}
+	}
+}
+
+func TestMissingBackupIsAnError(t *testing.T) {
+	ts := newTestServer(t)
+	rec := ts.do("GET", "/api/worlds/backup-download?name=Midgard&id=gone", "127.0.0.1", nil, nil)
+	if rec.Code == http.StatusOK || rec.Header().Get("Content-Type") == "application/zip" {
+		t.Fatalf("a missing backup downloaded: %d %q", rec.Code, rec.Header().Get("Content-Type"))
 	}
 }

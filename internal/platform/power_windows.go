@@ -4,7 +4,6 @@ package platform
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
@@ -26,12 +25,14 @@ var (
 	procGetLastInputInfo   = user32.NewProc("GetLastInputInfo")
 )
 
+// system32 is where Windows' own programs are, asked of Windows itself
+// rather than taken from an environment variable.
 func system32(exe string) string {
-	root := os.Getenv("SystemRoot")
-	if root == "" {
-		root = `C:\Windows`
+	dir, err := windows.GetSystemDirectory()
+	if err != nil || dir == "" {
+		dir = `C:\Windows\System32`
 	}
-	return filepath.Join(root, "System32", exe)
+	return filepath.Join(dir, exe)
 }
 
 // HibernateStatus reports whether Windows can hibernate right now.
@@ -95,6 +96,14 @@ func runElevated(exe, args string) error {
 	file, _ := windows.UTF16PtrFromString(exe)
 	params, _ := windows.UTF16PtrFromString(args)
 	return windows.ShellExecute(0, verb, file, params, nil, windows.SW_HIDE)
+}
+
+// runElevatedPowerShell runs a script with admin rights. It goes in the
+// command line, never as a file that another program could change while
+// Windows asks for permission.
+func runElevatedPowerShell(script string) error {
+	return runElevated(system32(`WindowsPowerShell\v1.0\powershell.exe`),
+		"-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand "+psEncode(script))
 }
 
 // KeepAwake stops Windows from going to sleep on its own while the server

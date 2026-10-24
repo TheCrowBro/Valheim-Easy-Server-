@@ -555,3 +555,41 @@ func TestExportWaitsForSaves(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Names that can never be made into a free one (a file called "..fwl" in an
+// upload, or one with "_backup_" in it) don't hang the check.
+func TestCheckWithHopelessNames(t *testing.T) {
+	l := newLib(t)
+	writeFile(t, filepath.Join(l.Worlds, "x_backup_y.fwl"), meta("x_backup_y", "AbCdEf1234"))
+	done := make(chan []Candidate, 1)
+	go func() {
+		done <- l.Check([]Candidate{{Name: ".", Renamable: true}, {Name: "x_backup_y", Renamable: true}})
+	}()
+	select {
+	case cands := <-done:
+		for _, c := range cands {
+			if c.FreeName != "" {
+				t.Errorf("%q got free name %q", c.Name, c.FreeName)
+			}
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Check didn't finish")
+	}
+}
+
+// A metadata file too big to be one isn't read into memory.
+func TestReadMetaLimit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "big.fwl")
+	f, _ := os.Create(path)
+	f.Truncate(maxMeta + 1)
+	f.Close()
+	if _, err := readMeta(path); err == nil {
+		t.Fatal("read a file bigger than any world's .fwl")
+	}
+	writeFile(t, path, meta("Midgard", "AbCdEf1234"))
+	if data, err := readMeta(path); err != nil {
+		t.Fatal(err)
+	} else if m, err := ParseMeta(data); err != nil || m.Name != "Midgard" {
+		t.Fatalf("meta = %+v %v", m, err)
+	}
+}

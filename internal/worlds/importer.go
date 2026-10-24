@@ -113,7 +113,7 @@ func Detect(root string, maxDepth int) []Candidate {
 				c.Note = "This is one of Valheim's backup copies of the world."
 				c.IsBackup = true
 			}
-			if data, err := os.ReadFile(c.fwlPath); err == nil {
+			if data, err := readMeta(c.fwlPath); err == nil {
 				if meta, err := ParseMeta(data); err == nil {
 					c.Seed = meta.SeedName
 				} else {
@@ -200,9 +200,14 @@ func markSuperseded(cands []Candidate) {
 	}
 }
 
-// freeName finds a name like "Midgard 2" that no world uses yet.
+// freeName finds a name like "Midgard 2" that no world uses yet, or ""
+// when the name can't be made into one (the person then picks a name).
 func (l *Library) freeName(name string, taken map[string]bool) string {
-	for n := 2; ; n++ {
+	name = strings.TrimLeft(name, " .-") // a world name can't start with these
+	if name == "" {
+		return ""
+	}
+	for n := 2; n < 1000; n++ {
 		suffix := " " + strconv.Itoa(n)
 		base := []rune(name)
 		if max := 40 - len(suffix); len(base) > max {
@@ -213,6 +218,7 @@ func (l *Library) freeName(name string, taken map[string]bool) string {
 			return try
 		}
 	}
+	return ""
 }
 
 // Choice says what to do with one candidate.
@@ -326,7 +332,7 @@ func place(c Candidate, name, worldsDir string, move bool) error {
 		return copyDir(c.dir, dst)
 	default:
 		dst := filepath.Join(worldsDir, name)
-		data, err := os.ReadFile(c.fwlPath)
+		data, err := readMeta(c.fwlPath)
 		if err != nil {
 			return err
 		}
@@ -459,7 +465,7 @@ func safeRel(name string) (string, bool) {
 		}
 	}
 	clean := path.Clean(name)
-	if clean == "." || clean == "" {
+	if clean == "." || clean == "" || !filepath.IsLocal(filepath.FromSlash(clean)) { // e.g. NUL on Windows
 		return "", false
 	}
 	return filepath.FromSlash(clean), true

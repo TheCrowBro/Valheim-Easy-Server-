@@ -337,6 +337,8 @@ func (s Settings) Validate() FieldErrors {
 		errs["serverName"] = "The server name can be at most 64 characters."
 	case hasBadChars(name):
 		errs["serverName"] = `The server name can't contain quotes (") or control characters.`
+	case strings.HasPrefix(name, "-"):
+		errs["serverName"] = "The server name can't start with a dash (-)."
 	}
 
 	pw := s.Password
@@ -347,6 +349,8 @@ func (s Settings) Validate() FieldErrors {
 		errs["password"] = "The password can be at most 64 characters."
 	case hasBadChars(pw) || strings.ContainsFunc(pw, unicode.IsSpace):
 		errs["password"] = `The password can't contain spaces or quotes (").`
+	case strings.HasPrefix(pw, "-"):
+		errs["password"] = "The password can't start with a dash (-)."
 	case name != "" && strings.Contains(strings.ToLower(name), strings.ToLower(pw)):
 		errs["password"] = "Valheim doesn't allow the password to be part of the server name."
 	case s.World != "" && strings.Contains(strings.ToLower(s.World), strings.ToLower(pw)):
@@ -355,6 +359,18 @@ func (s Settings) Validate() FieldErrors {
 
 	if msg := WorldNameProblem(s.World); msg != "" {
 		errs["world"] = msg
+	}
+
+	// The folders are given to programs, some with admin rights (the
+	// firewall rule), so they must be plain full paths.
+	for field, dir := range map[string]string{"serverDir": s.ServerDir, "saveDir": s.SaveDir} {
+		switch {
+		case dir == "":
+		case !filepath.IsAbs(dir):
+			errs[field] = `Use the folder's full path, for example C:\Valheim Server\server.`
+		case hasBadChars(dir):
+			errs[field] = `The folder can't contain quotes (") or control characters.`
+		}
 	}
 
 	if s.Port < 1024 || s.Port > 65534 {
@@ -435,6 +451,8 @@ var reservedNames = map[string]bool{
 	"COM6": true, "COM7": true, "COM8": true, "COM9": true,
 	"LPT1": true, "LPT2": true, "LPT3": true, "LPT4": true, "LPT5": true,
 	"LPT6": true, "LPT7": true, "LPT8": true, "LPT9": true,
+	"COM¹": true, "COM²": true, "COM³": true, "LPT¹": true, "LPT²": true, "LPT³": true,
+	"CONIN$": true, "CONOUT$": true,
 }
 
 // WorldNameProblem returns why name can't be used as a world name, or "".
@@ -451,6 +469,8 @@ func WorldNameProblem(name string) string {
 		return `The world name can't contain any of these: \ / : * ? " < > |`
 	case strings.HasSuffix(name, ".") || strings.HasPrefix(name, "."):
 		return "The world name can't start or end with a dot."
+	case strings.HasPrefix(name, "-"):
+		return "The world name can't start with a dash (-)." // Valheim would take it for an option
 	case reservedNames[strings.ToUpper(strings.SplitN(name, ".", 2)[0])]:
 		return "That name is reserved by Windows. Pick another."
 	case strings.Contains(strings.ToLower(name), "_backup_"):
@@ -610,9 +630,13 @@ var passwordWords = []string{
 	"wolf", "drakkar", "saga", "bronze", "silver", "serpent", "eikthyr",
 }
 
-// GeneratePassword makes an easy-to-share password such as "fjord-4821".
+// GeneratePassword makes an easy-to-share password such as
+// "raven-fjord-4821": two words and a number, about 7 million possibilities,
+// so guessing it by trying to join would take far too long.
 func GeneratePassword() string {
-	w, _ := rand.Int(rand.Reader, big.NewInt(int64(len(passwordWords))))
-	n, _ := rand.Int(rand.Reader, big.NewInt(9000))
-	return fmt.Sprintf("%s-%d", passwordWords[w.Int64()], 1000+n.Int64())
+	pick := func(n int) int64 {
+		v, _ := rand.Int(rand.Reader, big.NewInt(int64(n)))
+		return v.Int64()
+	}
+	return fmt.Sprintf("%s-%s-%d", passwordWords[pick(len(passwordWords))], passwordWords[pick(len(passwordWords))], 1000+pick(9000))
 }

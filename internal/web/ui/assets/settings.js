@@ -313,9 +313,12 @@ export default {
     };
     A['settings-discard'] = () => { draft = structuredClone(view.settings); errors = {}; app.render(); };
     A['settings-genpw'] = () => {
-      const words = ['odin', 'thor', 'freya', 'loki', 'fjord', 'rune', 'skald', 'mead', 'troll', 'raven', 'wolf', 'saga', 'longship', 'draugr'];
+      // The same words as the app's own (config.go): two words and a number.
+      const words = ['odin', 'thor', 'freya', 'loki', 'frigg', 'tyr', 'baldr', 'heimdall', 'fjord', 'rune', 'skald', 'longship',
+        'mead', 'troll', 'draugr', 'yggdrasil', 'bifrost', 'valkyrie', 'jotunn', 'mjolnir', 'raven', 'wolf', 'drakkar', 'saga',
+        'bronze', 'silver', 'serpent', 'eikthyr'];
       const pick = (n) => crypto.getRandomValues(new Uint32Array(1))[0] % n;
-      draft.password = `${words[pick(words.length)]}-${1000 + pick(9000)}`;
+      draft.password = `${words[pick(words.length)]}-${words[pick(words.length)]}-${1000 + pick(9000)}`;
       delete errors.password;
       app.render();
     };

@@ -30,4 +30,4 @@ func NetAdapters() []NetAdapter {
 }
 
 // EnableWakeOnLAN is only implemented on Windows.
-func EnableWakeOnLAN(string) error { return ErrUnsupported }
+func EnableWakeOnLAN() error { return ErrUnsupported }

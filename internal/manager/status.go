@@ -323,9 +323,9 @@ func (m *Manager) recheckSoon() {
 // FixFirewall adds the firewall rules (asks for admin permission).
 func (m *Manager) FixFirewall() error {
 	m.mu.Lock()
-	exe, data := m.paths.ServerExe, m.opt.DataDir
+	exe := m.paths.ServerExe
 	m.mu.Unlock()
-	err := platform.FixFirewall(exe, m.opt.AppExe, data)
+	err := platform.FixFirewall(exe, m.opt.AppExe)
 	m.recheckSoon()
 	return err
 }

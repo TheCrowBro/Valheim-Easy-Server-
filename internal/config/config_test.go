@@ -32,6 +32,13 @@ func TestValidation(t *testing.T) {
 		{"world", func(s *Settings) { s.World = "bad/name" }},
 		{"world", func(s *Settings) { s.World = "CON" }},
 		{"world", func(s *Settings) { s.World = "Midgard_backup_auto-1" }},
+		{"world", func(s *Settings) { s.World = "COM¹" }},
+		{"world", func(s *Settings) { s.World = "-logFile" }},
+		{"serverName", func(s *Settings) { s.ServerName = "-public" }},
+		{"password", func(s *Settings) { s.Password = "-crossplay" }},
+		{"serverDir", func(s *Settings) { s.ServerDir = `server` }},
+		{"serverDir", func(s *Settings) { s.ServerDir = filepath.Join(string(filepath.Separator)+"srv", "a\"b") }},
+		{"saveDir", func(s *Settings) { s.SaveDir = filepath.Join(string(filepath.Separator)+"srv", "a\nb") }},
 		{"port", func(s *Settings) { s.Port = 80 }},
 		{"idleMinutes", func(s *Settings) { s.IdleMinutes = 1 }},
 		{"extraArgs", func(s *Settings) { s.ExtraArgs = `-x "unclosed` }},
@@ -48,6 +55,26 @@ func TestValidation(t *testing.T) {
 		if _, ok := errs[c.field]; !ok {
 			t.Errorf("expected a %s error for %+v, got %v", c.field, s, errs)
 		}
+	}
+}
+
+func TestGeneratedPasswords(t *testing.T) {
+	seen := map[string]bool{}
+	for i := 0; i < 200; i++ {
+		pw := GeneratePassword()
+		parts := strings.Split(pw, "-")
+		if len(parts) != 3 || len(parts[2]) != 4 {
+			t.Fatalf("password %q isn't two words and a number", pw)
+		}
+		s := Defaults()
+		s.Password = pw
+		if errs := s.Validate(); errs != nil {
+			t.Fatalf("generated password %q is invalid: %v", pw, errs)
+		}
+		seen[pw] = true
+	}
+	if len(seen) < 190 {
+		t.Fatalf("only %d different passwords in 200", len(seen))
 	}
 }
 

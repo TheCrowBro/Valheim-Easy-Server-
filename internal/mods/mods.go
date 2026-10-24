@@ -283,6 +283,9 @@ func (in *Installer) prune(rec record) error {
 // switchPlugin moves a package's plugin folder into BepInEx/plugins, or out
 // of it into BepInEx/plugins-off.
 func (in *Installer) switchPlugin(name string, on bool) error {
+	if !safeName.MatchString(name) {
+		return fmt.Errorf("unexpected package name %q", name)
+	}
 	from := filepath.Join(in.Dir, "BepInEx", "plugins", name)
 	to := filepath.Join(in.Dir, "BepInEx", parkedDir, name)
 	if on {
@@ -521,6 +524,11 @@ func (in *Installer) unpackLoader(zr *zip.Reader) error {
 		if unsafeName(rel) {
 			return fmt.Errorf("the download has a file with an unsafe name (%q)", f.Name)
 		}
+		// The pack adds the loader; it never replaces the server itself or
+		// this app's record of what it installed.
+		if l := strings.ToLower(rel); l == "valheim_server.exe" || l == strings.ToLower("BepInEx/"+recordFile) {
+			return fmt.Errorf("the BepInEx download has a file it shouldn't (%q)", f.Name)
+		}
 		if err := in.extract(f, rel, rel == "BepInEx/config/BepInEx.cfg"); err != nil {
 			return err
 		}
@@ -586,7 +594,8 @@ func unsafeName(name string) bool {
 	if name == "" || strings.HasPrefix(name, "/") || strings.Contains(name, ":") {
 		return true
 	}
-	return slices.Contains(strings.Split(name, "/"), "..")
+	// IsLocal also turns away Windows device names such as NUL or COM1.
+	return slices.Contains(strings.Split(name, "/"), "..") || !filepath.IsLocal(filepath.FromSlash(name))
 }
 
 // extract writes one file from a zip to rel inside the server folder. keep
@@ -687,6 +696,13 @@ func (in *Installer) read() record {
 	}
 	if r.Packages == nil {
 		r.Packages = map[string]installed{}
+	}
+	// The names become folder names that get moved and deleted: only plain
+	// package names (a changed file mustn't point anywhere else).
+	for name := range r.Packages {
+		if !safeName.MatchString(name) {
+			delete(r.Packages, name)
+		}
 	}
 	return r
 }

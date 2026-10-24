@@ -314,10 +314,30 @@ func (s *Server) downloadBackup(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, msg)
 		return
 	}
-	attachment(w, name+" backup.zip")
-	if err := s.m.ExportBackup(w, name, id); err != nil {
+	out := &lazyAttachment{w: w, name: name + " backup.zip"}
+	if err := s.m.ExportBackup(out, name, id); err != nil {
+		if !out.started {
+			fail(w, err) // e.g. the backup was deleted: say so, not an empty zip
+			return
+		}
 		s.log.Printf("download backup %s/%s: %v", name, id, err)
 	}
+}
+
+// lazyAttachment makes a response a download when the first bytes are
+// written, so an error before then can still be reported as one.
+type lazyAttachment struct {
+	w       http.ResponseWriter
+	name    string
+	started bool
+}
+
+func (a *lazyAttachment) Write(p []byte) (int, error) {
+	if !a.started {
+		a.started = true
+		attachment(a.w, a.name)
+	}
+	return a.w.Write(p)
 }
 
 func (s *Server) newUpload(w http.ResponseWriter, r *http.Request) {

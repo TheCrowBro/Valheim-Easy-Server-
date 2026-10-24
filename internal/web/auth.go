@@ -3,6 +3,7 @@ package web
 import (
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -15,7 +16,8 @@ const blockedMsg = "This request was blocked for safety. Reload the page and try
 //     (127.0.0.1, localhost or ::1), which stops a site that points its own
 //     name at 127.0.0.1;
 //   - API requests the browser marks as coming from another site are
-//     refused, so other sites can't read or start downloads;
+//     refused, so other sites can't read or start downloads, and so is
+//     opening the panel from a link on another site;
 //   - changes need the panel's own X-VES header, which other sites can't
 //     add, and a matching Origin when the browser sends one.
 func guard(next http.Handler) http.Handler {
@@ -24,8 +26,15 @@ func guard(next http.Handler) http.Handler {
 			writeErr(w, http.StatusForbidden, "The control panel only works on the server computer itself.")
 			return
 		}
+		site := r.Header.Get("Sec-Fetch-Site")
+		otherSite := site == "cross-site" || site == "same-site"
+		if otherSite && r.Header.Get("Sec-Fetch-Mode") == "navigate" {
+			// A link on another site: the panel opens from the app instead.
+			http.Error(w, "Open the control panel from the shield icon next to the clock.", http.StatusForbidden)
+			return
+		}
 		if strings.HasPrefix(r.URL.Path, "/api/") {
-			if site := r.Header.Get("Sec-Fetch-Site"); site == "cross-site" || site == "same-site" {
+			if otherSite {
 				writeErr(w, http.StatusForbidden, blockedMsg)
 				return
 			}
@@ -49,7 +58,10 @@ func isLoopback(r *http.Request) bool {
 
 // loopbackHost reports whether a Host header names this computer.
 func loopbackHost(host string) bool {
-	if h, _, err := net.SplitHostPort(host); err == nil {
+	if h, port, err := net.SplitHostPort(host); err == nil {
+		if _, err := strconv.ParseUint(port, 10, 16); err != nil {
+			return false
+		}
 		host = h
 	}
 	host = strings.Trim(host, "[]")

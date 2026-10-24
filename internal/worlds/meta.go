@@ -18,6 +18,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"os"
 	"unicode/utf8"
 )
 
@@ -28,6 +29,24 @@ type Meta struct {
 	SeedName string
 	Seed     int32
 	UID      int64
+}
+
+// maxMeta is far more than a world's metadata file ever holds.
+const maxMeta = 1 << 20
+
+// readMeta reads a world's small metadata file (.fwl or .fwl2), refusing
+// one too big to be one rather than reading it into memory whole.
+func readMeta(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, maxMeta+1))
+	if err == nil && len(data) > maxMeta {
+		err = errors.New("the file is too big to be a Valheim world's .fwl")
+	}
+	return data, err
 }
 
 // ParseMeta reads a Valheim world metadata file. The file is a 4-byte

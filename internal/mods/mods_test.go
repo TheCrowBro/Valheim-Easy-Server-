@@ -1,6 +1,8 @@
 package mods
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"net/http/httptest"
 	"os"
@@ -292,5 +294,48 @@ func TestEnv(t *testing.T) {
 		}
 	} else if env != "" {
 		t.Fatalf("env %q", env)
+	}
+}
+
+// The record names folders that get moved and deleted, so a changed record
+// can't point anywhere else.
+func TestRecordNamesStayInside(t *testing.T) {
+	dir := t.TempDir()
+	in := &Installer{Dir: filepath.Join(dir, "server")}
+	victim := filepath.Join(dir, "victim")
+	os.MkdirAll(victim, 0o755)
+	os.MkdirAll(filepath.Join(in.Dir, "BepInEx", "plugins"), 0o755)
+	in.write(record{Packages: map[string]installed{
+		"x/../../../victim":          {Version: "1.0.0"},
+		"RandyKnapp-AdvancedPortals": {Version: "1.2.0"},
+	}})
+	rec := in.read()
+	if _, ok := rec.Packages["x/../../../victim"]; ok || len(rec.Packages) != 1 {
+		t.Fatalf("record = %+v", rec.Packages)
+	}
+	if err := in.switchPlugin("x/../../../victim", false); err == nil {
+		t.Fatal("moved a folder by an unsafe name")
+	}
+	if _, err := os.Stat(victim); err != nil {
+		t.Fatal("a folder outside the server was touched")
+	}
+}
+
+// The BepInEx pack can't replace the server or this app's record.
+func TestLoaderCantReplaceTheServer(t *testing.T) {
+	for _, name := range []string{"valheim_server.exe", "BepInEx/valheim-easy-server.json"} {
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		w, _ := zw.Create(loaderRoot + name)
+		w.Write([]byte("evil"))
+		zw.Close()
+		zr, _ := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+		in := &Installer{Dir: t.TempDir()}
+		if err := in.unpackLoader(zr); err == nil {
+			t.Errorf("%s: unpacked", name)
+		}
+		if exists(in.Dir, name) {
+			t.Errorf("%s was written", name)
+		}
 	}
 }
