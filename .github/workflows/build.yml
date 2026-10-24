@@ -107,8 +107,17 @@ jobs:
             Invoke-RestMethod -Method Post -Uri http://127.0.0.1:18457/api/app/update -Headers @{ "X-VES" = "1" } -ContentType "application/json" -Body '{"install":true}' | Out-Null
           }
 
+          function Answers([string]$url) {
+            try { Invoke-WebRequest $url -TimeoutSec 5 | Out-Null; $true } catch { $false }
+          }
+
           $web = Start-Process -FilePath python -ArgumentList "-m", "http.server", "18500", "--bind", "127.0.0.1", "--directory", $site -PassThru
           try {
+            $deadline = (Get-Date).AddSeconds(60)
+            while (-not (Answers "http://127.0.0.1:18500/")) {
+              if ($web.HasExited -or (Get-Date) -gt $deadline) { throw "The stand-in GitHub didn't start." }
+              Start-Sleep -Milliseconds 500
+            }
             Publish $n "dist\ValheimEasyServer.exe"
             Start-Process -FilePath $exe -ArgumentList "--no-window", "--data", $data, "--port", "18457", "--dev-fake-github", "http://127.0.0.1:18500"
             WaitFor { param($s) $s.app.build -eq 1 } "build 1 to start" | Out-Null
