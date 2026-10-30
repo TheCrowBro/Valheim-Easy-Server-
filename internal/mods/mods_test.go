@@ -40,7 +40,15 @@ func TestPrepareInstallsAndSwitches(t *testing.T) {
 	in, fake, _ := setup(t)
 	ctx := context.Background()
 	var steps []string
-	res, err := in.Prepare(ctx, []string{"advancedportals"}, false, func(s string) { steps = append(steps, s) })
+	var done []float64 // how far each download got
+	res, err := in.Prepare(ctx, []string{"advancedportals"}, false, func(s string, pct float64) {
+		if pct < 0 {
+			steps = append(steps, s)
+			done = append(done, 0)
+		} else {
+			done[len(done)-1] = pct
+		}
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,8 +56,8 @@ func TestPrepareInstallsAndSwitches(t *testing.T) {
 	if strings.Join(res.Changed, "|") != strings.Join(want, "|") {
 		t.Fatalf("changed %q, want %q", res.Changed, want)
 	}
-	if len(steps) != 4 {
-		t.Fatalf("steps %q", steps)
+	if len(steps) != 4 || done[1] != 100 || done[2] != 100 || done[3] != 100 {
+		t.Fatalf("steps %q, downloaded %v%%", steps, done)
 	}
 	for _, rel := range [][]string{
 		{"winhttp.dll"}, {"doorstop_config.ini"}, {"BepInEx", "core", "BepInEx.Preloader.dll"},
@@ -243,6 +251,35 @@ func TestPrepareRemovesModsNoLongerOffered(t *testing.T) {
 	}
 	if !exists(in.Dir, "BepInEx", "plugins", "RandyKnapp-AdvancedPortals") || !exists(in.Dir, "BepInEx", "plugins", "ValheimModding-Jotunn") {
 		t.Error("an offered mod or its library was removed")
+	}
+}
+
+// More World Locations keeps its asset bundles in plugins/Bundles and looks
+// for them in its own folder, as the mod managers lay it out.
+func TestPrepareMoreWorldLocations(t *testing.T) {
+	in, _, _ := setup(t)
+	res, err := in.Prepare(context.Background(), []string{"moreworldlocations"}, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Installed BepInEx 5.4.2351.|Installed Jötunn 2.30.2.|Installed YamlDotNet 16.3.1.|Installed Json.NET 13.0.4.|Installed More World Locations 5.2.2."
+	if got := strings.Join(res.Changed, "|"); got != want {
+		t.Fatalf("changed %q", got)
+	}
+	dir := filepath.Join("BepInEx", "plugins", "warpalicious-More_World_Locations_AIO")
+	for _, rel := range [][]string{
+		{dir, "More_World_Locations_AIO.dll"}, {dir, "assetBundleManifest_full"},
+		{dir, "Bundles", "mwl_meadowsbarn1"}, {dir, "Bundles", "cd_entrance2"},
+		{"BepInEx", "plugins", "ValheimModding-JsonDotNET", "Newtonsoft.Json.dll"},
+		{"BepInEx", "plugins", "ValheimModding-YamlDotNet", "YamlDotNet.dll"},
+		{"BepInEx", "plugins", "ValheimModding-Jotunn", "Jotunn.dll"},
+	} {
+		if !exists(in.Dir, rel...) {
+			t.Errorf("%s is missing", filepath.Join(rel...))
+		}
+	}
+	if exists(in.Dir, dir, "plugins") || exists(in.Dir, dir, "CHANGELOG.md") {
+		t.Error("the package wasn't laid out like a mod manager does")
 	}
 }
 

@@ -72,6 +72,10 @@ On the Worlds page, click "Add mods" (or "Change") on a world's card and
 tick the mods to play it with. "Create a new world" has the same list.
   - Riverheim: new landscapes with big continents and long rivers.
     For new worlds only: pick it under "Create a new world".
+  - More World Locations: 190 new places to explore, from ruins and
+    towers to dungeons and traders. Its places come with new worlds,
+    so pick it under "Create a new world" too. It's a big download
+    (about 260 MB), so the first start with it takes a while.
   - Advanced Portals: portals that let metal through.
   - Plant Everything: plant berry bushes, mushrooms and more trees.
   - Heightmap Unlimited: raise and dig the ground as far as you like.

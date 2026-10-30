@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,6 +25,8 @@ const (
 	Gamma     = "shudnal-GammaOfNightLights"
 	Sync      = "shudnal-ConditionalConfigSync"
 	Heightmap = "Digitalroot-Heightmap_Unlimited_JvL"
+	Locations = "warpalicious-More_World_Locations_AIO"
+	JSON      = "ValheimModding-JsonDotNET"
 )
 
 // Fake answers the package and download requests mods.Installer makes.
@@ -39,7 +42,7 @@ type Fake struct {
 func New() *Fake {
 	return &Fake{
 		versions: map[string]string{Loader: "5.4.2351", Jotunn: "2.30.2", Portal: "1.2.0", Yaml: "16.3.1", Seasons: "3.8.4",
-			Rivers: "1.2.1", Plants: "1.21.4", Gamma: "1.0.10", Sync: "1.0.11", Heightmap: "2.0.2"},
+			Rivers: "1.2.1", Plants: "1.21.4", Gamma: "1.0.10", Sync: "1.0.11", Heightmap: "2.0.2", Locations: "5.2.2", JSON: "13.0.4"},
 		extra: map[string]map[string]string{},
 	}
 }
@@ -72,6 +75,8 @@ var deps = map[string][]string{
 	Gamma:     {Loader + "-5.4.2350", Sync + "-1.0.5"},
 	Sync:      {Loader + "-5.4.2350"},
 	Heightmap: {Loader + "-5.4.2350", Jotunn + "-2.30.0"},
+	Locations: {Loader + "-5.4.2351", JSON + "-13.0.4", Yaml + "-16.3.1", Jotunn + "-2.30.2"},
+	JSON:      nil,
 }
 
 func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -94,8 +99,10 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}})
 	case len(parts) == 5 && parts[0] == "package" && parts[1] == "download":
 		name := parts[2] + "-" + parts[3]
+		b := f.zip(name, parts[4])
 		w.Header().Set("Content-Type", "application/zip")
-		w.Write(f.zip(name, parts[4]))
+		w.Header().Set("Content-Length", strconv.Itoa(len(b)))
+		w.Write(b)
 	default:
 		http.NotFound(w, r)
 	}
@@ -135,6 +142,19 @@ func (f *Fake) zip(name, version string) []byte {
 	case Heightmap:
 		files["plugins/Digitalroot.HeightmapUnlimitedJvL.dll"] = "heightmap " + version
 		files["plugins/LICENSE"] = "AGPL"
+	case Locations:
+		// The plugin and its asset bundle manifest at the top, the bundles
+		// in plugins/Bundles: the mod finds them in its own folder.
+		files["More_World_Locations_AIO.dll"] = "locations " + version
+		files["assetBundleManifest_full"] = "manifest"
+		files["plugins/Bundles/mwl_meadowsbarn1"] = "barn"
+		files["plugins/Bundles/cd_entrance2"] = "catacombs"
+		files["CHANGELOG.md"] = "# Changes"
+		files["icon.png"] = "png"
+	case JSON:
+		files["plugins/Newtonsoft.Json.dll"] = "json " + version
+		files["plugins/NewtonsoftJsonDetector.dll"] = "detector " + version
+		files["LICENSE.md"] = "MIT"
 	}
 	for k, v := range f.extra[name] {
 		files[k] = v

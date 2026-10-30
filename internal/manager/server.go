@@ -164,7 +164,7 @@ func (m *Manager) prepareMods(ctx context.Context, j *jobCtl, s config.Settings,
 	if len(ids) > 0 {
 		j.step("Getting the mods ready…", -1)
 	}
-	res, err := in.Prepare(ctx, ids, s.UpdateOnStart, func(msg string) { j.step(msg, -1) })
+	res, err := in.Prepare(ctx, ids, s.UpdateOnStart, j.step)
 	installed := in.Installed()
 	m.mu.Lock()
 	m.modVersions = installed

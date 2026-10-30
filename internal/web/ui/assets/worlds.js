@@ -129,7 +129,8 @@ function modsLine(name, busy) {
 }
 
 // modChecklist is the list of mods to tick, grouped. For an existing world
-// (named in existing), changing a mod that makes the land warns first.
+// (named in existing), changing a mod that makes the land, or adds places
+// when a world is made, warns first.
 function modChecklist(selected, existing) {
   const boxes = [];
   const groups = MOD_GROUPS.map(([group, title]) => {
@@ -138,18 +139,23 @@ function modChecklist(selected, existing) {
     return h('fieldset', { class: 'mod-group' }, h('legend', null, title),
       h('div', { class: 'mod-options' }, list.map((m) => {
         const was = selected.includes(m.id);
-        const warn = h('div', { class: 'callout warn small mod-warn', hidden: true }, icon('alert'), h('div', { class: 'body' }, was
-          ? `“${existing}” won’t load without ${m.name} if it was created with it. Only turn it off if the world was made without it.`
-          : `Only for a world created with ${m.name}, for example in your own game. “${existing}” won’t load with it if it was made without it: to play ${m.name}, create a new world.`));
+        const warns = (m.newWorlds || m.newPlaces) && existing;
+        const text = m.newWorlds
+          ? (was ? `“${existing}” won’t load without ${m.name} if it was created with it. Only turn it off if the world was made without it.`
+            : `Only for a world created with ${m.name}, for example in your own game. “${existing}” won’t load with it if it was made without it: to play ${m.name}, create a new world.`)
+          : (was ? `If “${existing}” was created with ${m.name}, the places it added go missing without it.`
+            : `“${existing}” already exists, so ${m.name} won’t add places to it: they’re added when a world is created. To explore them, create a new world with it.`);
+        const warn = h('div', { class: 'callout warn small mod-warn', hidden: true }, icon('alert'), h('div', { class: 'body' }, text));
         const cb = h('input', { type: 'checkbox', checked: was });
-        if (m.newWorlds && existing) cb.onchange = () => { warn.hidden = cb.checked === was; };
+        if (warns) cb.onchange = () => { warn.hidden = cb.checked === was; };
         boxes.push([m.id, cb]);
         return h('label', { class: 'mod-option', 'data-mod': m.id }, cb,
           h('span', { class: 'grow' },
-            h('span', { class: 'mod-option-name' }, m.name, m.newWorlds ? h('span', { class: 'badge accent' }, 'New worlds') : null),
+            h('span', { class: 'mod-option-name' }, m.name, m.newWorlds ? h('span', { class: 'badge accent' }, 'New worlds') : null,
+              m.newPlaces ? h('span', { class: 'badge' }, 'Best on new worlds') : null),
             h('small', null, m.short),
             h('small', { class: 'mod-option-players' }, PLAYERS_NEED[m.players] || ''),
-            m.newWorlds && existing ? warn : null));
+            warns ? warn : null));
       })));
   });
   return { el: groups, value: () => boxes.filter(([, cb]) => cb.checked).map(([id]) => id) };
@@ -430,7 +436,7 @@ function newWorldModal(app) {
       ...form.el,
       (data.mods || []).length ? h('details', { class: 'where new-world-mods' },
         h('summary', null, 'Mods (optional)'),
-        h('p', { class: 'small text-2' }, 'Tick any mods to play this world with. Players install most of them too. You can change them later, except Riverheim, which makes the land and has to be chosen now.'),
+        h('p', { class: 'small text-2' }, 'Tick any mods to play this world with. Players install most of them too. You can change them later, but choose Riverheim and More World Locations now: Riverheim makes the land, and More World Locations adds its places when the world is made.'),
         modList.el) : null,
       h('label', { class: 'row', style: { gap: '8px', cursor: 'pointer', color: 'var(--text)' } }, now,
         running ? 'Restart the server and switch to it now' : 'Start the server with it now'),

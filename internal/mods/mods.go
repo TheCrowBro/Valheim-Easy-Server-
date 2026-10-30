@@ -37,6 +37,10 @@ type Mod struct {
 	// is created with it and can't be played without it, nor a world made
 	// without it with it.
 	NewWorlds bool `json:"newWorlds,omitempty"`
+	// NewPlaces marks a mod that adds places to explore when a world is
+	// created: a world made before it was turned on doesn't get them, and
+	// the places need it once they're there.
+	NewPlaces bool `json:"newPlaces,omitempty"`
 }
 
 // Groups, for showing the mods in order.
@@ -64,6 +68,17 @@ var Catalog = []Mod{{
 	Group:     GroupWorld,
 	Players:   Required,
 	NewWorlds: true,
+}, {
+	ID:        "moreworldlocations",
+	Package:   "warpalicious-More_World_Locations_AIO",
+	Name:      "More World Locations",
+	Author:    "warpalicious",
+	Short:     "190 new places to explore: ruins, towers, dungeons, traders and more.",
+	Summary:   "Adds 190 new places to explore in every biome: ruins, towers, camps and two new dungeons, with traders and trainers who sell Blacksmith Stones and skill books, shipping ports, shrines and waystones. The places are added when a world is created, so a world made before the mod was turned on doesn't get them.",
+	URL:       "https://thunderstore.io/c/valheim/p/warpalicious/More_World_Locations_AIO/",
+	Group:     GroupWorld,
+	Players:   Required,
+	NewPlaces: true,
 }, {
 	ID:      "advancedportals",
 	Package: "RandyKnapp-AdvancedPortals",
@@ -139,7 +154,7 @@ const (
 	parkedDir  = "plugins-off"          // in BepInEx: packages the next start doesn't use
 	loaderRoot = "BepInExPack_Valheim/" // the pack's files, inside its zip
 	recordFile = "valheim-easy-server.json"
-	maxZip     = 200 << 20
+	maxZip     = 512 << 20 // More World Locations alone is 260 MB
 )
 
 var safeName = regexp.MustCompile(`^[A-Za-z0-9_]+-[A-Za-z0-9_]+$`)
@@ -185,10 +200,11 @@ func (in *Installer) Installed() map[string]string {
 // installs what's missing, updates everything when update is true, and
 // turns the mod loader on. With no ids it turns the loader off again, if
 // this app put it there.
-func (in *Installer) Prepare(ctx context.Context, ids []string, update bool, step func(string)) (Result, error) {
+// step gets what's happening, with how far along it is in percent, or -1.
+func (in *Installer) Prepare(ctx context.Context, ids []string, update bool, step func(msg string, pct float64)) (Result, error) {
 	var res Result
 	if step == nil {
-		step = func(string) {}
+		step = func(string, float64) {}
 	}
 	rec := in.read()
 	if len(ids) == 0 {
@@ -208,7 +224,7 @@ func (in *Installer) Prepare(ctx context.Context, ids []string, update bool, ste
 	if !update && in.complete(rec, want) {
 		return res, in.turnOn(rec, want)
 	}
-	step("Checking the mods on Thunderstore…")
+	step("Checking the mods on Thunderstore…", -1)
 	pkgs, err := in.resolve(ctx, want)
 	if err != nil {
 		if ctx.Err() == nil && in.complete(rec, want) {
@@ -221,8 +237,15 @@ func (in *Installer) Prepare(ctx context.Context, ids []string, update bool, ste
 		if cur, ok := rec.Packages[p.Name]; ok && cur.Version == p.Version {
 			continue
 		}
-		step(fmt.Sprintf("Downloading %s %s…", Title(p.Name), p.Version))
-		if err := in.install(ctx, p); err != nil {
+		msg := fmt.Sprintf("Downloading %s %s…", Title(p.Name), p.Version)
+		step(msg, -1)
+		err := in.install(ctx, p, func(pct int, size int64) {
+			if size >= 10<<20 {
+				msg = fmt.Sprintf("Downloading %s %s (%d MB)…", Title(p.Name), p.Version, (size+1<<19)>>20)
+			}
+			step(msg, float64(pct))
+		})
+		if err != nil {
 			return res, fmt.Errorf("couldn't install %s: %w", Title(p.Name), err)
 		}
 		rec.Packages[p.Name] = installed{Version: p.Version, Deps: p.Deps}
@@ -317,6 +340,8 @@ func Title(name string) string {
 		return "Jötunn"
 	case "shudnal-ConditionalConfigSync":
 		return "Conditional Config Sync"
+	case "ValheimModding-JsonDotNET":
+		return "Json.NET"
 	}
 	if i := strings.LastIndex(name, "-"); i >= 0 {
 		return name[i+1:]
@@ -448,7 +473,7 @@ func (in *Installer) client() *http.Client {
 	if in.Client != nil {
 		return in.Client
 	}
-	return &http.Client{Timeout: 10 * time.Minute}
+	return &http.Client{Timeout: 30 * time.Minute} // big mods on a slow connection
 }
 
 func (in *Installer) get(ctx context.Context, u string) (*http.Response, error) {
@@ -479,8 +504,9 @@ func (in *Installer) getJSON(ctx context.Context, u string, v any) error {
 	return json.NewDecoder(io.LimitReader(res.Body, 4<<20)).Decode(v)
 }
 
-// install downloads a package and unpacks it into the server folder.
-func (in *Installer) install(ctx context.Context, p pkg) error {
+// install downloads a package and unpacks it into the server folder. report
+// gets each whole percent of the download, when its size is known.
+func (in *Installer) install(ctx context.Context, p pkg, report func(pct int, size int64)) error {
 	if u, err := url.Parse(p.URL); err != nil || !strings.HasPrefix(p.URL, in.base()+"/") || u.User != nil {
 		return fmt.Errorf("unexpected download address %q", p.URL)
 	}
@@ -495,7 +521,8 @@ func (in *Installer) install(ctx context.Context, p pkg) error {
 	}
 	defer os.Remove(tmp.Name())
 	defer tmp.Close()
-	n, err := io.Copy(tmp, io.LimitReader(res.Body, maxZip+1))
+	pr := &progress{size: res.ContentLength, report: report}
+	n, err := io.Copy(tmp, io.TeeReader(io.LimitReader(res.Body, maxZip+1), pr))
 	if err != nil {
 		return fmt.Errorf("the download broke off: %v", err)
 	}
@@ -510,6 +537,24 @@ func (in *Installer) install(ctx context.Context, p pkg) error {
 		return in.unpackLoader(zr)
 	}
 	return in.unpackPlugin(zr, p.Name)
+}
+
+// progress counts a download's bytes.
+type progress struct {
+	done, size int64
+	last       int
+	report     func(pct int, size int64)
+}
+
+func (p *progress) Write(b []byte) (int, error) {
+	p.done += int64(len(b))
+	if p.size > 0 {
+		if pct := int(min(p.done*100/p.size, 100)); pct != p.last {
+			p.last = pct
+			p.report(pct, p.size)
+		}
+	}
+	return len(b), nil
 }
 
 // unpackLoader puts the BepInEx pack into the server folder, keeping an
