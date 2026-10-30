@@ -149,7 +149,7 @@ func argsKey(s config.Settings, saveDir string) string {
 		return ""
 	}
 	key := strings.Join(args, "\x00")
-	if ids := s.WorldMods(); len(ids) > 0 {
+	if ids := mods.ServerMods(s.WorldMods()); len(ids) > 0 { // players' own mods need no restart
 		key += "\x00mods\x00" + strings.Join(slices.Sorted(slices.Values(ids)), "\x00")
 	}
 	sum := sha256.Sum256([]byte(key))
@@ -161,7 +161,7 @@ func argsKey(s config.Settings, saveDir string) string {
 func (m *Manager) prepareMods(ctx context.Context, j *jobCtl, s config.Settings, p config.Paths) error {
 	in := &mods.Installer{Dir: p.Server, URL: m.opt.ModsURL}
 	ids := s.WorldMods()
-	if len(ids) > 0 {
+	if len(mods.ServerMods(ids)) > 0 {
 		j.step("Getting the mods ready…", -1)
 	}
 	res, err := in.Prepare(ctx, ids, s.UpdateOnStart, j.step)
@@ -241,7 +241,7 @@ func (m *Manager) doStart(ctx context.Context, j *jobCtl) error {
 		return err
 	}
 	env := append(os.Environ(), "SteamAppId=892970")
-	env = append(env, mods.Env(p.Server, len(s.WorldMods()) > 0)...)
+	env = append(env, mods.Env(p.Server, len(mods.ServerMods(s.WorldMods())) > 0)...)
 	j.step("Starting the Valheim server…", -1)
 	proc, err := platform.StartDetached(p.ServerExe, args, p.Server, env)
 	if err != nil {

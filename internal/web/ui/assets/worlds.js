@@ -35,6 +35,7 @@ const MOD_GROUPS = [['world', 'How the land is made'], ['play', 'Gameplay'], ['l
 const PLAYERS_NEED = {
   required: 'Players need it to join',
   recommended: 'Players can join without it, but should have it',
+  players: 'Only for players’ own games: the server doesn’t use it',
 };
 
 const MODIFIERS = {
@@ -167,6 +168,7 @@ function modsModal(app, name) {
   const existing = data.worlds.some((w) => w.name === name);
   const list = modChecklist(before, existing ? name : '');
   const running = data.running === name;
+  const forServer = (ids) => ids.filter((id) => { const m = data.mods.find((x) => x.id === id); return m && m.players !== 'players'; }).sort().join();
   openModal({
     title: `Mods for “${name}”`,
     wide: true,
@@ -178,7 +180,7 @@ function modsModal(app, name) {
       label: 'Save', kind: 'primary', icon: 'check', onClick: async () => {
         const ids = list.value();
         await api('/api/worlds/mods', { method: 'POST', body: { name, mods: ids } });
-        const restart = running && [...ids].sort().join() !== [...before].sort().join();
+        const restart = running && forServer(ids) !== forServer(before);
         toast(`Mods for “${name}” saved.${restart ? ' Restart the server to use them.' : ''}`, 'good');
         await load(true);
         app.render();

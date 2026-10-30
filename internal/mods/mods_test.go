@@ -283,6 +283,26 @@ func TestPrepareMoreWorldLocations(t *testing.T) {
 	}
 }
 
+// Mods just for players' own games stay off the server.
+func TestPlayersOnly(t *testing.T) {
+	if got := strings.Join(ServerMods([]string{"farlands", "seasonality", "gone"}), ","); got != "seasonality" {
+		t.Fatalf("ServerMods = %q", got)
+	}
+	in, fake, _ := setup(t)
+	ctx := context.Background()
+	if _, err := in.Prepare(ctx, []string{"seasonality"}, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	before := fake.Requests.Load()
+	res, err := in.Prepare(ctx, []string{"farlands"}, true, nil)
+	if err != nil || len(res.Changed) != 0 || fake.Requests.Load() != before {
+		t.Fatalf("a players' mod was fetched: %v %+v", err, res)
+	}
+	if exists(in.Dir, "winhttp.dll") || !exists(in.Dir, "winhttp.dll.off") {
+		t.Error("the mod loader is still on for a world with only a players' mod")
+	}
+}
+
 func TestCatalog(t *testing.T) {
 	ids := map[string]bool{}
 	for _, m := range Catalog {
@@ -291,7 +311,7 @@ func TestCatalog(t *testing.T) {
 			t.Errorf("bad catalog entry %+v", m)
 		}
 		ids[m.ID] = true
-		if m.Group != GroupWorld && m.Group != GroupPlay && m.Group != GroupLook || m.Players != Required && m.Players != Recommended {
+		if m.Group != GroupWorld && m.Group != GroupPlay && m.Group != GroupLook || m.Players != Required && m.Players != Recommended && m.Players != PlayersOnly {
 			t.Errorf("%s: group %q, players %q", m.ID, m.Group, m.Players)
 		}
 	}

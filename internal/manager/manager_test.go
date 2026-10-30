@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"valheim-easy-server/internal/config"
+	"valheim-easy-server/internal/mods"
 	"valheim-easy-server/internal/mods/modstest"
 	"valheim-easy-server/internal/steamcmd"
 	"valheim-easy-server/internal/worlds"
@@ -319,6 +320,30 @@ func TestModsAtStart(t *testing.T) {
 		t.Fatal("the world's mods weren't the only ones switched on")
 	}
 	if st := m.Status(); len(st.Mods) != 1 || st.Mods[0].Name != "Seasonality" || st.Mods[0].Version != "3.8.4" {
+		t.Fatalf("status mods = %+v", st.Mods)
+	}
+
+	// A mod just for players' own games needs no restart, and the server
+	// never downloads it (the stand-in Thunderstore doesn't have it).
+	if err := m.SetWorldMods(world, []string{"seasonality", "farlands"}); err != nil {
+		t.Fatal(err)
+	}
+	if m.Status().NeedsRestart {
+		t.Fatal("a mod only players use asked for a restart")
+	}
+	if err := m.SetWorldMods(world, []string{"farlands"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.RestartServer(); err != nil {
+		t.Fatal(err)
+	}
+	if job := waitJob(t, m, currentJobID(m)); job.Error != "" {
+		t.Fatalf("restart with only FarLands: %s", job.Error)
+	}
+	if exists("winhttp.dll") || exists("BepInEx", "plugins", "Ivvty-FarLands") {
+		t.Fatal("the server loads mods for a world with only a players' mod")
+	}
+	if st := m.Status(); len(st.Mods) != 1 || st.Mods[0].Name != "FarLands" || st.Mods[0].Players != mods.PlayersOnly {
 		t.Fatalf("status mods = %+v", st.Mods)
 	}
 }

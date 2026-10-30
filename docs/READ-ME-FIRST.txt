@@ -81,6 +81,9 @@ tick the mods to play it with. "Create a new world" has the same list.
   - Heightmap Unlimited: raise and dig the ground as far as you like.
   - Seasonality: winter, spring, summer and fall.
   - Gamma of Night Lights: darker nights with real moonlight.
+  - FarLands: see mountains, coasts and forests all the way to the
+    horizon. It only changes each player's own view, so the server
+    doesn't use it: players add it if they like.
 The app downloads a world's mods the next time the server starts it, and
 with "Update the server before it starts" on, it keeps them up to date.
 

@@ -32,7 +32,7 @@ type Mod struct {
 	Summary string `json:"summary"`
 	URL     string `json:"url"`     // its Thunderstore page, where players get it
 	Group   string `json:"group"`   // GroupWorld, GroupPlay or GroupLook
-	Players string `json:"players"` // what players need: Required or Recommended
+	Players string `json:"players"` // what players need: Required, Recommended or PlayersOnly
 	// NewWorlds marks a mod that changes how the land is generated: a world
 	// is created with it and can't be played without it, nor a world made
 	// without it with it.
@@ -54,6 +54,7 @@ const (
 const (
 	Required    = "required"    // the server turns away players without it
 	Recommended = "recommended" // players can join without it but miss what it does
+	PlayersOnly = "players"     // it only changes players' own games; the server doesn't use it
 )
 
 // Catalog lists the mods the app offers, in the order they're shown.
@@ -129,7 +130,28 @@ var Catalog = []Mod{{
 	URL:     "https://thunderstore.io/c/valheim/p/shudnal/GammaOfNightLights/",
 	Group:   GroupLook,
 	Players: Recommended,
+}, {
+	ID:      "farlands",
+	Package: "Ivvty-FarLands",
+	Name:    "FarLands",
+	Author:  "Ivvty",
+	Short:   "See mountains, coasts and forests all the way to the horizon.",
+	Summary: "Draws the land far beyond where Valheim normally stops: distant mountains, coasts and forests made from the world's own heights, colors, trees and rocks, with clearer air and long shadows. It only changes what each player sees in their own game, so the server doesn't need it and players can join with or without it.",
+	URL:     "https://thunderstore.io/c/valheim/p/Ivvty/FarLands/",
+	Group:   GroupLook,
+	Players: PlayersOnly,
 }}
+
+// ServerMods are the mods in ids that the server itself runs.
+func ServerMods(ids []string) []string {
+	var out []string
+	for _, id := range ids {
+		if m, ok := Find(id); ok && m.Players != PlayersOnly {
+			out = append(out, id)
+		}
+	}
+	return out
+}
 
 // Find returns the catalog entry for id.
 func Find(id string) (Mod, bool) {
@@ -198,8 +220,8 @@ func (in *Installer) Installed() map[string]string {
 
 // Prepare gets the server folder ready to start with the mods in ids. It
 // installs what's missing, updates everything when update is true, and
-// turns the mod loader on. With no ids it turns the loader off again, if
-// this app put it there.
+// turns the mod loader on. With no ids, or only mods for players' own
+// games, it turns the loader off again, if this app put it there.
 // step gets what's happening, with how far along it is in percent, or -1.
 func (in *Installer) Prepare(ctx context.Context, ids []string, update bool, step func(msg string, pct float64)) (Result, error) {
 	var res Result
@@ -207,19 +229,21 @@ func (in *Installer) Prepare(ctx context.Context, ids []string, update bool, ste
 		step = func(string, float64) {}
 	}
 	rec := in.read()
-	if len(ids) == 0 {
-		if len(rec.Packages) == 0 {
-			return res, nil // a loader installed by hand is left alone
-		}
-		return res, in.switchLoader(false)
-	}
 	want := []string{Loader}
 	for _, id := range ids {
 		m, ok := Find(id)
 		if !ok {
 			return res, fmt.Errorf("unknown mod %q", id)
 		}
-		want = append(want, m.Package)
+		if m.Players != PlayersOnly { // the others are for players' own games
+			want = append(want, m.Package)
+		}
+	}
+	if len(want) == 1 {
+		if len(rec.Packages) == 0 {
+			return res, nil // a loader installed by hand is left alone
+		}
+		return res, in.switchLoader(false)
 	}
 	if !update && in.complete(rec, want) {
 		return res, in.turnOn(rec, want)

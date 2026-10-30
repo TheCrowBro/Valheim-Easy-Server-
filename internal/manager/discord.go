@@ -74,7 +74,11 @@ func (m *Manager) announceLocked(run *serverRun) (p discordPost, ok bool) {
 		msg.Password = s.Password
 	}
 	for _, id := range s.WorldOptions[run.info.World].Mods {
-		if md, ok := mods.Find(id); ok {
+		md, ok := mods.Find(id)
+		switch {
+		case ok && md.Players == mods.PlayersOnly:
+			msg.Optional = append(msg.Optional, ModInfo{Mod: md})
+		case ok:
 			msg.Mods = append(msg.Mods, ModInfo{Mod: md, Version: m.modVersions[md.Package]})
 		}
 	}
@@ -136,7 +140,8 @@ type onlineMessage struct {
 	Address       string // internet address, when there's no join code
 	Password      string // empty to leave it out
 	Mods          []ModInfo
-	Reminder      []string // what players need to do first, such as "update Valheim to 1.0.21"
+	Optional      []ModInfo // just for players' own games
+	Reminder      []string  // what players need to do first, such as "update Valheim to 1.0.21"
 }
 
 func (o onlineMessage) text() string {
@@ -171,6 +176,13 @@ func (o onlineMessage) text() string {
 			them = "the mods"
 		}
 		hint += fmt.Sprintf(" Install %s first with the Gale or r2modman mod manager.", them)
+	}
+	if len(o.Optional) > 0 {
+		list := make([]string, 0, len(o.Optional))
+		for _, md := range o.Optional {
+			list = append(list, fmt.Sprintf("[%s](%s)", md.Name, md.URL))
+		}
+		fmt.Fprintf(&b, "Optional, just for your own game: %s\n", strings.Join(list, ", "))
 	}
 	if len(o.Reminder) > 0 {
 		fmt.Fprintf(&b, "📢 **Before you join:** %s.\n", strings.Join(o.Reminder, ", "))

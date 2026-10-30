@@ -35,7 +35,7 @@ func (m *Manager) startedWith(s config.Settings) played {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	p := played{Mods: map[string]string{}, Password: hashPassword(s.Password)}
-	for _, id := range s.WorldMods() {
+	for _, id := range mods.ServerMods(s.WorldMods()) { // players' own mods are up to them
 		if md, ok := mods.Find(id); ok {
 			p.Mods[id] = m.modVersions[md.Package]
 		}
@@ -48,7 +48,7 @@ func (m *Manager) playingLocked(run *serverRun) played {
 	p := run.info.Played
 	if p.Mods == nil { // started by an older version of the app
 		p = played{Mods: map[string]string{}, Password: hashPassword(m.settings.Password)}
-		for _, id := range m.settings.WorldOptions[run.info.World].Mods {
+		for _, id := range mods.ServerMods(m.settings.WorldOptions[run.info.World].Mods) {
 			if md, ok := mods.Find(id); ok {
 				p.Mods[id] = m.modVersions[md.Package]
 			}

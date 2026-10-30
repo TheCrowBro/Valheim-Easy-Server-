@@ -218,6 +218,13 @@ func TestDiscordMessages(t *testing.T) {
 	if got := o.text(); got != want {
 		t.Errorf("online message:\n%s\nwant:\n%s", got, want)
 	}
+	// A mod just for players' own games is offered, not asked for.
+	far, _ := mods.Find("farlands")
+	o = onlineMessage{Server: "S", World: "W", Code: "123456", Optional: []ModInfo{{Mod: far}}}
+	if got := o.text(); !strings.Contains(got, "Optional, just for your own game: [FarLands]("+far.URL+")\n") ||
+		strings.Contains(got, "Install") || strings.Contains(got, "Mods:") {
+		t.Errorf("message with an optional mod:\n%s", got)
+	}
 	o = onlineMessage{Server: "S", World: "W", Address: "203.0.113.5:2456"}
 	if got := o.text(); !strings.Contains(got, "Address: **203.0.113.5:2456**") || strings.Contains(got, "Password") ||
 		!strings.Contains(got, "add the server by its address") {

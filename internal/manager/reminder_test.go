@@ -69,7 +69,7 @@ func TestRemindersAfterUpdates(t *testing.T) {
 	if err := m.UpdateSettings(s); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.SetWorldMods(world, []string{"advancedportals", "seasonality"}); err != nil {
+	if err := m.SetWorldMods(world, []string{"advancedportals", "seasonality", "farlands"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := m.RestartServer(); err != nil {
@@ -78,8 +78,12 @@ func TestRemindersAfterUpdates(t *testing.T) {
 	if job := waitJob(t, m, currentJobID(m)); job.Error != "" {
 		t.Fatalf("restart: %s", job.Error)
 	}
+	// FarLands is up to each player, so it's mentioned but not asked for.
 	want := "update Valheim to 1.0.21, update Advanced Portals to 1.2.1, install Seasonality, use the new password"
 	chat.wait(t, "📢 **Before you join:** "+want+".", 1)
+	if chat.count("Optional, just for your own game: [FarLands](") != 1 {
+		t.Fatalf("FarLands isn't offered in the post: %q", chat.all())
+	}
 	waitFor(t, "the reminder on the Home page", 10*time.Second, func() bool {
 		return strings.Join(m.Status().Reminder, ", ") == want
 	})

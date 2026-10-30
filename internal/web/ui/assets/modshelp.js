@@ -10,6 +10,7 @@ const R2MODMAN = 'https://thunderstore.io/c/valheim/p/ebkr/r2modman/';
 const NEED = {
   required: ['warn', 'Needed to join'],
   recommended: ['', 'Recommended'],
+  players: ['accent', 'Just for your game'],
 };
 
 // address shows a web address people can read off the screen (through an
@@ -33,14 +34,19 @@ export function openModsHelp(list) {
   const it = many ? 'them' : 'it';
   const newWorlds = list.filter((m) => m.newWorlds);
   const optional = list.filter((m) => m.players !== 'required');
+  const yours = list.filter((m) => m.players === 'players'); // just for players' own games
+  const needed = list.filter((m) => m.players !== 'players');
+  const extras = !needed.length;
   openModal({
-    title: many ? 'The mods you need to play' : 'The mod you need to play',
+    title: extras ? `${many ? 'Mods' : 'A mod'} for your own game` : many ? 'The mods you need to play' : 'The mod you need to play',
     wide: true,
     body: [
-      h('p', null, `This world uses ${many ? `${list.length} mods` : 'a mod'}, so everyone who plays installs ${it} once in their own Valheim. `,
+      extras ? h('p', null, `${many ? 'These mods change' : 'This mod changes'} what you see in your own game. ${many ? 'They’re' : 'It’s'} optional: the server doesn’t need ${it}, and you can join with or without ${it}.`)
+        : h('p', null, `This world uses ${needed.length > 1 ? `${needed.length} mods` : 'a mod'}, so everyone who plays installs ${needed.length > 1 ? 'them' : 'it'} once in their own Valheim. `,
         optional.length && optional.length < list.length ? 'You can’t join without the ones marked ' : '',
         optional.length && optional.length < list.length ? h('b', null, 'Needed to join') : '',
         optional.length && optional.length < list.length ? '. ' : '',
+        yours.length ? `${names(yours)} ${yours.length > 1 ? 'are' : 'is'} optional, just for your own game. ` : '',
         'Xbox, PlayStation, Switch and Game Pass players can’t use mods.'),
       list.map((m) => {
         const [tone, need] = NEED[m.players] || NEED.required;
@@ -61,7 +67,7 @@ export function openModsHelp(list) {
           ' and install it. Anything else it needs, such as BepInEx, comes with it.'),
         h('li', null, 'Start Valheim from the mod manager (', h('b', null, 'Launch game'), ' in Gale, ', h('b', null, 'Start modded'), ' in r2modman) and join as usual.')),
       newWorlds.length ? h('p', { class: 'small text-2' }, `Play other worlds with a different profile: with ${names(newWorlds)} on, worlds made without it won’t load.`) : null,
-      h('p', { class: 'small muted' }, 'If joining fails because the versions don’t match, update the mods in the mod manager.'),
+      extras ? null : h('p', { class: 'small muted' }, 'If joining fails because the versions don’t match, update the mods in the mod manager.'),
     ],
     actions: [{ label: 'Close', kind: 'primary' }],
   });

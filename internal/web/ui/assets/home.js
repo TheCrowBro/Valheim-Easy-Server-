@@ -185,14 +185,21 @@ function discordLine(st) {
 // modsNotice says the world needs mods; its button opens the pop-up with
 // which ones and where to download them.
 function modsNotice(mods) {
+  const named = (list) => (list.length > 3 ? `${list.length} mods`
+    : `the ${list.map((m) => m.name).join(list.length > 2 ? ', ' : ' and ').replace(/, ([^,]*)$/, ' and $1')} mod${list.length > 1 ? 's' : ''}`);
+  const server = mods.filter((m) => m.players !== 'players');
+  const extras = mods.filter((m) => m.players === 'players'); // just for players' own games
   const many = mods.length > 1;
-  const what = mods.length > 3 ? `${mods.length} mods`
-    : `the ${mods.map((m) => m.name).join(mods.length > 2 ? ', ' : ' and ').replace(/, ([^,]*)$/, ' and $1')} mod${many ? 's' : ''}`;
+  const optional = extras.length > 1 ? 'They’re optional' : 'It’s optional';
+  const text = server.length
+    ? [h('strong', null, `This world is played with ${named(server)}. `), `Players install ${server.length > 1 ? 'them' : 'it'} once on their own PC.`,
+      extras.length ? ` ${extras.map((m) => m.name).join(' and ')} ${extras.length > 1 ? 'are' : 'is'} optional, just for their own game.` : '']
+    : [h('strong', null, `Players can add ${named(extras)} to their own game. `), `${optional}: the server doesn’t need ${many ? 'them' : 'it'}.`];
   return h('div', { class: 'callout info mods-help' }, icon('info'), h('div', { class: 'body small' },
-    h('p', null, h('strong', null, `This world is played with ${what}. `),
-      `Players install ${many ? 'them' : 'it'} once on their own PC.`),
+    h('p', null, text),
     h('div', { class: 'actions' },
-      h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'mods-help' }, icon('help'), many ? 'Which mods do I need?' : 'Which mod do I need?'))));
+      h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'mods-help' }, icon('help'),
+        !server.length ? (many ? 'About these mods' : 'About this mod') : many ? 'Which mods do I need?' : 'Which mod do I need?'))));
 }
 
 function playersCard(app) {
