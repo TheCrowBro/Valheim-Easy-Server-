@@ -79,7 +79,7 @@ Each time the server is online, the channel gets a message like this:
 > <sub>In Valheim, go to Join Game and join by code. Install the mod first with the Gale or r2modman mod manager.</sub>
 
 - **Before you join** appears when something changed since your friends last played: a newer Valheim, an updated mod, a mod added to or dropped from the world, or a new password. It says what to do, and stays until someone has joined since.
-- **Include the password** adds the password, hidden as a spoiler until it's clicked. Only turn it on if the channel is just for your friends.
+- **Include the password** adds the password, hidden as a spoiler until it's clicked. Turning it on while the server is online posts the message again, with the password. Only turn it on if the channel is just for your friends.
 - **Also post when the server stops** (on by default) says when the server stops, restarts, crashes or the computer goes to rest, so nobody tries a code that no longer works.
 - **Post who died the most each day** (on by default) ends the day with a message like this, at 23:59, if anyone played that day:
 

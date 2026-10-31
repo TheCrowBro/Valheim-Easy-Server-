@@ -84,7 +84,7 @@ function discordSection() {
         h('p', { class: 'small muted' },
           'Only people who manage the Discord server see Integrations: if you don’t, ask its owner for the link. Through the IP KVM, use its paste feature, or open Discord in a browser on this computer and copy the link there.')),
       switchRow('discordPassword', 'Include the password',
-        'Hidden as a spoiler until it’s clicked. Only turn this on if the channel is just for your friends.'),
+        'Hidden as a spoiler until it’s clicked. Turning it on while the server is online posts the message again with it. Only turn this on if the channel is just for your friends.'),
       switchRow('discordStopped', 'Also post when the server stops',
         'So nobody tries a join code that no longer works.'),
       switchRow('discordDaily', 'Post who died the most each day',

@@ -39,7 +39,9 @@ func (m *Manager) UpdateSettings(in config.Settings) error {
 		return err
 	}
 	// Turned on, or moved to another channel: post the join code there now.
-	if run := m.run; run != nil && next.Discord && (!cur.Discord || next.DiscordWebhook != cur.DiscordWebhook) {
+	// Likewise when the password is to be included, so friends get it.
+	if run := m.run; run != nil && next.Discord && (!cur.Discord || next.DiscordWebhook != cur.DiscordWebhook ||
+		next.DiscordPassword && !cur.DiscordPassword) {
 		run.info.Announced = ""
 		if post, ok := m.announceLocked(run); ok {
 			m.queueDiscord(post)

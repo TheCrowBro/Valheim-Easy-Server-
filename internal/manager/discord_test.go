@@ -161,6 +161,40 @@ func TestDiscordPostsJoinCode(t *testing.T) {
 	}
 }
 
+// Turning on "Include the password" while the server is online posts again,
+// so friends get the password; turning it off doesn't.
+func TestDiscordPasswordTurnedOnLater(t *testing.T) {
+	fake := newFakeDiscord(t)
+	env := setup(t)
+	m := env.m
+	m.opt.DiscordURL = fake.URL
+	install(t, m)
+	turnOnDiscord(t, m)
+	s := m.Settings()
+	s.DiscordPassword = false
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	code := startOnline(t, m)
+	fake.wait(t, "Join code: **"+code+"**", 1)
+	if fake.count("Password:") != 0 {
+		t.Fatalf("the password was posted: %q", fake.all())
+	}
+	s.DiscordPassword = true
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	fake.wait(t, "Password: ||", 1)
+	s.DiscordPassword = false
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "Discord posts to go out", 20*time.Second, func() bool { return m.discordPending.Load() == 0 })
+	if n := fake.count("is online"); n != 2 {
+		t.Fatalf("posted online %d times: %q", n, fake.all())
+	}
+}
+
 func TestDiscordAfterTakeoverAndRest(t *testing.T) {
 	fake := newFakeDiscord(t)
 	env := setup(t)
