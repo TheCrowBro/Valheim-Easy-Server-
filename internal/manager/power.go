@@ -143,6 +143,7 @@ func (m *Manager) sampleLoop() {
 				m.onWake(gap)
 				continue
 			}
+			m.updateAwake()
 			m.sample(now, gap)
 			m.checkIdle(now)
 			if now.Sub(saved) > 5*time.Minute {
@@ -205,16 +206,27 @@ func clamp(v float64) float64 {
 	return v
 }
 
+// wakeGrace is how long the computer stays awake after waking up, so
+// friends have time to join. Windows itself goes back to sleep about two
+// minutes after an unattended wake (such as Wake-on-LAN) unless asked not to.
+var wakeGrace = 15 * time.Minute
+
 // onWake runs after the computer comes back from sleep or hibernation.
 func (m *Manager) onWake(gap time.Duration) {
 	m.mu.Lock()
-	m.idleSince = time.Now()
+	now := time.Now()
+	m.idleSince = now
+	m.wakeHold = now.Add(wakeGrace)
+	if m.keepAwakeUntil.Before(m.wakeHold) {
+		m.keepAwakeUntil = m.wakeHold
+	}
 	resume := m.resumeOnWake && m.settings.StartAfterWake && m.run == nil
 	m.resumeOnWake = false
 	m.net.publicAt = time.Time{} // the address may have changed
 	m.mu.Unlock()
+	m.updateAwake()
 	m.log.Printf("woke up after %s", gap.Round(time.Second))
-	m.addActivity("wake", "", "The computer woke up.")
+	m.addActivity("wake", "", fmt.Sprintf("The computer woke up. It stays awake for at least %d minutes, so friends have time to join.", int(wakeGrace.Minutes())))
 	if resume {
 		m.addActivity("info", "", "Starting the server again in 20 seconds (it was running before the computer went to sleep).")
 		time.AfterFunc(20*time.Second, func() {
@@ -227,6 +239,26 @@ func (m *Manager) onWake(gap time.Duration) {
 		})
 	}
 	m.notify()
+}
+
+// wantAwakeLocked reports whether Windows should be kept from sleeping:
+// while the server runs, for a while after waking up, and while a job
+// (other than resting) is in progress, such as starting the server.
+func (m *Manager) wantAwakeLocked(now time.Time) bool {
+	job := m.job != nil && m.job.Finished == nil && m.job.Kind != "hibernate"
+	return m.run != nil || now.Before(m.wakeHold) || job
+}
+
+// updateAwake asks Windows to stay awake, or stops asking, as needed. It
+// doesn't stop the computer being put to rest on purpose.
+func (m *Manager) updateAwake() {
+	if m.awake == nil {
+		return // not started
+	}
+	m.mu.Lock()
+	want := m.wantAwakeLocked(time.Now())
+	m.mu.Unlock()
+	m.awake.Set(want)
 }
 
 // idleDeadlineLocked is when automatic hibernation will happen, or zero.

@@ -100,6 +100,7 @@ type Manager struct {
 	localCands     []worlds.Candidate
 	idleSince      time.Time
 	keepAwakeUntil time.Time
+	wakeHold       time.Time // after waking up, Windows is kept awake until then
 	resumeOnWake   bool
 	net            netInfo
 	checks         checkCache

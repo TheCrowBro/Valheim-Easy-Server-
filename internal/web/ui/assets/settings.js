@@ -101,7 +101,7 @@ function automationSection() {
     switchRow('startAfterWake', 'Start the server again after the computer wakes up',
       'If the server was running when the computer went to rest, it starts again by itself when someone wakes the computer.'),
     switchRow('idleHibernate', draft.restMode === 'sleep' ? 'Sleep when nobody is playing' : 'Hibernate when nobody is playing',
-      'Saves power. Wake the computer with Wake-on-LAN (for example from the IP KVM) or its power button.', {
+      'Saves power. Wake the computer with Wake-on-LAN (for example from the IP KVM) or its power button. After waking up, it stays awake for at least 15 minutes.', {
       extra: draft.idleHibernate ? h('div', { class: 'row', style: { marginTop: '8px' } }, 'After',
         h('input', { class: `input${errors.idleMinutes ? ' invalid' : ''}`, type: 'number', min: 10, max: 1440, 'data-field': 'idleMinutes', value: draft.idleMinutes, style: { width: '96px' }, 'aria-label': 'Minutes' }),
         'minutes without players') : null,

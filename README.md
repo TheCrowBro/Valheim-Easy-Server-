@@ -151,6 +151,8 @@ How it works:
 
 **Hibernate** (top right on every page, or the tray menu) saves the world, stops the server and hibernates the computer, which then uses no power. If the server was running before, it starts again by itself about 20 seconds after the computer wakes up. The app always asks first.
 
+After waking up, the computer stays awake for at least 15 minutes, so friends have time to join, even if nobody touches it. (Left to itself, Windows goes back to sleep about two minutes after a Wake-on-LAN wake.) The app also keeps Windows awake while the server runs and while it's busy with something such as starting or updating the server.
+
 **Waking it with Wake-on-LAN** (for example from an IP KVM):
 
 1. Connect the computer to the router with an Ethernet cable. Wake-on-LAN doesn't work over Wi-Fi.

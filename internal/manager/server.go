@@ -379,7 +379,7 @@ func (m *Manager) attach(proc *platform.Proc, info runInfo, adopted bool) *serve
 	runtimePath := m.dataFile("runtime.json")
 	m.mu.Unlock()
 	saveRuntime(runtimePath, info)
-	m.awake.Set(true)
+	m.updateAwake()
 	m.go_(func() { m.tail(ctx, run) })
 	go func() {
 		defer m.recoverPanic()
@@ -508,7 +508,7 @@ func (m *Manager) onExit(run *serverRun, code int) {
 
 	run.proc.Close()
 	os.Remove(runtimePath)
-	m.awake.Set(false)
+	m.updateAwake() // still awake if it has just woken up
 	if expected {
 		m.addActivity("stopped", "", "The server stopped.")
 	} else {

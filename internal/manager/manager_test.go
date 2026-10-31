@@ -440,6 +440,44 @@ func TestHibernateStopsServerFirst(t *testing.T) {
 	}
 }
 
+// After waking up, the computer stays awake for a while even with nobody
+// on and the shortest idle time: friends need time to join.
+func TestWakeKeepsAwake(t *testing.T) {
+	env := setup(t)
+	m := env.m
+	s := m.Settings()
+	s.IdleHibernate, s.IdleMinutes = true, 10
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	m.onWake(8 * time.Hour)
+	now := time.Now()
+	m.mu.Lock()
+	deadline := m.idleDeadlineLocked()
+	awake, later := m.wantAwakeLocked(now), m.wantAwakeLocked(now.Add(wakeGrace+time.Minute))
+	m.mu.Unlock()
+	if deadline.Before(now.Add(wakeGrace - time.Second)) {
+		t.Fatalf("rests %s after waking", deadline.Sub(now).Round(time.Second))
+	}
+	if !awake || later {
+		t.Fatalf("Windows kept awake: %v now, %v after %s", awake, later, wakeGrace)
+	}
+	if !hasText(m, "wake", "The computer woke up. It stays awake for at least 15 minutes") {
+		t.Fatal("no activity about staying awake")
+	}
+	// A job in progress keeps it awake too, unless it's going to rest.
+	m.mu.Lock()
+	m.job = &Job{Kind: "install"}
+	busy := m.wantAwakeLocked(now.Add(wakeGrace + time.Minute))
+	m.job.Kind = "hibernate"
+	resting := m.wantAwakeLocked(now.Add(wakeGrace + time.Minute))
+	m.job = nil
+	m.mu.Unlock()
+	if !busy || resting {
+		t.Fatalf("awake for a job %v, while resting %v", busy, resting)
+	}
+}
+
 func TestSleepInsteadOfHibernate(t *testing.T) {
 	env := setup(t)
 	m := env.m
