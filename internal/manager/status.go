@@ -64,7 +64,15 @@ type JoinInfo struct {
 	Port       int      `json:"port"`
 	Password   string   `json:"password"`
 	Public     bool     `json:"public"`
+	// Problem says why there's no join code: "crossplay" when crossplay
+	// couldn't start, "late" when none came a few minutes after the server
+	// was ready.
+	Problem string `json:"problem,omitempty"`
 }
+
+// codeWait is how long the server normally takes to get its join code once
+// it's ready, with time to spare.
+var codeWait = 3 * time.Minute
 
 // IdleInfo describes upcoming automatic hibernation.
 type IdleInfo struct {
@@ -164,6 +172,14 @@ func (m *Manager) Status() Status {
 		}
 		st.Join.Code = r.tracker.JoinCode
 		st.Join.PublicAddr = r.tracker.PublicAddr
+		if r.ready && !r.info.NoCrossplay && r.tracker.JoinCode == "" {
+			switch {
+			case r.tracker.CrossplayFailed:
+				st.Join.Problem = "crossplay"
+			case time.Since(r.readyAt) > codeWait:
+				st.Join.Problem = "late"
+			}
+		}
 		st.Reminder = m.reminderLocked(r)
 		if s.Discord {
 			st.Discord = &DiscordInfo{Error: r.discordErr}

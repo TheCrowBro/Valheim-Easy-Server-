@@ -29,6 +29,7 @@ const (
 	WorldLoadFailed
 	BadPasswordConfig
 	Shutdown
+	CrossplayFailed // Windows couldn't load Valheim's crossplay library
 )
 
 // Event is one parsed log line.
@@ -135,6 +136,9 @@ func Parse(line string) Event {
 	switch {
 	case strings.HasPrefix(text, "Game server connected"):
 		ev.Kind = ServerReady
+	case strings.HasPrefix(text, "DllNotFoundException: Party"),
+		strings.HasPrefix(text, "DLL Not Found: This error usually occurs when you do not have the correct dependencies installed, and will prevent crossplay"):
+		ev.Kind = CrossplayFailed
 	case strings.HasPrefix(text, "Session \""), strings.HasPrefix(text, "New session server \""):
 		if m := reJoinActive.FindStringSubmatch(text); m != nil {
 			ev.Kind, ev.Session, ev.Code, ev.Addr, ev.Count = JoinCode, m[1], m[2], m[3], atoi(m[4])

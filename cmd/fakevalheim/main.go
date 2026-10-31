@@ -12,6 +12,9 @@
 //	FAKE_VALHEIM_SPEED=60     run save and backup timers this many times faster
 //	FAKE_VALHEIM_CRASH=10     exit with an error after this many seconds
 //	FAKE_VALHEIM_VERSION=1.0.21  the Valheim version it says it is (1.0.20)
+//	FAKE_VALHEIM_PARTY=missing   crossplay can't start, as when Windows can't
+//	                          load Party.dll; "silent" gets no join code either,
+//	                          without saying why
 package main
 
 import (
@@ -139,9 +142,18 @@ func main() {
 	s.log("Game server connected")
 	code := ""
 	if s.crossplay {
+		party := os.Getenv("FAKE_VALHEIM_PARTY")
+		if party == "missing" {
+			// Unity writes the exception without Valheim's timestamp.
+			s.raw("DllNotFoundException: Party assembly:<unknown assembly> type:<unknown type> member:(null)\n" +
+				"  at PlayFab.Party.PlayFabMultiplayerManager.InitializeImpl () [0x000c4] in <5a1d494e032e423ab0fcf9da33b2bcf6>:0 \n")
+			s.log("DLL Not Found: This error usually occurs when you do not have the correct dependencies installed, and will prevent crossplay from working. The dependencies are different depending on which platform you play on.")
+		}
 		s.log(fmt.Sprintf(`New session server "%s" that has join code , now 0 player(s)`, s.name))
-		code = fmt.Sprintf("%06d", 100000+rand.Intn(899999))
-		s.log(fmt.Sprintf(`Session "%s" registered with join code %s`, s.name, code))
+		if party == "" {
+			code = fmt.Sprintf("%06d", 100000+rand.Intn(899999))
+			s.log(fmt.Sprintf(`Session "%s" registered with join code %s`, s.name, code))
+		}
 	}
 
 	go s.loop(code)
@@ -164,7 +176,11 @@ func main() {
 }
 
 func (s *server) log(msg string) {
-	line := time.Now().Format("01/02/2006 15:04:05") + ": " + msg + "\n"
+	s.raw(time.Now().Format("01/02/2006 15:04:05") + ": " + msg + "\n")
+}
+
+// raw writes lines as they are, like Unity's own messages.
+func (s *server) raw(line string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.logf != nil {

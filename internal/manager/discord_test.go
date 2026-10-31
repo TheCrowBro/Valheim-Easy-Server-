@@ -195,6 +195,52 @@ func TestDiscordPasswordTurnedOnLater(t *testing.T) {
 	}
 }
 
+// When crossplay can't start, the panel says so instead of waiting for a
+// join code, and nothing is posted in Discord.
+func TestCrossplayCantStart(t *testing.T) {
+	fake := newFakeDiscord(t)
+	t.Setenv("FAKE_VALHEIM_PARTY", "missing")
+	env := setup(t)
+	m := env.m
+	m.opt.DiscordURL = fake.URL
+	install(t, m)
+	turnOnDiscord(t, m)
+	if err := m.StartServer(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the reason there's no join code", 20*time.Second, func() bool { return m.Status().Join.Problem == "crossplay" })
+	if st := m.Status(); st.State != StateOnline || st.Join.Code != "" {
+		t.Fatalf("state %s, code %q", st.State, st.Join.Code)
+	}
+	if err := m.StopServer(); err != nil {
+		t.Fatal(err)
+	}
+	waitJob(t, m, currentJobID(m))
+	if n := fake.count("is online"); n != 0 {
+		t.Fatalf("posted online %d times: %q", n, fake.all())
+	}
+}
+
+// A join code that doesn't come, for no reason the log gives, is late after
+// a while.
+func TestJoinCodeLate(t *testing.T) {
+	old := codeWait
+	codeWait = time.Second
+	t.Cleanup(func() { codeWait = old })
+	t.Setenv("FAKE_VALHEIM_PARTY", "silent")
+	env := setup(t)
+	m := env.m
+	install(t, m)
+	if err := m.StartServer(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the server to be ready", 20*time.Second, func() bool { return m.Status().State == StateOnline })
+	if p := m.Status().Join.Problem; p != "" {
+		t.Fatalf("problem %q straight away", p)
+	}
+	waitFor(t, "the join code to be late", 10*time.Second, func() bool { return m.Status().Join.Problem == "late" })
+}
+
 func TestDiscordAfterTakeoverAndRest(t *testing.T) {
 	fake := newFakeDiscord(t)
 	env := setup(t)

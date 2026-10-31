@@ -44,7 +44,10 @@ type Tracker struct {
 	// NoJoinCode is set for a server started without crossplay, which has
 	// no join code: a line claiming one was made up by a player.
 	NoJoinCode bool
-	session    string // the server's session name, from its first join code line
+	// CrossplayFailed is set when crossplay couldn't start, so no join code
+	// will come.
+	CrossplayFailed bool
+	session         string // the server's session name, from its first join code line
 }
 
 // Players returns a copy of everyone online, in join order.
@@ -76,6 +79,8 @@ func (t *Tracker) Apply(ev Event, now time.Time) []Activity {
 			t.Ready = true
 			return []Activity{act("online", "", "", "The server is online and ready for players.")}
 		}
+	case CrossplayFailed:
+		t.CrossplayFailed = !t.NoJoinCode
 	case JoinCode:
 		// The server registers its session before anyone can connect, so
 		// a later line about another session was made up by a player.

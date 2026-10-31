@@ -138,6 +138,7 @@ type serverRun struct {
 	stopping   bool
 	forced     bool // ended with Force stop
 	ready      bool
+	readyAt    time.Time     // when it became ready
 	replaying  bool          // reading an existing log after adopting a running server
 	done       chan struct{} // closed when the process has exited
 	readyCh    chan struct{} // closed when the server says it's ready

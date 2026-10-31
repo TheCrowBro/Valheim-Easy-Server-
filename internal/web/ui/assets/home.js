@@ -127,12 +127,15 @@ function joinCard(app) {
   ];
   const lan = (j.lanAddrs || []).filter((a) => !a.startsWith('100.'));
   const body = [];
-  if (j.crossplay) {
+  if (j.crossplay && !j.code && j.problem === 'crossplay') {
+    body.push(codeProblem(j.problem)); // nobody can join, by code or address
+  } else if (j.crossplay) {
     const code = j.code ? j.code.replace(/(\d{3})(\d{3})/, '$1 $2') : '';
+    if (!code && j.problem) body.push(codeProblem(j.problem));
     body.push(h('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '14px' } },
       h('div', null, h('div', { class: 'muted small' }, 'Join code'),
         code ? h('div', { class: 'join-code' }, code)
-          : h('div', { class: 'text-2', style: { padding: '8px 0' } }, online || st.state === 'starting' ? 'Waiting for the code…' : 'Shown here when the server is online.')),
+          : h('div', { class: 'text-2', style: { padding: '8px 0' } }, j.problem ? 'No join code' : online || st.state === 'starting' ? 'Waiting for the code…' : 'Shown here when the server is online.')),
       code ? h('button', { class: 'btn', 'data-action': 'copy', 'data-text': j.code, 'data-label': 'Join code copied' }, icon('copy'), 'Copy code') : null));
     body.push(h('dl', { class: 'kv' }, j.publicAddr ? addrRow('Or address', j.publicAddr) : null, pwRow));
     body.push(h('ol', { class: 'steps' },
@@ -168,10 +171,23 @@ function reminderNotice(st) {
     h('p', { class: 'text-2' }, 'Things changed since they last played. ', st.discord ? 'The Discord post says this too.' : 'Let them know.')));
 }
 
+// codeProblem says why there's no join code and what to do instead.
+function codeProblem(problem) {
+  const off = ['Turn ', h('b', null, 'Crossplay'), ' off in Settings and restart the server: friends then join by address, with UDP ports 2456–2457 forwarded on your router to this computer.'];
+  const text = problem === 'crossplay'
+    ? [h('p', null, h('strong', null, 'Crossplay can’t start on this computer, so there’s no join code and nobody can join. '),
+      'Windows couldn’t load Valheim’s crossplay part (Party.dll).'),
+    h('p', null, ...off, ' Installing Microsoft’s Visual C++ Redistributable (x64) fixes this on some computers.')]
+    : [h('p', null, h('strong', null, 'No join code yet. '), 'Valheim usually gets one within a minute of starting. The Log page says why if you type “playfab” in its filter.'),
+      h('p', null, 'If it doesn’t come: ', ...off)];
+  return h('div', { class: 'callout warn' }, icon('alert'), h('div', { class: 'body small' }, text,
+    h('div', { class: 'actions' }, h('button', { class: 'btn btn-sm', 'data-action': 'show-settings' }, 'Open settings'))));
+}
+
 // discordLine says whether the join code made it to the Discord channel.
 function discordLine(st) {
   const d = st.discord;
-  if (!d || st.state !== 'online') return null;
+  if (!d || st.state !== 'online' || st.join.problem === 'crossplay') return null;
   if (d.error) {
     return h('div', { class: 'callout warn discord-line' }, icon('alert'), h('div', { class: 'body small' },
       h('p', null, h('strong', null, 'Couldn’t post in Discord. '), d.error),

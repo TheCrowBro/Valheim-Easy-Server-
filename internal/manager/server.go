@@ -632,7 +632,7 @@ func (m *Manager) handleLine(run *serverRun, line string) {
 	acts := run.tracker.Apply(ev, time.Now())
 	noteEventsLocked(run, acts)
 	if run.tracker.Ready && !run.ready {
-		run.ready = true
+		run.ready, run.readyAt = true, time.Now()
 		close(run.readyCh)
 	}
 	post, announce := m.announceLocked(run)

@@ -39,6 +39,11 @@ func TestParseLines(t *testing.T) {
 		{"10/22/2026 22:00:00: OnApplicationQuit", Event{Kind: Shutdown}},
 		{"[Info   :   Unity Log] 10/22/2026 20:01:11: Game server connected", Event{Kind: ServerReady}},
 		{"Game server connected", Event{Kind: ServerReady}},
+		// Crossplay can't start: Unity's exception, and Valheim's own words.
+		{"DllNotFoundException: Party assembly:<unknown assembly> type:<unknown type> member:(null)", Event{Kind: CrossplayFailed}},
+		{"[Error  :   Unity Log] DllNotFoundException: Party", Event{Kind: CrossplayFailed}},
+		{"10/31/2026 00:18:35: DLL Not Found: This error usually occurs when you do not have the correct dependencies installed, and will prevent crossplay from working. The dependencies are different depending on which platform you play on.", Event{Kind: CrossplayFailed}},
+		{" For windows: You need VC++ Redistributables. https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170", Event{Kind: Unknown}},
 	}
 	for _, tc := range tests {
 		got := Parse(tc.line)
@@ -125,6 +130,24 @@ func TestTrackerSteamSession(t *testing.T) {
 	}
 	if tr.LastSave.IsZero() {
 		t.Fatal("last save not recorded")
+	}
+}
+
+// Crossplay that can't start means no join code, unless the server was
+// started without crossplay, where the line means nothing.
+func TestTrackerCrossplayFailed(t *testing.T) {
+	var tr Tracker
+	feed(t, &tr, `
+DllNotFoundException: Party assembly:<unknown assembly> type:<unknown type> member:(null)
+10/31/2026 00:19:11: New session server "Valheim with Friends" that has join code , now 0 player(s)
+`)
+	if !tr.CrossplayFailed || tr.JoinCode != "" {
+		t.Fatalf("failed %v, code %q", tr.CrossplayFailed, tr.JoinCode)
+	}
+	steam := Tracker{NoJoinCode: true}
+	feed(t, &steam, "DllNotFoundException: Party\n")
+	if steam.CrossplayFailed {
+		t.Fatal("a server without crossplay counted as failing at it")
 	}
 }
 
@@ -236,6 +259,8 @@ func TestParsePlayerTextIsOnlyItself(t *testing.T) {
 		{`10/22/2026 21:00:00: PlayFab socket with remote ID playfab/AAAA received local Platform ID Connections 0 ZDOS:1`, PlatformID},
 		{`10/22/2026 21:00:00: Kicking x registered with join code 777777`, Unknown},
 		{`10/22/2026 21:00:00: Kicking OnApplicationQuit`, Unknown},
+		{`10/22/2026 21:00:00: Got character ZDOID from DllNotFoundException: Party : 456:1`, Character},
+		{`10/22/2026 21:00:00: Kicking DllNotFoundException: Party`, Unknown},
 	} {
 		ev := Parse(tc.line)
 		if ev.Kind != tc.kind || ev.Code != "" || ev.Addr != "" || ev.Count != -1 {
