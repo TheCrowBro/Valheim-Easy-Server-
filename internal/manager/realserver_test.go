@@ -80,17 +80,25 @@ func TestRealServer(t *testing.T) {
 		}
 	}
 
+	// The join code comes once the world is up and friends can join.
+	waitCode := func() {
+		deadline := time.Now().Add(4 * time.Minute)
+		for m.Status().Join.Code == "" && m.Status().Join.Problem == "" && time.Now().Before(deadline) {
+			time.Sleep(2 * time.Second)
+		}
+		join := m.Status().Join
+		t.Logf("join code %q, problem %q", join.Code, join.Problem)
+		if join.Code == "" {
+			t.Errorf("no join code (crossplay): %q", join.Problem)
+		}
+	}
 	start("a new world with crossplay")
-	deadline := time.Now().Add(4 * time.Minute)
-	for m.Status().Join.Code == "" && m.Status().Join.Problem == "" && time.Now().Before(deadline) {
-		time.Sleep(2 * time.Second)
-	}
-	join := m.Status().Join
-	t.Logf("join code %q, problem %q", join.Code, join.Problem)
-	if join.Code == "" {
-		t.Errorf("no join code (crossplay): %q", join.Problem)
-	}
+	waitCode()
+	logPath := m.CurrentLogPath()
 	stop()
+	if b, err := os.ReadFile(logPath); err == nil { // how the macOS server starts and stops, line by line
+		t.Logf("the whole server log:\n%s", b)
+	}
 	w, err := m.Worlds()
 	if err != nil || len(w.Worlds) != 1 || w.Worlds[0].Name != "Midgard" || w.Worlds[0].NeverSaved {
 		t.Fatalf("worlds after saving: %+v %v", w, err)
@@ -101,6 +109,7 @@ func TestRealServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	start("the same world with a mod (Plant Everything)")
+	waitCode()
 	bep := filepath.Join(p.Server, "BepInEx", "LogOutput.log")
 	b, err := os.ReadFile(bep)
 	text := string(b)
