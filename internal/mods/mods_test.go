@@ -345,12 +345,30 @@ func TestEnv(t *testing.T) {
 		t.Fatal("env without mods")
 	}
 	env := strings.Join(Env("/srv", true), "\n")
-	if runtime.GOOS == "linux" {
+	switch runtime.GOOS {
+	case "linux":
 		if !strings.Contains(env, "LD_PRELOAD=libdoorstop_x64.so") || !strings.Contains(env, "DOORSTOP_TARGET_ASSEMBLY=/srv/BepInEx/core/BepInEx.Preloader.dll") {
 			t.Fatalf("env %q", env)
 		}
-	} else if env != "" {
-		t.Fatalf("env %q", env)
+	case "darwin":
+		dir := t.TempDir()
+		lib := filepath.Join(dir, "doorstop_libs", "libdoorstop_x64.dylib")
+		if _, err := dist.ReadFile(doorstopMac); err == nil {
+			lib = filepath.Join(dir, "doorstop_libs", "libdoorstop_valheimeasyserver.dylib") // this build's own
+		} else if Env(dir, true) != nil {
+			t.Fatal("mods are loaded with no Doorstop to load them")
+		} else {
+			os.MkdirAll(filepath.Dir(lib), 0o755)
+			os.WriteFile(lib, []byte("\xcf\xfa\xed\xfe a Mac library"), 0o755)
+		}
+		env := strings.Join(Env(dir, true), "\n")
+		if !strings.Contains(env, "DYLD_INSERT_LIBRARIES="+lib) || !strings.Contains(env, "DYLD_LIBRARY_PATH="+filepath.Join(dir, "valheim_server")) {
+			t.Fatalf("env %q", env)
+		}
+	default:
+		if env != "" {
+			t.Fatalf("env %q", env)
+		}
 	}
 }
 

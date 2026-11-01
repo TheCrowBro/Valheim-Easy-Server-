@@ -429,8 +429,12 @@ func TestHibernateStopsServerFirst(t *testing.T) {
 	if job.Error != "" {
 		t.Fatalf("hibernate: %s", job.Error)
 	}
-	if env.hibernated.Load() != 1 {
-		t.Fatalf("hibernate called %d times", env.hibernated.Load())
+	rested := &env.hibernated
+	if runtime.GOOS == "darwin" {
+		rested = &env.slept // Macs sleep instead
+	}
+	if rested.Load() != 1 {
+		t.Fatalf("rested %d times", rested.Load())
 	}
 	st := m.Status()
 	if st.State != StateStopped || st.LastExit == nil || !st.LastExit.Expected {

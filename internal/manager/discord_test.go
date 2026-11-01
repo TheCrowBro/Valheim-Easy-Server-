@@ -264,6 +264,7 @@ func TestDiscordAfterTakeoverAndRest(t *testing.T) {
 		atRest = fake.all()
 		return nil
 	}
+	m2.opt.Sleep = m2.opt.Hibernate // what a Mac does
 	m2.Start()
 	env.m = m2
 	waitFor(t, "takeover", 10*time.Second, func() bool {

@@ -60,8 +60,8 @@ type Server struct {
 // a waker running on it, when the test ends.
 func New(t testing.TB, key ssh.PublicKey) *Server {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("the stand-in JetKVM needs sh")
+	if runtime.GOOS != "linux" {
+		t.Skip("the stand-in JetKVM runs the JetKVM's start script, which needs Linux")
 	}
 	_, priv, _ := ed25519.GenerateKey(rand.Reader)
 	signer, err := ssh.NewSignerFromKey(priv)

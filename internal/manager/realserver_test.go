@@ -47,7 +47,7 @@ func TestRealServer(t *testing.T) {
 	t.Logf("server at %s", p.ServerExe)
 
 	s := m.Settings()
-	s.ServerName, s.World, s.Password = "Valheim Easy Server CI", "CITest", "ci-check-4821"
+	s.ServerName, s.Password = "Valheim Easy Server CI", "ci-check-4821" // the world is Midgard, the first one
 	s.Crossplay, s.Public, s.UpdateOnStart = true, false, false
 	if err := m.UpdateSettings(s); err != nil {
 		t.Fatal(err)
@@ -92,12 +92,12 @@ func TestRealServer(t *testing.T) {
 	}
 	stop()
 	w, err := m.Worlds()
-	if err != nil || len(w.Worlds) != 1 || w.Worlds[0].Name != "CITest" {
+	if err != nil || len(w.Worlds) != 1 || w.Worlds[0].Name != "Midgard" || w.Worlds[0].NeverSaved {
 		t.Fatalf("worlds after saving: %+v %v", w, err)
 	}
 	t.Logf("world saved: %+v", w.Worlds[0])
 
-	if err := m.SetWorldMods("CITest", []string{"planteverything"}); err != nil {
+	if err := m.SetWorldMods("Midgard", []string{"planteverything"}); err != nil {
 		t.Fatal(err)
 	}
 	start("the same world with a mod (Plant Everything)")

@@ -240,7 +240,7 @@ func (s *Settings) fillMissing() {
 	if s.IdleMinutes == 0 {
 		s.IdleMinutes = d.IdleMinutes
 	}
-	if s.RestMode == "" || runtime.GOOS == "darwin" { // Macs sleep; they don't hibernate
+	if s.RestMode == "" || runtime.GOOS == "darwin" && s.RestMode == RestHibernate { // Macs sleep; they don't hibernate
 		s.RestMode = d.RestMode
 	}
 }
@@ -256,7 +256,7 @@ func (s *Settings) Normalize() {
 	s.DiscordWebhook = strings.TrimSpace(s.DiscordWebhook)
 	s.DiscordBotToken = strings.TrimSpace(s.DiscordBotToken)
 	s.JetKVM = strings.TrimSpace(s.JetKVM)
-	if runtime.GOOS == "darwin" {
+	if runtime.GOOS == "darwin" && s.RestMode == RestHibernate {
 		s.RestMode = RestSleep // Macs sleep; they don't hibernate
 	}
 	for name, o := range s.WorldOptions {

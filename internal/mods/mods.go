@@ -389,12 +389,16 @@ func Env(dir string, on bool) []string {
 			"LD_PRELOAD=libdoorstop_x64.so",
 		}
 	case "darwin":
+		lib := macDoorstop(dir)
+		if lib == "" {
+			return nil
+		}
 		// The server allows these: it's built to take mods. Mono finds its
 		// own libraries in the server's folder when Doorstop starts it.
 		return []string{
 			"DOORSTOP_ENABLED=1", preloader,
 			"DYLD_LIBRARY_PATH=" + filepath.Join(dir, "valheim_server"),
-			"DYLD_INSERT_LIBRARIES=" + macDoorstop(dir),
+			"DYLD_INSERT_LIBRARIES=" + lib,
 		}
 	}
 	return nil
