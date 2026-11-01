@@ -17,3 +17,5 @@ Thumbs.db
 
 # Built by CI and carried by the app.
 /internal/jetkvm/dist/*.gz
+/internal/mods/dist/*.dylib
+/internal/mods/dist/*.txt

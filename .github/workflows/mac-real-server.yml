@@ -1,0 +1,27 @@
+name: Real Valheim server on a Mac
+
+# Started by hand (Actions, "Run workflow"). On an Intel Mac, like a 2013
+# Mac Pro, it installs the real Valheim server with SteamCMD (about 2 GB),
+# plays a new world with crossplay, saves and stops it, then plays it with
+# a mod. It takes about a quarter of an hour.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-server:
+    name: Install, play, save, play with a mod (Intel Mac)
+    runs-on: macos-15-intel
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Build the mod loader for macOS 11 and later (UnityDoorstop)
+        run: .github/scripts/build-doorstop.sh
+      - name: The real server
+        run: go test -tags realserver -run TestRealServer -v -count=1 -timeout 75m ./internal/manager/

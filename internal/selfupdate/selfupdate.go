@@ -17,6 +17,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -29,9 +30,17 @@ const (
 	Repo       = "TheCrowBro/Valheim-Easy-Server-"
 	RepoID     = 1430331409
 	DefaultAPI = "https://api.github.com"
-	ExeName    = "ValheimEasyServer.exe"
 	maxExe     = 200 << 20
 )
+
+// ExeName is the release file that copies of the app on this system update
+// from: the Windows program, or the program inside the Mac app.
+var ExeName = map[bool]string{false: "ValheimEasyServer.exe", true: "ValheimEasyServer-mac"}[runtime.GOOS == "darwin"]
+
+// ProgramHeader is how a program for this system starts: "MZ" on Windows,
+// and a Mach-O header (here a universal one, for Intel and Apple silicon)
+// on macOS.
+var ProgramHeader = map[bool]string{false: "MZ", true: "\xca\xfe\xba\xbe"}[runtime.GOOS == "darwin"]
 
 // Release is a published build.
 type Release struct {
@@ -176,7 +185,7 @@ func (u *Updater) Download(ctx context.Context, rel Release, path string) error 
 	case hex.EncodeToString(h.Sum(nil)) != want:
 		err = errors.New("the download doesn't match the release's checksum")
 	case !isProgram(path):
-		err = errors.New("the download isn't a Windows program")
+		err = errors.New("the download isn't a program for this computer")
 	}
 	if err != nil {
 		os.Remove(path)
@@ -185,16 +194,26 @@ func (u *Updater) Download(ctx context.Context, rel Release, path string) error 
 	return nil
 }
 
-// isProgram checks for the "MZ" every Windows program starts with.
+// isProgram checks the start of the file: "MZ" for a Windows program, or a
+// Mach-O header (universal, or 64-bit Intel or Apple silicon) on macOS.
 func isProgram(path string) bool {
 	f, err := os.Open(path)
 	if err != nil {
 		return false
 	}
 	defer f.Close()
-	b := make([]byte, 2)
-	_, err = io.ReadFull(f, b)
-	return err == nil && string(b) == "MZ"
+	b := make([]byte, 4)
+	if _, err := io.ReadFull(f, b); err != nil {
+		return false
+	}
+	if runtime.GOOS == "darwin" {
+		switch string(b) {
+		case "\xca\xfe\xba\xbe", "\xcf\xfa\xed\xfe":
+			return true
+		}
+		return false
+	}
+	return string(b[:2]) == "MZ"
 }
 
 // Swap puts the downloaded program in place of the running one. Windows

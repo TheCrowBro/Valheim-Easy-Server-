@@ -169,3 +169,6 @@ func IdleTime() (time.Duration, bool) {
 	now, _, _ := procGetTickCount.Call()
 	return time.Duration(uint32(now)-li.Time) * time.Millisecond, true
 }
+
+// AfterWake has nothing to do on Windows: an unattended wake is a full one.
+func AfterWake() {}

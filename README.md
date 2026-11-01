@@ -1,6 +1,6 @@
 # Valheim Easy Server
 
-Run a Valheim dedicated server on a spare Windows PC, such as an old Mac Pro running Windows 10 through Boot Camp, and look after it with a simple app on that computer. Friends who help run it use the same app through an IP KVM or remote desktop. Nobody needs to touch a command line.
+Run a Valheim dedicated server on a spare Windows PC or Mac, such as an old Mac Pro, and look after it with a simple app on that computer. Friends who help run it use the same app through an IP KVM or remote desktop. Nobody needs to touch a command line.
 
 ![The control panel's home page](docs/screenshots/home.png)
 
@@ -29,7 +29,7 @@ Run a Valheim dedicated server on a spare Windows PC, such as an old Mac Pro run
 
 ## Getting it
 
-1. Open the [newest release](../../releases/latest) and download **ValheimEasyServer-windows.zip**.
+1. Open the [newest release](../../releases/latest) and download **ValheimEasyServer-windows.zip** (or **ValheimEasyServer-mac.zip** for a Mac: see [The Mac version](#the-mac-version)).
 2. Unzip it. You get `ValheimEasyServer.exe` and `READ-ME-FIRST.txt`.
 
 You only do this once: after that, the app [updates itself](#app-updates).
@@ -58,6 +58,26 @@ The **How friends join** card on the Home page has everything:
 - **Crossplay off (Steam only).** Friends join by address. Friends outside your home need **UDP ports 2456–2457 forwarded** on your router to the server computer.
 
 Everyone needs the same Valheim version as the server. The app updates the server before each start, so friends just need to update their game.
+
+## The Mac version
+
+The same app runs on a Mac with macOS 11 Big Sur or newer, Intel or Apple silicon: a 2013 Mac Pro (the "trash can") runs it on macOS 12 Monterey. It runs Valheim's own Mac server, which Steam provides alongside the Windows and Linux ones, so crossplay join codes work too, and the control panel is the same one, in your web browser.
+
+1. Download **ValheimEasyServer-mac.zip** from the [newest release](../../releases/latest) and open it. Drag **Valheim Easy Server** into **Applications**.
+2. Open it from there. macOS won't open it the first time, because it isn't signed by Apple. On macOS 12 Monterey to 14 Sonoma, right-click the app, choose **Open**, then **Open**. On macOS 15 Sequoia and newer, click **Done**, then go to **System Settings → Privacy & Security** and click **Open Anyway**.
+3. The control panel opens in your browser. From there it's the same as on Windows: **Install the server** (about 2 GB from Steam; no Steam account needed), then work through **Setup on this computer**.
+
+What's different on a Mac:
+
+- **The app has no window or Dock icon of its own.** It works in the background; open **Valheim Easy Server** again (from Applications) to get the control panel back. To close it, use **Settings → Maintenance**.
+- **Macs sleep rather than hibernate**, so the button says **Sleep**, and the Mac stays awake by itself while the server runs or friends play.
+- **Wake-on-LAN** is macOS's **Wake for network access**. **Turn on Wake for network access** in Settings sets it (macOS asks for your password). The [Discord /valheim](#starting-the-server-from-discord) wake-up works the same way as on Windows.
+- **The firewall** is off on a Mac unless you turned it on. If it's on, the app asks to let friends through it.
+- **Everything is in** `~/Library/Application Support/ValheimEasyServer` (the server, worlds, backups and logs), rather than next to the app.
+- **Mods** work as on Windows. BepInEx's loader for Macs is built for the newest macOS only, so the app brings its own copy of it, built for macOS 11 and later ([UnityDoorstop](https://github.com/NeighTools/UnityDoorstop), LGPL 2.1; its license is in the app).
+- **The app updates itself** like the Windows one, as long as it's been moved out of Downloads (for example into Applications).
+
+Moving from the Windows version: on its Worlds page, click **Download** on each world, and drop the zips on **Add a world** on the Mac.
 
 ## Posting the join code in Discord
 
@@ -249,6 +269,8 @@ Every change to this project that passes its tests on GitHub becomes a new [rele
 | /valheim doesn't show up in Discord | Add the bot to the Discord server with the link in **Settings → Start the server from Discord**. With the join code posted in Discord, the bot only works in that channel's Discord server. |
 | "The JetKVM didn't let the app in" | On the JetKVM's page, under **Settings → Advanced**, check that **Developer Mode** is on, and paste the app's key into **SSH Public Key** again. |
 | "The JetKVM doesn't identify itself the way it did before" | That's expected after the JetKVM is reset or its system is updated: click **Trust it and install again**. If neither happened, check the JetKVM's address: another device may have it. |
+| macOS won't open the app | It isn't signed by Apple. Right-click it and choose **Open** (macOS 12 to 14), or click **Open Anyway** in **System Settings → Privacy & Security** (macOS 15 and newer). See [The Mac version](#the-mac-version). |
+| The Mac doesn't wake from sleep with Wake-on-LAN | Check that **Settings → Resting and waking up** says **Wake for network access** is on, that the KVM uses the MAC address shown there, and that the Mac is on a cable, not Wi-Fi. |
 | The app doesn't update itself | **Settings → App updates** says why. The computer needs internet access to github.com, and the app's folder must be one it can write to, like `C:\Valheim Server` (not Program Files). A copy without **App updates** in Settings needs replacing once (see [App updates](#app-updates)). |
 | The app doesn't open after an update | It normally puts the previous version back by itself. If not, delete `ValheimEasyServer.exe`, rename `ValheimEasyServer.exe.old` to `ValheimEasyServer.exe`, and double-click it. |
 | Mods (BepInEx) | Install them into the server folder (**Settings → Folders → Open**); the app starts the server the same way. Use **Repair server files** to undo. |
@@ -280,7 +302,8 @@ The app's own log is in `logs\app.log` inside its folder, and the server's logs 
 - starts the server from Discord with a small program it carries for the JetKVM's ARM processor (`valheim-waker`, built from `cmd/valheim-waker`). It copies it to the JetKVM over SSH with its own key, into `/userdata/valheim-waker`, with a start script in `/userdata/init.d`. The waker stays connected to Discord as your bot. For /valheim, it sends Wake-on-LAN packets to the computer's network adapter for a few minutes, each request with its own random tag, and asks the server whether it's up (a Steam query on the game port + 1). The app listens for those packets on UDP port 9 and starts the server once per tag;
 - updates itself from this project's GitHub releases (see [Security](#security)). It checks the download's SHA-256 checksum, renames the running program to `ValheimEasyServer.exe.old` (Windows allows renaming a running program), puts the new one in its place and starts it on the same port. If the new one's panel doesn't answer within a minute, the old one goes back;
 - reads CPU, GPU, memory and network usage from Windows' performance counters, the same source Task Manager uses;
-- hibernates with `shutdown /h` or sleeps through Windows' own sleep call, and sets up Wake-on-LAN with `powercfg /deviceenablewake` and the network adapter's power settings (magic packet on, pattern wake off).
+- hibernates with `shutdown /h` or sleeps through Windows' own sleep call, and sets up Wake-on-LAN with `powercfg /deviceenablewake` and the network adapter's power settings (magic packet on, pattern wake off);
+- on a Mac, runs Valheim's macOS server (`valheim_server/Valheim`, one program for Intel and Apple silicon) with Steam's client library from SteamCMD, and stops it with the same signal as Ctrl+C. It sleeps with `pmset sleepnow`, keeps the Mac awake with `caffeinate`, turns on Wake for network access with `pmset -a womp 1`, starts at login with a launch agent, and reads usage with `top`, `vm_stat` and `netstat`. Mods are loaded with its own build of UnityDoorstop, which the server allows (it's built to take mods).
 
 Its folder holds `settings.json`, `jetkvm.json` and `jetkvm-key.pem` (once the JetKVM is set up), `server\` (the Valheim server), `saves\worlds_local\` (worlds), `saves\adminlist.txt` and the other player lists, `backups\`, `logs\` and `steamcmd\`.
 

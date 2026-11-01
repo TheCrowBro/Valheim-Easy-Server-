@@ -26,10 +26,11 @@ jobs:
           go-version-file: go.mod
       - name: Check formatting
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
-      - name: Vet (Linux and Windows code)
+      - name: Vet (Linux, Windows and Mac code)
         run: |
           go vet ./...
           GOOS=windows go vet ./...
+          GOOS=darwin go vet ./...
       - name: Check the control panel scripts
         run: |
           for f in internal/web/ui/assets/*.js; do
@@ -43,6 +44,7 @@ jobs:
           GOTOOLCHAIN=$(go env GOVERSION) GOBIN="$RUNNER_TEMP/bin" go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
           "$RUNNER_TEMP/bin/govulncheck" ./...
           GOOS=windows "$RUNNER_TEMP/bin/govulncheck" ./...
+          GOOS=darwin "$RUNNER_TEMP/bin/govulncheck" ./...
       - name: Build the waker for the JetKVM (ARMv7 Linux), so the tests check it too
         run: |
           GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=test" -o waker.tmp ./cmd/valheim-waker
@@ -189,13 +191,97 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  mac:
+    name: Tests and app (Mac)
+    runs-on: macos-15-intel # an Intel Mac, like a 2013 Mac Pro
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Mac features (processes, usage readings, power, network, login item)
+        run: go test -v -count=1 ./internal/platform/
+      - name: All tests (a stand-in Valheim server is started, saved and stopped)
+        run: go test -count=1 ./...
+      - name: Version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          if [ "$REF_TYPE" = "tag" ]; then v="$REF_NAME"; else v="build-$RUN_NUMBER"; fi
+          echo "VES_VERSION=$v" >> "$GITHUB_ENV"
+      - name: Build the mod loader for macOS 11 and later (UnityDoorstop)
+        run: .github/scripts/build-doorstop.sh
+      - name: Build the waker for the JetKVM (ARMv7 Linux)
+        run: |
+          GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$VES_VERSION" -o waker.tmp ./cmd/valheim-waker
+          gzip -9 -c waker.tmp > internal/jetkvm/dist/valheim-waker-armv7.gz
+          rm waker.tmp
+      - name: Build the app (one program for Intel and Apple silicon)
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          for arch in amd64 arm64; do
+            GOARCH=$arch CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$VES_VERSION -X main.build=$RUN_NUMBER" -o "ves-$arch" .
+          done
+          lipo -create -output ValheimEasyServer-mac ves-amd64 ves-arm64
+          lipo -info ValheimEasyServer-mac
+      - name: Make the Mac app
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          folder="dist-mac/Valheim Easy Server"
+          app="$folder/Valheim Easy Server.app"
+          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+          cp ValheimEasyServer-mac "$app/Contents/MacOS/ValheimEasyServer"
+          sed "s/BUILD_NUMBER/$RUN_NUMBER/g" macapp/Info.plist > "$app/Contents/Info.plist"
+          plutil -lint "$app/Contents/Info.plist"
+          iconset="$RUNNER_TEMP/AppIcon.iconset"
+          mkdir -p "$iconset"
+          for size in 16 32 128 256 512; do
+            sips -z $size $size internal/web/ui/assets/icon-512.png --out "$iconset/icon_${size}x${size}.png" > /dev/null
+            sips -z $((size * 2)) $((size * 2)) internal/web/ui/assets/icon-512.png --out "$iconset/icon_${size}x${size}@2x.png" > /dev/null
+          done
+          iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
+          cp internal/mods/dist/UnityDoorstop-LICENSE.txt "$app/Contents/Resources/"
+          cp docs/READ-ME-FIRST-Mac.txt "$folder/READ-ME-FIRST.txt"
+          ditto -c -k --keepParent "$folder" dist-mac/ValheimEasyServer-mac.zip
+          cp ValheimEasyServer-mac dist-mac/
+          ls -la dist-mac "$app/Contents/MacOS"
+      - name: Smoke test the Mac app (opened from Finder, it carries on in the background)
+        run: |
+          set -euo pipefail
+          data="$RUNNER_TEMP/ves-smoke"
+          exe="dist-mac/Valheim Easy Server/Valheim Easy Server.app/Contents/MacOS/ValheimEasyServer"
+          "$exe" --no-window --data "$data" --port 18456 # returns once the background copy is started
+          ok=""
+          for i in $(seq 1 30); do
+            if status=$(curl -fsS http://127.0.0.1:18456/api/status); then ok=1; break; fi
+            sleep 1
+          done
+          cat "$data/logs/app.log" || true
+          test -n "$ok"
+          echo "$status" | grep -q '"state":"not_installed"'
+          echo "$status" | grep -q '"platform":"darwin"'
+          curl -fsS http://127.0.0.1:18456/ | grep -q "Valheim Easy Server"
+          pkill -f -- "--data $data" || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ValheimEasyServer-mac
+          path: |
+            dist-mac/ValheimEasyServer-mac.zip
+            dist-mac/ValheimEasyServer-mac
+          if-no-files-found: error
+
   release:
     name: Publish release
     # Every build of the main branch that passes the tests becomes a release
     # (build-N), which installed copies of the app update themselves to.
     # Version tags (v1.0) get a release too.
     if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || github.ref == format('refs/heads/{0}', github.event.repository.default_branch))
-    needs: [linux, windows]
+    needs: [linux, windows, mac]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -204,16 +290,21 @@ jobs:
         with:
           name: ValheimEasyServer-windows
           path: dist
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ValheimEasyServer-mac
+          path: dist-mac
       - name: Zip, checksum and notes
         env:
           MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           (cd dist && zip -r ../ValheimEasyServer-windows.zip .)
-          cp dist/ValheimEasyServer.exe .
+          cp dist/ValheimEasyServer.exe dist-mac/ValheimEasyServer-mac.zip dist-mac/ValheimEasyServer-mac .
           sha256sum ValheimEasyServer.exe > ValheimEasyServer.exe.sha256
+          sha256sum ValheimEasyServer-mac > ValheimEasyServer-mac.sha256
           # The notes are the commit message without its trailers; the app
           # shows their first line as what changed.
-          { printf '%s\n' "$MESSAGE" | sed '/^Co-Authored-By:/d; /^Claude-Session:/d'; echo; echo "SHA-256 of ValheimEasyServer.exe: $(cut -d' ' -f1 ValheimEasyServer.exe.sha256)"; } > notes.md
+          { printf '%s\n' "$MESSAGE" | sed '/^Co-Authored-By:/d; /^Claude-Session:/d'; echo; echo "SHA-256 of ValheimEasyServer.exe: $(cut -d' ' -f1 ValheimEasyServer.exe.sha256)"; echo; echo "SHA-256 of ValheimEasyServer-mac (the Mac app's program): $(cut -d' ' -f1 ValheimEasyServer-mac.sha256)"; } > notes.md
       # With GitHub's own command-line tool, so no outside code handles the
       # files every installed copy will run.
       - name: Publish the build
@@ -224,7 +315,7 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           tag="build-$RUN_NUMBER"
-          files="ValheimEasyServer-windows.zip ValheimEasyServer.exe ValheimEasyServer.exe.sha256"
+          files="ValheimEasyServer-windows.zip ValheimEasyServer.exe ValheimEasyServer.exe.sha256 ValheimEasyServer-mac.zip ValheimEasyServer-mac ValheimEasyServer-mac.sha256"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release upload "$tag" $files --repo "$GITHUB_REPOSITORY" --clobber # a re-run
           else
@@ -235,4 +326,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" ValheimEasyServer-windows.zip ValheimEasyServer.exe ValheimEasyServer.exe.sha256 --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+        run: gh release create "$TAG" ValheimEasyServer-windows.zip ValheimEasyServer.exe ValheimEasyServer.exe.sha256 ValheimEasyServer-mac.zip ValheimEasyServer-mac ValheimEasyServer-mac.sha256 --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes

@@ -271,16 +271,18 @@ function feed(app) {
 function checklist(app) {
   const st = app.status;
   const c = st.checklist;
+  const mac = st.platform === 'darwin';
   if (localStorage.getItem('ves-setup-hidden') === '1') return null;
   const items = [
     [c.installed, 'Install the Valheim server', 'Free, downloaded from Steam.', !c.installed && h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'install' }, 'Install')],
-    [c.firewall, 'Allow it through Windows Firewall', 'So friends can connect. Windows asks for permission.', !c.firewall && h('button', { class: 'btn btn-sm', 'data-action': 'fix-firewall' }, 'Allow')],
+    mac ? [c.firewall, 'Let friends through the macOS firewall', c.firewall ? 'The firewall is off, or lets the server through.' : 'The firewall is on. macOS asks for your password.', !c.firewall && h('button', { class: 'btn btn-sm', 'data-action': 'fix-firewall' }, 'Allow')]
+      : [c.firewall, 'Allow it through Windows Firewall', 'So friends can connect. Windows asks for permission.', !c.firewall && h('button', { class: 'btn btn-sm', 'data-action': 'fix-firewall' }, 'Allow')],
     st.restMode === 'sleep'
       ? [st.sleep.available, 'Sleep works on this computer', st.sleep.available ? 'The Sleep button works.' : st.sleep.detail, !st.sleep.available && h('button', { class: 'btn btn-sm', 'data-action': 'go', 'data-page': 'settings' }, 'Settings')]
       : [c.hibernate, 'Hibernation turned on', c.hibernate ? 'The Hibernate button works.' : 'Needed for the Hibernate button.', !c.hibernate && h('button', { class: 'btn btn-sm', 'data-action': 'enable-hibernate' }, 'Turn on')],
-    [c.wakeOnLan, 'Wake-on-LAN turned on', c.wired ? 'So the computer can be woken over the network, for example from an IP KVM.' : 'Needs a network cable: Wake-on-LAN doesn’t work over Wi-Fi.',
+    [c.wakeOnLan, mac ? 'Wake for network access turned on' : 'Wake-on-LAN turned on', c.wired ? 'So the computer can be woken over the network, for example from an IP KVM.' : 'Needs a network cable: Wake-on-LAN doesn’t work over Wi-Fi.',
       !c.wakeOnLan && c.wired && h('button', { class: 'btn btn-sm', 'data-action': 'enable-wol' }, 'Turn on')],
-    [c.launchOnLogin, 'Start this app with Windows', 'So it’s ready after a restart.', !c.launchOnLogin && h('button', { class: 'btn btn-sm', 'data-action': 'go', 'data-page': 'settings' }, 'Set up')],
+    [c.launchOnLogin, mac ? 'Start this app when you log in' : 'Start this app with Windows', 'So it’s ready after a restart.', !c.launchOnLogin && h('button', { class: 'btn btn-sm', 'data-action': 'go', 'data-page': 'settings' }, 'Set up')],
   ];
   const left = items.filter((i) => !i[0]).length;
   return h('section', { class: 'card', 'aria-label': 'Setup' },

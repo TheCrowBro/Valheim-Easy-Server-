@@ -131,10 +131,10 @@ const (
 )
 
 // FirewallReady reports whether the game server's firewall rule exists.
-func FirewallReady() bool { return ruleExists(fwGameRule) }
+func FirewallReady(serverExe string) bool { return ruleExists(fwGameRule) }
 
 // WakeRuleReady reports whether the app may hear Wake-on-LAN signals.
-func WakeRuleReady() bool { return ruleExists(fwWakeRule) }
+func WakeRuleReady(appExe string) bool { return ruleExists(fwWakeRule) }
 
 func ruleExists(name string) bool {
 	cmd := exec.Command(system32("netsh.exe"), "advfirewall", "firewall", "show", "rule", "name="+name)
@@ -261,3 +261,6 @@ func UDPPortInUse(port int) bool {
 	}
 	return false
 }
+
+// Detach isn't needed on Windows.
+func Detach(string, []string) error { return ErrUnsupported }

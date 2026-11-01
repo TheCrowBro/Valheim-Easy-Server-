@@ -3,16 +3,15 @@
 package platform
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"syscall"
 )
-
-// OpenAppWindow opens the control panel in the default browser.
-func OpenAppWindow(url string) error { return OpenURL(url) }
 
 // OpenURL opens a link in the default browser.
 func OpenURL(url string) error { return open(url) }
@@ -38,36 +37,34 @@ func open(target string) error {
 	return nil
 }
 
-// LaunchOnLogin is only implemented on Windows.
-func LaunchOnLogin() (bool, error) { return false, nil }
-
-// SetLaunchOnLogin is only implemented on Windows.
-func SetLaunchOnLogin(bool, string, string) error { return ErrUnsupported }
-
-// FirewallReady is always true outside Windows (nothing to set up here).
-func FirewallReady() bool { return true }
-
-// WakeRuleReady is always true outside Windows.
-func WakeRuleReady() bool { return true }
-
-// FixFirewall is only implemented on Windows.
-func FixFirewall(string, string, bool) error { return ErrUnsupported }
-
-// SingleInstance does nothing outside Windows.
-func SingleInstance(string) (func(), bool, error) { return func() {}, false, nil }
-
-// ShowError prints the message (there is no message box here).
-func ShowError(title, msg string) { fmt.Fprintf(os.Stderr, "%s: %s\n", title, msg) }
-
-// SteamPath returns where the Steam client keeps its data, or "".
-func SteamPath() string {
-	home, _ := os.UserHomeDir()
-	for _, p := range []string{home + "/.steam/steam", home + "/.local/share/Steam"} {
-		if st, err := os.Stat(p); err == nil && st.IsDir() {
-			return p
-		}
+// SingleInstance makes sure only one copy of the app runs per data folder,
+// with a lock on a file that the system lets go of when the app closes.
+// It returns already=true if another copy holds the lock.
+func SingleInstance(id string) (release func(), already bool, err error) {
+	path := filepath.Join(os.TempDir(), "ValheimEasyServer-"+id+".lock")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, false, err
 	}
-	return ""
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		f.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return func() {}, true, nil
+		}
+		return nil, false, err
+	}
+	return func() { f.Close() }, false, nil
+}
+
+// Detach starts the program again in the background, in a session of its
+// own, so it carries on when the copy that started it ends.
+func Detach(exe string, args []string) error {
+	cmd := exec.Command(exe, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	return cmd.Process.Release()
 }
 
 // FreeDisk returns the free space on the drive holding path.
@@ -93,9 +90,6 @@ func parentDir(p string) string {
 	}
 	return ""
 }
-
-// Confirm has no dialog outside Windows; it always says yes.
-func Confirm(title, msg string) bool { return true }
 
 // UDPPortInUse reports whether a UDP port is taken, by trying to open it.
 func UDPPortInUse(port int) bool {

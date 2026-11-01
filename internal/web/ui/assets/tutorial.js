@@ -115,7 +115,8 @@ function steps(st) {
       text: [
         ['Click ', b('Stop server'), '. The world is saved first, then the server shuts down. If anyone is still playing, the panel asks first, because they’ll be disconnected.'],
         ['Wait until it says ', b('Offline'), ' before you turn off or restart the computer.'],
-        ['Closing this window doesn’t stop the server. It keeps running, and the shield icon next to the clock opens the panel again.'],
+        [st && st.platform === 'darwin' ? 'Closing this window doesn’t stop the server. It keeps running, and opening Valheim Easy Server again (for example from the Applications folder) opens the panel again.'
+          : 'Closing this window doesn’t stop the server. It keeps running, and the shield icon next to the clock opens the panel again.'],
       ],
     },
     {

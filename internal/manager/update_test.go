@@ -20,7 +20,7 @@ import (
 )
 
 func TestAppUpdates(t *testing.T) {
-	program := "MZ build 5"
+	program := selfupdate.ProgramHeader + " build 5"
 	h := sha256.Sum256([]byte(program))
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -52,7 +52,7 @@ func TestAppUpdates(t *testing.T) {
 	}
 	// Set up as main does, before the app starts.
 	exe := filepath.Join(t.TempDir(), selfupdate.ExeName)
-	os.WriteFile(exe, []byte("MZ build 4"), 0o755)
+	os.WriteFile(exe, []byte(selfupdate.ProgramHeader+" build 4"), 0o755)
 	setUp := func(m *Manager, build int, relaunch func()) {
 		m.opt.AppExe, m.opt.AppBuild, m.opt.AppVersion = exe, build, fmt.Sprintf("build-%d", build)
 		m.opt.Updater = &selfupdate.Updater{API: srv.URL}
@@ -70,7 +70,7 @@ func TestAppUpdates(t *testing.T) {
 	if a.Build != 4 || a.Latest == nil || a.Latest.Build != 5 || a.CheckedAt == nil || a.Error != "" {
 		t.Fatalf("app info = %+v", a)
 	}
-	if b, _ := os.ReadFile(exe); string(b) != "MZ build 4" {
+	if b, _ := os.ReadFile(exe); string(b) != selfupdate.ProgramHeader+" build 4" {
 		t.Fatal("checking replaced the program")
 	}
 
@@ -92,7 +92,7 @@ func TestAppUpdates(t *testing.T) {
 	if b, _ := os.ReadFile(exe); string(b) != program {
 		t.Fatalf("program = %q", b)
 	}
-	if b, _ := os.ReadFile(exe + ".old"); string(b) != "MZ build 4" {
+	if b, _ := os.ReadFile(exe + ".old"); string(b) != selfupdate.ProgramHeader+" build 4" {
 		t.Fatalf("the old copy = %q", b)
 	}
 	if !hasText(m, "update", "Updating the app to build 5: Remind friends what changed before they join.") || !m.Status().App.Updating {
@@ -132,7 +132,7 @@ func TestAppUpdates(t *testing.T) {
 	// When the new build doesn't start, main puts the previous version back
 	// and starts that. It says so, and doesn't install that build by itself
 	// again.
-	os.WriteFile(exe, []byte("MZ build 4"), 0o755)
+	os.WriteFile(exe, []byte(selfupdate.ProgramHeader+" build 4"), 0o755)
 	data, _ := json.Marshal(updateRecord{From: 4, To: 5})
 	os.WriteFile(filepath.Join(env.data, updateFile), data, 0o644)
 	m = newTestManager(t, env.data, env)
@@ -144,7 +144,7 @@ func TestAppUpdates(t *testing.T) {
 	if err := m.checkForUpdate(true, true); err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := os.ReadFile(exe); string(b) != "MZ build 4" || m.Status().App.Latest == nil || m.Status().App.Updating {
+	if b, _ := os.ReadFile(exe); string(b) != selfupdate.ProgramHeader+" build 4" || m.Status().App.Latest == nil || m.Status().App.Updating {
 		t.Fatalf("installed a build that didn't start: %+v", m.Status().App)
 	}
 	// Someone can still try it.

@@ -55,7 +55,16 @@ func main() {
 	devServer := flag.String("dev-fake-server", "", "development only: install this program instead of downloading the real server")
 	devDiscord := flag.String("dev-fake-discord", "", "development only: send Discord messages to this address instead of Discord")
 	devGitHub := flag.String("dev-fake-github", "", "development only: look for app updates at this address instead of GitHub")
-	flag.Parse()
+	detached := flag.Bool("detached", false, "used by the app itself on macOS")
+	// Older macOS versions add a -psn_… argument when an app is opened.
+	args := os.Args[1:]
+	for i := 0; i < len(args); i++ {
+		if strings.HasPrefix(args[i], "-psn_") {
+			args = append(args[:i], args[i+1:]...)
+			i--
+		}
+	}
+	flag.CommandLine.Parse(args)
 	for _, dev := range []string{*devDiscord, *devGitHub} {
 		if dev != "" && !loopbackURL(dev) {
 			platform.ShowError(appName, "The --dev-fake-* options only take an address on this computer, such as http://127.0.0.1:8460.")
@@ -65,6 +74,15 @@ func main() {
 
 	exe, _ := os.Executable()
 	exe, _ = filepath.EvalSymlinks(exe)
+	inMacApp := runtime.GOOS == "darwin" && strings.Contains(exe, ".app/Contents/MacOS/")
+	if inMacApp && !*detached {
+		// Opened from Finder (or at login): carry on in the background.
+		// macOS only opens an app that isn't running, so opening it again
+		// then starts a new copy, which shows the control panel.
+		if err := platform.Detach(exe, append(args, "--detached")); err == nil {
+			return
+		}
+	}
 	selfupdate.CleanUp(exe) // a download an update didn't finish
 	dataDir, err := resolveDataDir(*dataFlag, exe)
 	if err != nil {
@@ -83,7 +101,11 @@ func main() {
 	}
 	if already {
 		if !openExisting(dataDir) {
-			platform.ShowError(appName, "Valheim Easy Server is already running. Look for the shield icon next to the clock.")
+			msg := "Valheim Easy Server is already running. Look for the shield icon next to the clock."
+			if runtime.GOOS == "darwin" {
+				msg = "Valheim Easy Server is already running."
+			}
+			platform.ShowError(appName, msg)
 		}
 		closeLog()
 		return
@@ -95,9 +117,16 @@ func main() {
 	}
 	var closeApp func(stopServer, restart bool)
 	var restart atomic.Bool // start the updated program once this one has closed
-	if n, _ := strconv.Atoi(build); n > 0 && runtime.GOOS == "windows" {
+	translocated := strings.Contains(exe, "/AppTranslocation/")
+	if n, _ := strconv.Atoi(build); n > 0 && (runtime.GOOS == "windows" || runtime.GOOS == "darwin" && !translocated) {
 		opt.AppBuild, opt.Updater = n, &selfupdate.Updater{API: *devGitHub}
 		opt.Relaunch = func() { closeApp(false, true) }
+	}
+	if translocated {
+		// macOS runs a downloaded app from a temporary copy until it's
+		// moved somewhere, and that copy can't update itself.
+		logger.Printf("running from a temporary copy (%s): updates are off", exe)
+		go platform.ShowError(appName, "Please move Valheim Easy Server to your Applications folder (drag it there in Finder), and open it from there. Where it is now, macOS runs a temporary copy of it, which can't update itself.")
 	}
 	if *devServer != "" {
 		src, _ := filepath.Abs(*devServer)
@@ -377,6 +406,16 @@ func resolveDataDir(flagValue, exe string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		return dir, os.MkdirAll(dir, 0o755)
+	}
+	if runtime.GOOS == "darwin" {
+		// A Mac app keeps its files in ~/Library/Application Support, not
+		// in the app, which gets replaced when it updates.
+		base, err := os.UserConfigDir()
+		if err != nil {
+			return "", err
+		}
+		dir := filepath.Join(base, "ValheimEasyServer")
 		return dir, os.MkdirAll(dir, 0o755)
 	}
 	dir := filepath.Dir(exe)

@@ -115,6 +115,9 @@ function discordSection() {
 
 const okAddr = (a) => /^[\w.\-]+(:\d+)?$/.test(a || '');
 
+// mac reports whether the server computer is a Mac.
+const mac = () => !!(appRef && appRef.status && appRef.status.platform === 'darwin');
+
 // The form's fields are named as the app names them in its errors.
 const wkKey = (name) => (name === 'botToken' ? 'token' : 'address');
 
@@ -136,17 +139,17 @@ function wakePrereqs(app, on) {
       h('p', null, h('strong', null, 'Connect this computer to the router with a network cable. '), 'Wake-on-LAN doesn’t work over Wi-Fi.'))));
   } else if (!c.wakeOnLan) {
     out.push(h('div', { class: 'callout warn' }, icon('alert'), h('div', { class: 'body' },
-      h('p', null, 'Windows doesn’t let the network adapter wake this computer yet.'),
-      h('div', { class: 'actions' }, h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'enable-wol' }, icon('power'), 'Turn on Wake-on-LAN')))));
+      h('p', null, st.platform === 'darwin' ? '“Wake for network access” is off, so this Mac can’t be woken over the network yet.' : 'Windows doesn’t let the network adapter wake this computer yet.'),
+      h('div', { class: 'actions' }, h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'enable-wol' }, icon('power'), st.platform === 'darwin' ? 'Turn on Wake for network access' : 'Turn on Wake-on-LAN')))));
   }
-  if (draft.restMode !== 'sleep') {
+  if (draft.restMode !== 'sleep' && st.platform !== 'darwin') {
     out.push(h('div', { class: 'callout info' }, icon('info'), h('div', { class: 'body' },
       h('p', null, 'Choose ', h('b', null, 'Sleep'), ' under ', h('b', null, 'Resting and waking up'), ': most computers, Macs included, can’t be woken over the network from hibernation.'))));
   }
   if (on && !c.firewall) {
     out.push(h('div', { class: 'callout warn' }, icon('alert'), h('div', { class: 'body' },
-      h('p', null, 'Windows Firewall has to let the wake signal in, or the server won’t start when the computer wakes up.'),
-      h('div', { class: 'actions' }, h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'fix-firewall' }, icon('shieldCheck'), 'Allow through Windows Firewall')))));
+      h('p', null, st.platform === 'darwin' ? 'The macOS firewall has to let the wake signal in, or the server won’t start when the Mac wakes up.' : 'Windows Firewall has to let the wake signal in, or the server won’t start when the computer wakes up.'),
+      h('div', { class: 'actions' }, h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'fix-firewall' }, icon('shieldCheck'), st.platform === 'darwin' ? 'Allow through the macOS firewall' : 'Allow through Windows Firewall')))));
   }
   return out;
 }
@@ -283,9 +286,9 @@ function automationSection() {
         'minutes without players') : null,
     }),
     h('div', { class: 'toggle-row' },
-      h('div', { class: 'grow' }, h('div', { class: 'title' }, 'Start this app when Windows starts'),
-        h('div', { class: 'help' }, 'Opens quietly in the background (look for the shield in the taskbar corner).')),
-      toggle({ checked: !!view.launchOnLogin, 'data-action': 'settings-login', 'aria-label': 'Start with Windows' })));
+      h('div', { class: 'grow' }, h('div', { class: 'title' }, mac() ? 'Start this app when you log in' : 'Start this app when Windows starts'),
+        h('div', { class: 'help' }, mac() ? 'Opens quietly in the background. Open Valheim Easy Server again to see the control panel.' : 'Opens quietly in the background (look for the shield in the taskbar corner).')),
+      toggle({ checked: !!view.launchOnLogin, 'data-action': 'settings-login', 'aria-label': mac() ? 'Start when you log in' : 'Start with Windows' })));
 }
 
 function restSection(app) {
@@ -301,7 +304,7 @@ function restSection(app) {
     h('div', { class: 'card-head' }, h('h2', null, 'Resting and waking up')),
     h('p', { class: 'text-2', style: { marginBottom: '12px' } }, 'When the Hibernate (or Sleep) button is used, or nobody has played for a while, the computer can:'),
     h('div', { class: 'choices' },
-      option('hibernate', 'Hibernate', 'Uses no power. Some computers can’t be woken by Wake-on-LAN from hibernation; if yours doesn’t wake, choose Sleep.'),
+      st && st.platform === 'darwin' ? null : option('hibernate', 'Hibernate', 'Uses no power. Some computers can’t be woken by Wake-on-LAN from hibernation; if yours doesn’t wake, choose Sleep.'),
       option('sleep', 'Sleep', canSleep ? 'Uses a little power and wakes in seconds. Wake-on-LAN can wake most computers from sleep.' : st.sleep.detail, !canSleep)),
     h('h3', { class: 'subhead' }, 'Wake-on-LAN'),
     main ? [
@@ -312,12 +315,12 @@ function restSection(app) {
       h('p', { class: 'small muted' }, [main.name, main.description !== main.name ? main.description : '', (main.ipv4 || [])[0] ? 'IP ' + main.ipv4[0] : ''].filter(Boolean).join(' · ')),
       main.wakeArmed
         ? h('div', { class: 'callout good', style: { marginTop: '12px' } }, icon('check'), h('div', { class: 'body' },
-          h('p', null, 'Windows lets this network adapter wake the computer.'),
+          h('p', null, st.platform === 'darwin' ? '“Wake for network access” is on: a Wake-on-LAN signal wakes this Mac.' : 'Windows lets this network adapter wake the computer.'),
           h('p', { class: 'small text-2' }, 'Test it once: use the Hibernate (or Sleep) button, wait a minute, then send Wake-on-LAN from the IP KVM.')))
         : h('div', { class: 'callout warn', style: { marginTop: '12px' } }, icon('alert'), h('div', { class: 'body' },
-          h('p', null, 'Windows doesn’t let this network adapter wake the computer yet.'),
-          h('div', { class: 'actions' }, h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'enable-wol' }, icon('power'), 'Turn on Wake-on-LAN')),
-          h('p', { class: 'small text-2', style: { marginTop: '8px' } }, 'Windows asks for permission. Nobody playing is disconnected. If it still doesn’t wake afterwards, restart the computer once.'))),
+          h('p', null, st.platform === 'darwin' ? '“Wake for network access” is off, so this Mac can’t be woken over the network yet.' : 'Windows doesn’t let this network adapter wake the computer yet.'),
+          h('div', { class: 'actions' }, h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'enable-wol' }, icon('power'), st.platform === 'darwin' ? 'Turn on Wake for network access' : 'Turn on Wake-on-LAN')),
+          h('p', { class: 'small text-2', style: { marginTop: '8px' } }, st.platform === 'darwin' ? 'macOS asks for an administrator’s password. Nobody playing is disconnected.' : 'Windows asks for permission. Nobody playing is disconnected. If it still doesn’t wake afterwards, restart the computer once.'))),
       others.length ? h('p', { class: 'small muted', style: { marginTop: '10px' } }, 'Other network ports: ',
         others.map((a) => `${a.name} (${a.mac}${a.connected ? '' : ', no cable'})`).join(', ')) : null,
     ] : h('div', { class: 'callout warn' }, icon('alert'), h('div', { class: 'body' },
@@ -399,8 +402,8 @@ function maintenanceSection(app) {
         h('button', { class: 'btn', 'data-action': 'repair', disabled: running || busy }, icon('wrench'), 'Repair server files'),
         running ? h('span', { class: 'small muted' }, 'Stop the server to update or repair it.') : null),
       h('div', { class: 'row' },
-        h('button', { class: 'btn', 'data-action': 'fix-firewall' }, icon('shieldCheck'), 'Allow through Windows Firewall'),
-        st && !st.hibernate.available ? h('button', { class: 'btn', 'data-action': 'enable-hibernate' }, icon('moon'), 'Turn on hibernation') : null),
+        h('button', { class: 'btn', 'data-action': 'fix-firewall' }, icon('shieldCheck'), st && st.platform === 'darwin' ? 'Allow through the macOS firewall' : 'Allow through Windows Firewall'),
+        st && !st.hibernate.available && st.platform !== 'darwin' ? h('button', { class: 'btn', 'data-action': 'enable-hibernate' }, icon('moon'), 'Turn on hibernation') : null),
       h('div', { class: 'row', style: { paddingTop: '12px', borderTop: '1px solid var(--line)' } },
         h('button', { class: 'btn', 'data-action': 'settings-quit', 'data-stop': '0' }, icon('x'), 'Close the app (server keeps running)'),
         running ? h('button', { class: 'btn btn-danger', 'data-action': 'settings-quit', 'data-stop': '1' }, icon('power'), 'Stop the server and close the app') : null),
@@ -575,7 +578,8 @@ export default {
       try {
         await api('/api/system/launch-on-login', { method: 'POST', body: { enabled: el.checked } });
         view.launchOnLogin = el.checked;
-        toast(el.checked ? 'The app will start with Windows.' : 'The app won’t start with Windows any more.', 'good');
+        toast(el.checked ? (mac() ? 'The app will start when you log in.' : 'The app will start with Windows.')
+          : (mac() ? 'The app won’t start when you log in any more.' : 'The app won’t start with Windows any more.'), 'good');
       } catch (e) {
         el.checked = !el.checked;
         toast(e.message, 'bad');

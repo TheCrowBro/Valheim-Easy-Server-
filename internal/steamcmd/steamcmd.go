@@ -26,7 +26,12 @@ import (
 // can be downloaded with an anonymous login.
 const AppID = "896660"
 
-const windowsZipURL = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip"
+// downloads is where SteamCMD comes from on each system.
+var downloads = map[string]string{
+	"windows": "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip",
+	"darwin":  "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_osx.tar.gz",
+	"linux":   "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz",
+}
 
 // Progress is reported while installing.
 type Progress struct {
@@ -57,9 +62,6 @@ func (s *SteamCMD) exe() string {
 
 // Install implements Installer.
 func (s *SteamCMD) Install(ctx context.Context, validate bool, progress func(Progress)) error {
-	if runtime.GOOS != "windows" {
-		return errors.New("installing with SteamCMD is only supported on Windows by this app")
-	}
 	if err := s.ensureSteamCMD(ctx, progress); err != nil {
 		return err
 	}
@@ -98,11 +100,15 @@ func (s *SteamCMD) ensureSteamCMD(ctx context.Context, progress func(Progress)) 
 	if _, err := os.Stat(s.exe()); err == nil {
 		return nil
 	}
+	link, ok := downloads[runtime.GOOS]
+	if !ok {
+		return fmt.Errorf("SteamCMD isn't available for %s", runtime.GOOS)
+	}
 	progress(Progress{Step: "Downloading SteamCMD…", Percent: 0})
 	if err := os.MkdirAll(s.Dir, 0o755); err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, windowsZipURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, link, nil)
 	if err != nil {
 		return err
 	}
@@ -115,12 +121,12 @@ func (s *SteamCMD) ensureSteamCMD(ctx context.Context, progress func(Progress)) 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("couldn't download SteamCMD (server said %s)", resp.Status)
 	}
-	zipPath := filepath.Join(s.Dir, "steamcmd.zip")
-	f, err := os.Create(zipPath)
+	archive := filepath.Join(s.Dir, filepath.Base(link))
+	f, err := os.Create(archive)
 	if err != nil {
 		return err
 	}
-	defer os.Remove(zipPath)
+	defer os.Remove(archive)
 	pr := &progressReader{r: resp.Body, total: resp.ContentLength, report: func(pct float64) {
 		progress(Progress{Step: "Downloading SteamCMD…", Percent: pct})
 	}}
@@ -131,7 +137,18 @@ func (s *SteamCMD) ensureSteamCMD(ctx context.Context, progress func(Progress)) 
 	if err := f.Close(); err != nil {
 		return err
 	}
-	return extractOne(zipPath, "steamcmd.exe", s.exe())
+	if runtime.GOOS == "windows" {
+		return extractOne(archive, "steamcmd.exe", s.exe())
+	}
+	// The macOS one has a framework with links inside: the system's tar
+	// unpacks it as intended.
+	if out, err := exec.CommandContext(ctx, "tar", "-xzf", archive, "-C", s.Dir).CombinedOutput(); err != nil {
+		return fmt.Errorf("the SteamCMD download couldn't be unpacked: %v %s", err, strings.TrimSpace(string(out)))
+	}
+	if _, err := os.Stat(s.exe()); err != nil {
+		return errors.New("the SteamCMD download doesn't contain steamcmd.sh")
+	}
+	return nil
 }
 
 // extractOne copies a single named file out of a zip archive.
@@ -272,6 +289,8 @@ func FriendlyError(msg string) string {
 		return "SteamCMD couldn't write the server files. Make sure the disk isn't full and the server isn't running."
 	case strings.Contains(low, "timeout"), strings.Contains(low, "no connection"), strings.Contains(low, "connect"):
 		return "SteamCMD couldn't reach Steam. Check the internet connection and try again."
+	case strings.Contains(low, "bad cpu type"):
+		return "SteamCMD needs Rosetta on a Mac with Apple silicon. Open Terminal, run: softwareupdate --install-rosetta, then try again."
 	case strings.Contains(low, "0x6"):
 		return "SteamCMD hit an error while updating (" + msg + "). Try again, or use Repair."
 	}

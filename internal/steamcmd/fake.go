@@ -47,6 +47,9 @@ func (f *Fake) Install(ctx context.Context, validate bool, progress func(Progres
 	}
 	defer in.Close()
 	dst := filepath.Join(f.InstallDir, f.ExeName)
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
 	tmp := dst + ".tmp"
 	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 	if err != nil {

@@ -135,10 +135,14 @@ func (m *Manager) sampleLoop() {
 		case <-m.ctx.Done():
 			return
 		case now := <-tick.C:
-			gap := now.Sub(last)
+			// The wall clock keeps running while the computer rests (unlike
+			// the clock timers use on macOS and Linux), so a long pause
+			// between readings means it has just woken up.
+			gap := now.Round(0).Sub(last.Round(0))
 			last = now
-			// The clock keeps running while the computer rests, so a long
-			// pause between readings means it has just woken up.
+			if gap <= 0 { // the clock was set back
+				gap = m.opt.SampleInterval
+			}
 			if gap > m.opt.SampleInterval+20*time.Second {
 				m.onWake(gap)
 				continue
@@ -224,6 +228,7 @@ func (m *Manager) onWake(gap time.Duration) {
 	m.resumeOnWake = false
 	m.net.publicAt = time.Time{} // the address may have changed
 	m.mu.Unlock()
+	platform.AfterWake() // a Mac may be only half awake after Wake-on-LAN
 	m.updateAwake()
 	m.log.Printf("woke up after %s", gap.Round(time.Second))
 	m.addActivity("wake", "", fmt.Sprintf("The computer woke up. It stays awake for at least %d minutes, so friends have time to join.", int(wakeGrace.Minutes())))

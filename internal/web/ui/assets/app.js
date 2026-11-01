@@ -233,9 +233,14 @@ A.hibernate = async () => {
   run('/api/power/hibernate');
 };
 A['keep-awake'] = () => run('/api/power/keep-awake', null, 'Resting automatically was postponed.');
-A['enable-wol'] = () => run('/api/power/enable-wake-on-lan', null, 'Windows will ask for permission. Click Yes, then wait a few seconds.');
+// isMac reports whether the server computer is a Mac (the panel is the same
+// on both; a few words and settings differ).
+export const isMac = () => !!(app.status && app.status.platform === 'darwin');
+const askNote = () => (isMac() ? 'macOS asks for an administrator’s password: type it and click OK, then wait a few seconds.'
+  : 'Windows will ask for permission. Click Yes, then wait a few seconds.');
+A['enable-wol'] = () => run('/api/power/enable-wake-on-lan', null, askNote());
 A['enable-hibernate'] = () => run('/api/power/enable-hibernate', null, 'Windows will ask for permission. Click Yes.');
-A['fix-firewall'] = () => run('/api/system/firewall', null, 'Windows will ask for permission. Click Yes, then wait a few seconds.');
+A['fix-firewall'] = () => run('/api/system/firewall', null, askNote());
 A['open-folder'] = (d) => run('/api/system/open-folder', { which: d.which });
 A.copy = (d) => copyText(d.text, d.label || 'Copied');
 A.go = (d) => go(d.page);

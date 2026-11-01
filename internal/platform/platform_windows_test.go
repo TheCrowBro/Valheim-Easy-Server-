@@ -171,7 +171,7 @@ func TestMachineAndPower(t *testing.T) {
 		t.Logf("idle for %v", d)
 	}
 	on, err := LaunchOnLogin()
-	t.Logf("launch on login = %v (%v), firewall ready = %v, steam = %q", on, err, FirewallReady(), SteamPath())
+	t.Logf("launch on login = %v (%v), firewall ready = %v, steam = %q", on, err, FirewallReady(""), SteamPath())
 	if free, ok := FreeDisk(os.TempDir()); !ok || free == 0 {
 		t.Fatalf("free disk = %d %v", free, ok)
 	}

@@ -373,18 +373,31 @@ func Title(name string) string {
 	return name
 }
 
-// Env is what the server's environment needs to load mods on Linux. On
-// Windows, winhttp.dll in the server folder does the same job.
+// Env is what the server's environment needs to load mods on Linux and
+// macOS: Doorstop, loaded into the server, starts BepInEx. On Windows,
+// winhttp.dll in the server folder does the same job.
 func Env(dir string, on bool) []string {
-	if !on || runtime.GOOS != "linux" {
+	if !on {
 		return nil
 	}
-	return []string{
-		"DOORSTOP_ENABLED=1",
-		"DOORSTOP_TARGET_ASSEMBLY=" + filepath.Join(dir, "BepInEx", "core", "BepInEx.Preloader.dll"),
-		"LD_LIBRARY_PATH=" + filepath.Join(dir, "doorstop_libs") + ":" + filepath.Join(dir, "linux64") + ":" + os.Getenv("LD_LIBRARY_PATH"),
-		"LD_PRELOAD=libdoorstop_x64.so",
+	preloader := "DOORSTOP_TARGET_ASSEMBLY=" + filepath.Join(dir, "BepInEx", "core", "BepInEx.Preloader.dll")
+	switch runtime.GOOS {
+	case "linux":
+		return []string{
+			"DOORSTOP_ENABLED=1", preloader,
+			"LD_LIBRARY_PATH=" + filepath.Join(dir, "doorstop_libs") + ":" + filepath.Join(dir, "linux64") + ":" + os.Getenv("LD_LIBRARY_PATH"),
+			"LD_PRELOAD=libdoorstop_x64.so",
+		}
+	case "darwin":
+		// The server allows these: it's built to take mods. Mono finds its
+		// own libraries in the server's folder when Doorstop starts it.
+		return []string{
+			"DOORSTOP_ENABLED=1", preloader,
+			"DYLD_LIBRARY_PATH=" + filepath.Join(dir, "valheim_server"),
+			"DYLD_INSERT_LIBRARIES=" + macDoorstop(dir),
+		}
 	}
+	return nil
 }
 
 // complete reports whether the packages in want and everything they need

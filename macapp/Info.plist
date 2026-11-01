@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>Valheim Easy Server</string>
+	<key>CFBundleDisplayName</key>
+	<string>Valheim Easy Server</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.thecrowbro.valheimeasyserver</string>
+	<key>CFBundleExecutable</key>
+	<string>ValheimEasyServer</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>BUILD_NUMBER</string>
+	<key>CFBundleVersion</key>
+	<string>BUILD_NUMBER</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>11.0</string>
+	<!-- No Dock icon: the app works in the background, and its window is the control panel in the browser. -->
+	<key>LSUIElement</key>
+	<true/>
+</dict>
+</plist>

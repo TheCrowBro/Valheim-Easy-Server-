@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 
 // Status is everything the dashboard shows. It is polled every few seconds.
 type Status struct {
+	Platform     string                `json:"platform"` // "windows" or "darwin" (macOS)
 	State        State                 `json:"state"`
 	Installed    bool                  `json:"installed"`
 	Job          *Job                  `json:"job,omitempty"`
@@ -122,6 +124,7 @@ func (m *Manager) Status() Status {
 	defer m.mu.Unlock()
 	s := m.settings
 	st := Status{
+		Platform:   runtime.GOOS,
 		State:      m.stateLocked(),
 		Installed:  m.installedLocked(),
 		ServerName: s.ServerName,
@@ -302,13 +305,13 @@ func (m *Manager) checksLoop() {
 	for {
 		m.mu.Lock()
 		due := time.Since(m.checks.at) > time.Minute
-		save := m.paths.Save
+		save, serverExe := m.paths.Save, m.paths.ServerExe
 		m.mu.Unlock()
 		if due {
 			var c checkCache
 			c.at = time.Now()
-			c.firewall = platform.FirewallReady()
-			c.wakeRule = platform.WakeRuleReady()
+			c.firewall = platform.FirewallReady(serverExe)
+			c.wakeRule = platform.WakeRuleReady(m.opt.AppExe)
 			c.hibernate.Available, c.hibernate.Detail = m.opt.HibernateStatus()
 			c.sleep.Available, c.sleep.Detail = m.opt.SleepStatus()
 			c.network = m.opt.NetAdapters()

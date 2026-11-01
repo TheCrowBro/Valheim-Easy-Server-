@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -241,6 +242,11 @@ func (m *Manager) doStart(ctx context.Context, j *jobCtl) error {
 		return err
 	}
 	env := append(os.Environ(), "SteamAppId=892970")
+	if runtime.GOOS == "darwin" {
+		// The macOS server comes without Steam's client library: SteamCMD
+		// has one, for both kinds of Mac.
+		env = append(env, "DYLD_FALLBACK_LIBRARY_PATH="+p.SteamCMD+":/usr/local/lib:/usr/lib")
+	}
 	env = append(env, mods.Env(p.Server, len(mods.ServerMods(s.WorldMods())) > 0)...)
 	j.step("Starting the Valheim server…", -1)
 	proc, err := platform.StartDetached(p.ServerExe, args, p.Server, env)

@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !darwin
 
 package platform
 
@@ -34,3 +34,6 @@ func (*KeepAwake) Set(bool) {}
 
 // IdleTime is unknown outside Windows.
 func IdleTime() (time.Duration, bool) { return 0, false }
+
+// AfterWake has nothing to do here.
+func AfterWake() {}

@@ -1,0 +1,71 @@
+VALHEIM EASY SERVER FOR MAC
+===========================
+Runs a Valheim dedicated server on this Mac, with a control panel in your
+web browser. It needs macOS 11 Big Sur or newer (a 2013 Mac Pro runs up to
+macOS 12 Monterey), on an Intel Mac or one with Apple silicon. It uses
+Valheim's own Mac server, from Steam.
+
+
+FIRST START
+-----------
+1. Drag "Valheim Easy Server" into your Applications folder.
+2. Open it from there. The first time, macOS won't open it, because it
+   isn't signed by Apple (it's free):
+   - macOS 12 Monterey to 14 Sonoma: right-click the app, choose Open,
+     then click Open.
+   - macOS 15 Sequoia and newer: click Done, open System Settings,
+     Privacy & Security, scroll down and click "Open Anyway".
+3. The control panel opens in your web browser. Click "Install the
+   server": it downloads the Valheim server from Steam (about 2 GB). You
+   don't need Steam, or to own Valheim on this Mac.
+
+The app works in the background, with no window or Dock icon of its own.
+Open Valheim Easy Server again (from Applications) to see the control
+panel. To close it, go to Settings, Maintenance.
+
+
+ONCE, ON THIS MAC
+-----------------
+The Home page lists what's left to set up:
+  - "Wake for network access", so your IP KVM (or a Wake-on-LAN app) can
+    wake the Mac from sleep. macOS asks for your password.
+  - Starting the app when you log in, so it's ready after a restart.
+  - If you turned on the macOS firewall, letting friends through it.
+The address your IP KVM needs for Wake-on-LAN (the MAC address) is in
+Settings, under "Resting and waking up".
+
+
+TO PLAY
+-------
+In Valheim, go to Join Game and join by the code the control panel shows
+(crossplay), or add the server by its address.
+
+
+COMING FROM THE WINDOWS VERSION
+-------------------------------
+On the Worlds page of the Windows version, click "Download" on each
+world, then drop the zips on "Add a world" on the Mac. Your Discord
+settings, mods and JetKVM setup are set up again in the Mac's Settings.
+
+
+WHERE EVERYTHING IS
+-------------------
+The server, worlds, backups and logs are in your home folder, under
+Library/Application Support/ValheimEasyServer (Settings has buttons that
+open these folders).
+
+
+UPDATES
+-------
+The app keeps itself up to date from GitHub, like the Windows version.
+It can only do that from the Applications folder (or another folder you
+moved it to), not straight from Downloads.
+
+
+MORE HELP
+---------
+https://github.com/TheCrowBro/Valheim-Easy-Server-
+
+Mods are loaded with UnityDoorstop (https://github.com/NeighTools/UnityDoorstop),
+which is under the GNU LGPL 2.1; its license is inside the app, in
+Contents/Resources.

@@ -55,7 +55,7 @@ func sum(s string) string {
 }
 
 func TestLatestAndDownload(t *testing.T) {
-	program := "MZ the new app"
+	program := ProgramHeader + " the new app"
 	files := map[string]string{
 		"/build-5/" + ExeName:             program,
 		"/build-5/" + ExeName + ".sha256": sum(program) + "  " + ExeName + "\n",
@@ -89,7 +89,7 @@ func TestLatestAndDownload(t *testing.T) {
 	}
 
 	// A file that doesn't match its checksum isn't kept.
-	files["/build-5/"+ExeName] = "MZ something else"
+	files["/build-5/"+ExeName] = ProgramHeader + " something else"
 	if err := u.Download(context.Background(), rel, path); err == nil || !strings.Contains(err.Error(), "checksum") {
 		t.Fatalf("a changed file: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestLatestAndDownload(t *testing.T) {
 	// Nor something that isn't a program.
 	files["/build-5/"+ExeName] = "<html>"
 	files["/build-5/"+ExeName+".sha256"] = sum("<html>")
-	if err := u.Download(context.Background(), rel, path); err == nil || !strings.Contains(err.Error(), "Windows program") {
+	if err := u.Download(context.Background(), rel, path); err == nil || !strings.Contains(err.Error(), "program for this computer") {
 		t.Fatalf("not a program: %v", err)
 	}
 

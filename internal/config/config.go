@@ -141,7 +141,7 @@ func Defaults() Settings {
 		AutoRestart:         true,
 		StartAfterWake:      true,
 		IdleMinutes:         60,
-		RestMode:            RestHibernate,
+		RestMode:            defaultRestMode(),
 		DiscordStopped:      true,
 		DiscordDaily:        true,
 	}
@@ -240,7 +240,7 @@ func (s *Settings) fillMissing() {
 	if s.IdleMinutes == 0 {
 		s.IdleMinutes = d.IdleMinutes
 	}
-	if s.RestMode == "" {
+	if s.RestMode == "" || runtime.GOOS == "darwin" { // Macs sleep; they don't hibernate
 		s.RestMode = d.RestMode
 	}
 }
@@ -256,6 +256,9 @@ func (s *Settings) Normalize() {
 	s.DiscordWebhook = strings.TrimSpace(s.DiscordWebhook)
 	s.DiscordBotToken = strings.TrimSpace(s.DiscordBotToken)
 	s.JetKVM = strings.TrimSpace(s.JetKVM)
+	if runtime.GOOS == "darwin" {
+		s.RestMode = RestSleep // Macs sleep; they don't hibernate
+	}
 	for name, o := range s.WorldOptions {
 		if o.IsZero() {
 			delete(s.WorldOptions, name)
@@ -518,12 +521,26 @@ type Paths struct {
 	SteamCMDEx string `json:"steamcmdExe"` // full path to steamcmd
 }
 
-// ServerExeName is the dedicated server binary for this OS.
+// ServerExeName is the dedicated server binary for this OS, relative to the
+// server folder. The macOS one is a universal program (Intel and Apple
+// silicon) in a folder of its own.
 func ServerExeName() string {
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		return "valheim_server.exe"
+	case "darwin":
+		return filepath.Join("valheim_server", "Valheim")
 	}
 	return "valheim_server.x86_64"
+}
+
+// defaultRestMode is how the computer rests unless the settings say: Macs
+// sleep (they don't hibernate), and Windows computers hibernate.
+func defaultRestMode() string {
+	if runtime.GOOS == "darwin" {
+		return RestSleep
+	}
+	return RestHibernate
 }
 
 // ResolvePaths works out all folders from the data folder and settings.
