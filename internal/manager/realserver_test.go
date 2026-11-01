@@ -2,12 +2,13 @@
 
 package manager
 
-// The real thing, for checking the app on a new kind of computer (a Mac):
-// it installs the actual Valheim server with SteamCMD (about 2 GB), starts
-// a world with crossplay, saves and stops it, then plays it with a mod and
-// checks BepInEx loaded it. Run it with:
+// The real thing, for checking the app on Windows and on a Mac: it installs
+// the actual Valheim server with SteamCMD (about 2 GB), makes a new world
+// with crossplay and stops it as soon as it's online (the world must be
+// saved), plays it with a mod and checks BepInEx loaded it, then plays it
+// without crossplay or mods. Run it with:
 //
-//	go test -tags realserver -run TestRealServer -v -timeout 60m ./internal/manager/
+//	go test -tags realserver -run TestRealServer -v -timeout 75m ./internal/manager/
 
 import (
 	"bufio"
@@ -53,7 +54,9 @@ func TestRealServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	start := func(what string) {
+	// Online means the world is loaded and the server is open for players,
+	// which it says in its log: opened is that line.
+	start := func(what, opened string) {
 		step(what)
 		if err := m.StartServer(); err != nil {
 			t.Fatal(err)
@@ -64,6 +67,10 @@ func TestRealServer(t *testing.T) {
 			t.Fatalf("%s: state %s, %s", what, m.Status().State, job.Error)
 		}
 		step("online")
+		if b, _ := os.ReadFile(m.CurrentLogPath()); !strings.Contains(string(b), opened) {
+			dumpLog(t, m)
+			t.Fatalf("online before the server said %q", opened)
+		}
 	}
 	stop := func() {
 		step("stopping (the world is saved first)")
@@ -92,11 +99,12 @@ func TestRealServer(t *testing.T) {
 			t.Errorf("no join code (crossplay): %q", join.Problem)
 		}
 	}
-	start("a new world with crossplay")
-	waitCode()
+	// Stopped as soon as it's online, a new world is saved: it was made
+	// before the server said it was online.
+	start("a new world with crossplay", "Opened PlayFab server")
 	logPath := m.CurrentLogPath()
 	stop()
-	if b, err := os.ReadFile(logPath); err == nil { // how the macOS server starts and stops, line by line
+	if b, err := os.ReadFile(logPath); err == nil { // how the server starts and stops, line by line
 		t.Logf("the whole server log:\n%s", b)
 	}
 	w, err := m.Worlds()
@@ -108,7 +116,7 @@ func TestRealServer(t *testing.T) {
 	if err := m.SetWorldMods("Midgard", []string{"planteverything"}); err != nil {
 		t.Fatal(err)
 	}
-	start("the same world with a mod (Plant Everything)")
+	start("the same world with a mod (Plant Everything)", "Opened PlayFab server")
 	waitCode()
 	bep := filepath.Join(p.Server, "BepInEx", "LogOutput.log")
 	b, err := os.ReadFile(bep)
@@ -125,6 +133,32 @@ func TestRealServer(t *testing.T) {
 		t.Fatalf("the world wasn't saved when the server stopped with mods: %+v %v (before %v)", w.Worlds, err, before)
 	}
 	t.Logf("saved again with the mod: %v", w.Worlds[0].Modified)
+
+	// Without crossplay or mods: Valheim's own server, through Steam only.
+	s = m.Settings()
+	s.Crossplay = false
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetWorldMods("Midgard", nil); err != nil {
+		t.Fatal(err)
+	}
+	bepInfo, _ := os.Stat(bep)
+	before = w.Worlds[0].Modified
+	start("the same world without crossplay or mods", "Opened Steam server")
+	if st := m.Status(); st.Join.Code != "" {
+		t.Errorf("a join code without crossplay: %q", st.Join.Code)
+	}
+	stop()
+	dumpLog(t, m)
+	if now, err := os.Stat(bep); err == nil && bepInfo != nil && !now.ModTime().Equal(bepInfo.ModTime()) {
+		t.Error("BepInEx was loaded for a world without mods")
+	}
+	w, err = m.Worlds()
+	if err != nil || len(w.Worlds) != 1 || !w.Worlds[0].Modified.After(before) {
+		t.Fatalf("the world wasn't saved when the server stopped without crossplay: %+v %v (before %v)", w.Worlds, err, before)
+	}
+	t.Logf("saved again without crossplay: %v", w.Worlds[0].Modified)
 }
 
 // waitJobFor waits for the current job to finish.

@@ -13,8 +13,8 @@ import (
 type Kind int
 
 const (
-	Unknown Kind = iota
-	ServerReady
+	Unknown     Kind = iota
+	ServerReady      // the world is loaded and the server is open for players
 	JoinCode
 	PeerCount
 	Connecting
@@ -30,6 +30,7 @@ const (
 	BadPasswordConfig
 	Shutdown
 	CrossplayFailed // Windows couldn't load Valheim's crossplay library
+	SteamConnected  // logged in to Steam, which can come before the world has loaded
 )
 
 // Event is one parsed log line.
@@ -134,8 +135,10 @@ func Parse(line string) Event {
 
 	// The server's own messages.
 	switch {
-	case strings.HasPrefix(text, "Game server connected"):
+	case strings.HasPrefix(text, "Opened Steam server"), strings.HasPrefix(text, "Opened PlayFab server"):
 		ev.Kind = ServerReady
+	case strings.HasPrefix(text, "Game server connected"):
+		ev.Kind = SteamConnected
 	case strings.HasPrefix(text, "DllNotFoundException: Party"),
 		strings.HasPrefix(text, "DLL Not Found: This error usually occurs when you do not have the correct dependencies installed, and will prevent crossplay"):
 		ev.Kind = CrossplayFailed

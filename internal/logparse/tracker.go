@@ -35,7 +35,8 @@ type Tracker struct {
 	JoinCode   string
 	PublicAddr string
 	Version    string
-	Ready      bool
+	Ready      bool      // the world is loaded and the server is open for players
+	SteamAt    time.Time // when it logged in to Steam, often before the world has loaded
 	LastSave   time.Time
 	Stopping   bool
 	StoppingAt time.Time // when the server said it was shutting down
@@ -48,6 +49,13 @@ type Tracker struct {
 	// will come.
 	CrossplayFailed bool
 	session         string // the server's session name, from its first join code line
+}
+
+// Overdue reports a server that logged in to Steam at least wait ago but
+// never said it opened, as if a Valheim update had worded that differently.
+// The caller can then count it as ready after all.
+func (t *Tracker) Overdue(now time.Time, wait time.Duration) bool {
+	return !t.Ready && !t.SteamAt.IsZero() && now.Sub(t.SteamAt) >= wait
 }
 
 // Players returns a copy of everyone online, in join order.
@@ -73,11 +81,20 @@ func (t *Tracker) Apply(ev Event, now time.Time) []Activity {
 		return Activity{Kind: kind, Time: at, Name: name, PlatformID: pid, Text: text}
 	}
 
+	ready := func() []Activity {
+		if t.Ready {
+			return nil
+		}
+		t.Ready = true
+		return []Activity{act("online", "", "", "The server is online and ready for players.")}
+	}
+
 	switch ev.Kind {
 	case ServerReady:
-		if !t.Ready {
-			t.Ready = true
-			return []Activity{act("online", "", "", "The server is online and ready for players.")}
+		return ready()
+	case SteamConnected:
+		if t.SteamAt.IsZero() {
+			t.SteamAt = at
 		}
 	case CrossplayFailed:
 		t.CrossplayFailed = !t.NoJoinCode
@@ -99,12 +116,13 @@ func (t *Tracker) Apply(ev Event, now time.Time) []Activity {
 		if ev.Addr != "" {
 			t.PublicAddr = ev.Addr
 		}
-		if ev.Code != "" && ev.Addr != "" && !t.Ready {
-			t.Ready = true
-		}
+		// Valheim opens its crossplay session once the world is loaded, so
+		// this also means it's ready if the line saying so was missed.
+		out := ready()
 		if ev.Count >= 0 && ev.Addr != "" {
-			return t.reconcile(ev.Count, at)
+			out = append(out, t.reconcile(ev.Count, at)...)
 		}
+		return out
 	case PeerCount:
 		return t.reconcile(ev.Count, at)
 	case Connecting, Handshake, PlatformID:

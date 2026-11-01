@@ -13,7 +13,7 @@ let appRef = null;
 
 function lineClass(text) {
   if (/error|exception|failed|crash/i.test(text)) return 'err';
-  if (/Got character ZDOID|join code|Game server connected|Closing socket/.test(text)) return 'hl';
+  if (/Got character ZDOID|join code|Opened (Steam|PlayFab) server|Closing socket/.test(text)) return 'hl';
   if (/World save|World saved/.test(text)) return 'ok';
   return '';
 }

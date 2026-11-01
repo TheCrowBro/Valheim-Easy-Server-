@@ -11,7 +11,9 @@ func TestParseLines(t *testing.T) {
 		line string
 		want Event
 	}{
-		{"10/22/2026 20:01:11: Game server connected", Event{Kind: ServerReady}},
+		{"10/22/2026 20:01:11: Game server connected", Event{Kind: SteamConnected}},
+		{"11/01/2026 07:30:06: Opened PlayFab server", Event{Kind: ServerReady}},
+		{"11/01/2026 07:30:06: Opened Steam server", Event{Kind: ServerReady}},
 		{`10/22/2026 20:01:15: Session "Viking Friends" with join code 604510 and IP 203.0.113.4:2456 is active with 2 player(s)`,
 			Event{Kind: JoinCode, Code: "604510", Addr: "203.0.113.4:2456", Count: 2}},
 		{`10/22/2026 20:01:12: Session "Viking Friends" registered with join code 604510`, Event{Kind: JoinCode, Code: "604510", Count: -1}},
@@ -37,8 +39,8 @@ func TestParseLines(t *testing.T) {
 		{"10/22/2026 20:15:00: World load failed mid-file. Exiting without save. Check backups!", Event{Kind: WorldLoadFailed}},
 		{"10/22/2026 20:15:00: Error bad password: password is part of world name", Event{Kind: BadPasswordConfig}},
 		{"10/22/2026 22:00:00: OnApplicationQuit", Event{Kind: Shutdown}},
-		{"[Info   :   Unity Log] 10/22/2026 20:01:11: Game server connected", Event{Kind: ServerReady}},
-		{"Game server connected", Event{Kind: ServerReady}},
+		{"[Info   : Unity Log] 11/01/2026 07:30:56: Opened PlayFab server", Event{Kind: ServerReady}},
+		{"Game server connected", Event{Kind: SteamConnected}},
 		// Crossplay can't start: Unity's exception, and Valheim's own words.
 		{"DllNotFoundException: Party assembly:<unknown assembly> type:<unknown type> member:(null)", Event{Kind: CrossplayFailed}},
 		{"[Error  :   Unity Log] DllNotFoundException: Party", Event{Kind: CrossplayFailed}},
@@ -103,7 +105,8 @@ func TestTrackerSteamSession(t *testing.T) {
 	var tr Tracker
 	acts := feed(t, &tr, `
 10/22/2026 20:00:00: Valheim version: l-1.0.12 (network version 35)
-10/22/2026 20:00:30: Game server connected
+10/22/2026 20:00:02: Game server connected
+10/22/2026 20:00:30: Opened Steam server
 10/22/2026 20:01:00: Got connection SteamID 76561198000000001
 10/22/2026 20:01:01: Got handshake from client 76561198000000001
 10/22/2026 20:01:02: Got connection SteamID 76561198000000002
@@ -130,6 +133,68 @@ func TestTrackerSteamSession(t *testing.T) {
 	}
 	if tr.LastSave.IsZero() {
 		t.Fatal("last save not recorded")
+	}
+}
+
+// On a Mac the server logs in to Steam before it has even started loading
+// the world. It's online once it opens, after making or loading the world.
+func TestTrackerOnlineOnceOpen(t *testing.T) {
+	var tr Tracker
+	acts := feed(t, &tr, `
+11/01/2026 07:28:27: Steam game server initialized
+11/01/2026 07:28:27: Valheim version: 1.0.21 (network version 41)
+11/01/2026 07:28:29: Game server connected
+11/01/2026 07:28:37: Load world: Midgard (Midgard)
+11/01/2026 07:28:54: Loading: Generating locations
+11/01/2026 07:30:05: There are 38 that take a long time to generate (over 0.5 sec). Total slow location time is 49.3 seconds that could be saved on world gen!
+`)
+	if tr.Ready || len(acts) != 0 {
+		t.Fatalf("online while still making the world: %+v", acts)
+	}
+	if want := time.Date(2026, 11, 1, 7, 28, 29, 0, time.Local); !tr.SteamAt.Equal(want) {
+		t.Fatalf("logged in to Steam at %v, want %v", tr.SteamAt, want)
+	}
+	acts = feed(t, &tr, `
+11/01/2026 07:30:06: Semaphore type: ManualResetEventSlim
+11/01/2026 07:30:06: Opened PlayFab server
+11/01/2026 07:30:06: New session server "Valheim Easy Server CI" that has join code , now 0 player(s)
+11/01/2026 07:30:07: Session "Valheim Easy Server CI" registered with join code 037599
+`)
+	if got := kinds(acts); got != "online:" || !tr.Ready || tr.JoinCode != "037599" {
+		t.Fatalf("activities %s, ready %v, code %q", got, tr.Ready, tr.JoinCode)
+	}
+	if want := time.Date(2026, 11, 1, 7, 30, 6, 0, time.Local); !acts[0].Time.Equal(want) {
+		t.Fatalf("online at %v, want %v", acts[0].Time, want)
+	}
+}
+
+// If a Valheim update words the line about opening differently, a server
+// that logged in to Steam long ago still counts as online in the end.
+func TestTrackerOverdue(t *testing.T) {
+	var tr Tracker
+	at := func(clock string) time.Time {
+		v, err := time.ParseInLocation("15:04:05", clock, time.Local)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return time.Date(2026, 11, 1, v.Hour(), v.Minute(), v.Second(), 0, time.Local)
+	}
+	if tr.Overdue(at("09:00:00"), 10*time.Minute) {
+		t.Fatal("overdue before logging in to Steam")
+	}
+	feed(t, &tr, `
+11/01/2026 07:50:00: Game server connected
+11/01/2026 07:55:00: Game server connected
+`)
+	if tr.Overdue(at("07:59:59"), 10*time.Minute) {
+		t.Fatal("overdue too soon")
+	}
+	if !tr.Overdue(at("08:00:00"), 10*time.Minute) {
+		t.Fatal("not overdue 10 minutes after the first time it logged in to Steam")
+	}
+	feed(t, &tr, "11/01/2026 08:00:01: Opened Steam server\n")
+	if !tr.Ready || tr.Overdue(at("09:00:00"), 10*time.Minute) {
+		t.Fatalf("ready %v, still overdue", tr.Ready)
 	}
 }
 
@@ -163,7 +228,7 @@ func TestTrackerCrossplaySession(t *testing.T) {
 10/22/2026 20:10:00: Session "Viking Friends" with join code 604510 and IP 203.0.113.4:2456 is active with 1 player(s)
 10/22/2026 20:40:00: Closing socket playfab/AAAA
 `)
-	if got, want := kinds(acts), "join:Freydis,leave:Freydis"; got != want {
+	if got, want := kinds(acts), "online:,join:Freydis,leave:Freydis"; got != want {
 		t.Fatalf("activities = %s, want %s", got, want)
 	}
 	if tr.JoinCode != "604510" || tr.PublicAddr != "203.0.113.4:2456" {
@@ -172,8 +237,8 @@ func TestTrackerCrossplaySession(t *testing.T) {
 	if !tr.Ready {
 		t.Fatal("session line should mark the server ready")
 	}
-	if acts[0].PlatformID != "Xbox_2535416401464117" {
-		t.Fatalf("platform id = %q", acts[0].PlatformID)
+	if acts[1].PlatformID != "Xbox_2535416401464117" { // acts[0] is "online"
+		t.Fatalf("platform id = %q", acts[1].PlatformID)
 	}
 }
 

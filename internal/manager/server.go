@@ -21,6 +21,7 @@ import (
 	"valheim-easy-server/internal/mods"
 	"valheim-easy-server/internal/platform"
 	"valheim-easy-server/internal/steamcmd"
+	"valheim-easy-server/internal/worlds"
 )
 
 var errNotInstalled = &ActionError{
@@ -259,7 +260,11 @@ func (m *Manager) doStart(ctx context.Context, j *jobCtl) error {
 	m.addActivity("starting", "", fmt.Sprintf("Starting the server with the world %q.", s.World))
 	m.pruneLogs()
 
-	j.step("Loading the world… The first start after an update can take a few minutes.", -1)
+	loading := "Loading the world… The first start after an update can take a few minutes."
+	if w, err := m.library().Get(s.World); errors.Is(err, worlds.ErrNotFound) || err == nil && w.NeverSaved {
+		loading = "Making the new world… A world’s first start takes a few minutes."
+	}
+	j.step(loading, -1)
 	select {
 	case <-run.readyCh:
 		j.result("The server is online.")
@@ -275,7 +280,7 @@ func (m *Manager) doStart(ctx context.Context, j *jobCtl) error {
 	case <-ctx.Done():
 		j.result("Stopped waiting for the server to finish loading.")
 		return nil
-	case <-time.After(10 * time.Minute):
+	case <-time.After(readyWait + 5*time.Minute):
 		j.result("The server is running but hasn't said it's ready yet.")
 		return nil
 	}
@@ -612,6 +617,7 @@ func (m *Manager) tail(ctx context.Context, run *serverRun) {
 				m.notify()
 			}
 		}
+		m.checkOverdue(run)
 		select {
 		case <-ctx.Done():
 			if len(partial) > 0 {
@@ -635,7 +641,29 @@ func (m *Manager) handleLine(run *serverRun, line string) {
 	}
 	text := ev.Text // without Valheim's own timestamp; Time carries it
 	m.logs.add(func(seq int64) LogLine { return LogLine{Seq: seq, Time: at, Text: text} })
+	m.handleEvent(run, ev)
+}
 
+// readyWait is how long after logging in to Steam a server that never says
+// it opened is counted as ready anyway. Making a big new world can take
+// several minutes on an older computer.
+var readyWait = 10 * time.Minute
+
+// checkOverdue counts a server as ready when it logged in to Steam long ago
+// but never said it opened, so a Valheim update that words that line
+// differently can't leave it "starting" forever.
+func (m *Manager) checkOverdue(run *serverRun) {
+	m.mu.Lock()
+	overdue := m.run == run && !run.replaying && run.tracker.Overdue(time.Now(), readyWait)
+	m.mu.Unlock()
+	if overdue {
+		m.log.Printf("the server logged in to Steam %v ago but never said it opened; counting it as online", readyWait)
+		m.handleEvent(run, logparse.Event{Kind: logparse.ServerReady, Count: -1})
+	}
+}
+
+// handleEvent updates the server's state with one log event.
+func (m *Manager) handleEvent(run *serverRun, ev logparse.Event) {
 	m.mu.Lock()
 	if m.run != run {
 		m.mu.Unlock()

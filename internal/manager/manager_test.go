@@ -374,6 +374,73 @@ func TestCrashRestartsAutomatically(t *testing.T) {
 	waitFor(t, "stop", 20*time.Second, func() bool { return m.Status().State == StateStopped })
 }
 
+// The first start of a world makes it, which takes a few minutes with the
+// real server: the panel says so.
+func TestSaysWhenMakingANewWorld(t *testing.T) {
+	env := setup(t)
+	m := env.m
+	install(t, m)
+	start := func() string {
+		if err := m.StartServer(); err != nil {
+			t.Fatal(err)
+		}
+		msg := ""
+		waitFor(t, "the server to be online", 20*time.Second, func() bool {
+			if j := m.Status().Job; j != nil && (strings.HasPrefix(j.Message, "Making") || strings.HasPrefix(j.Message, "Loading")) {
+				msg = j.Message
+			}
+			return m.Status().State == StateOnline
+		})
+		if err := m.StopServer(); err != nil {
+			t.Fatal(err)
+		}
+		waitJob(t, m, currentJobID(m))
+		return msg
+	}
+	if msg := start(); !strings.HasPrefix(msg, "Making the new world") {
+		t.Fatalf("first start: %q", msg)
+	}
+	if msg := start(); !strings.HasPrefix(msg, "Loading the world") {
+		t.Fatalf("second start: %q", msg)
+	}
+}
+
+// A server that logged in to Steam but never says it opened, as if a
+// Valheim update had worded that line differently, counts as online after a
+// while instead of starting forever.
+func TestOnlineWhenOpeningIsNeverSaid(t *testing.T) {
+	old := readyWait
+	readyWait = 3 * time.Second
+	t.Cleanup(func() { readyWait = old })
+	t.Setenv("FAKE_VALHEIM_OPEN", "quiet")
+	env := setup(t)
+	m := env.m
+	s := m.Settings()
+	s.Crossplay = false // a join code would say it's open
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	install(t, m)
+	if err := m.StartServer(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the world to load", 15*time.Second, func() bool {
+		b, _ := os.ReadFile(m.CurrentLogPath())
+		return strings.Contains(string(b), "DungeonDB Start")
+	})
+	if st := m.Status().State; st != StateStarting {
+		t.Fatalf("state %s before the server said it opened", st)
+	}
+	waitFor(t, "online after all", 20*time.Second, func() bool { return m.Status().State == StateOnline })
+	if !hasActivity(m, "online", "") {
+		t.Fatal(`no "online" activity`)
+	}
+	if err := m.StopServer(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "stop", 20*time.Second, func() bool { return m.Status().State == StateStopped })
+}
+
 func TestTakesOverRunningServer(t *testing.T) {
 	t.Setenv("FAKE_VALHEIM_SCRIPT", "join:Gunnar@2")
 	env := setup(t)

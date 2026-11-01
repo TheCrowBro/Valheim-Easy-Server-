@@ -15,6 +15,8 @@
 //	FAKE_VALHEIM_PARTY=missing   crossplay can't start, as when Windows can't
 //	                          load Party.dll; "silent" gets no join code either,
 //	                          without saying why
+//	FAKE_VALHEIM_OPEN=quiet   never says it opened for players, as if a Valheim
+//	                          update had worded that line differently
 package main
 
 import (
@@ -135,25 +137,38 @@ func main() {
 		s.log("Error bad password: the password can't be part of the world name or seed")
 		os.Exit(1)
 	}
-	s.sleep(2 * time.Second)
+	// Like the real server: it logs in to Steam while it's still loading
+	// the world, and only opens for players once the world is loaded.
+	s.sleep(1 * time.Second)
+	s.log("Game server connected")
+	s.sleep(1 * time.Second)
 	s.log("ZNet.LoadWorld: " + s.world)
 	s.log("DungeonDB Start")
 	s.sleep(1 * time.Second)
-	s.log("Game server connected")
+	opened := func(line string) {
+		if os.Getenv("FAKE_VALHEIM_OPEN") != "quiet" {
+			s.log(line)
+		}
+	}
 	code := ""
 	if s.crossplay {
 		party := os.Getenv("FAKE_VALHEIM_PARTY")
 		if party == "missing" {
-			// Unity writes the exception without Valheim's timestamp.
+			// Unity writes the exception without Valheim's timestamp. The
+			// session line that follows is all that says the server opened.
 			s.raw("DllNotFoundException: Party assembly:<unknown assembly> type:<unknown type> member:(null)\n" +
 				"  at PlayFab.Party.PlayFabMultiplayerManager.InitializeImpl () [0x000c4] in <5a1d494e032e423ab0fcf9da33b2bcf6>:0 \n")
 			s.log("DLL Not Found: This error usually occurs when you do not have the correct dependencies installed, and will prevent crossplay from working. The dependencies are different depending on which platform you play on.")
+		} else {
+			opened("Opened PlayFab server")
 		}
 		s.log(fmt.Sprintf(`New session server "%s" that has join code , now 0 player(s)`, s.name))
 		if party == "" {
 			code = fmt.Sprintf("%06d", 100000+rand.Intn(899999))
 			s.log(fmt.Sprintf(`Session "%s" registered with join code %s`, s.name, code))
 		}
+	} else {
+		opened("Opened Steam server")
 	}
 
 	go s.loop(code)
