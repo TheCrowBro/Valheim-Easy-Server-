@@ -227,6 +227,16 @@ jobs:
           done
           lipo -create -output ValheimEasyServer-mac ves-amd64 ves-arm64
           lipo -info ValheimEasyServer-mac
+          # A 2013 Mac Pro gets macOS 12 Monterey at most, and each Go release
+          # raises the oldest macOS its programs start on (Go 1.27 needs 13).
+          for arch in x86_64 arm64; do
+            minos=$(vtool -arch "$arch" -show-build ValheimEasyServer-mac | awk '$1 == "minos" {print $2}')
+            echo "$arch: starts on macOS $minos and newer"
+            if [ -z "$minos" ] || [ "${minos%%.*}" -gt 12 ]; then
+              echo "::error::The Mac app would need macOS $minos, but a 2013 Mac Pro has macOS 12 at most. Build it with Go 1.26 (go.mod)."
+              exit 1
+            fi
+          done
       - name: Make the Mac app
         env:
           RUN_NUMBER: ${{ github.run_number }}

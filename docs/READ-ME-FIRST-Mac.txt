@@ -1,9 +1,9 @@
 VALHEIM EASY SERVER FOR MAC
 ===========================
 Runs a Valheim dedicated server on this Mac, with a control panel in your
-web browser. It needs macOS 11 Big Sur or newer (a 2013 Mac Pro runs up to
-macOS 12 Monterey), on an Intel Mac or one with Apple silicon. It uses
-Valheim's own Mac server, from Steam.
+web browser. It needs macOS 12 Monterey or newer (the last macOS for a 2013
+Mac Pro), on an Intel Mac or one with Apple silicon. It uses Valheim's own
+Mac server, from Steam.
 
 
 FIRST START
@@ -38,7 +38,9 @@ Settings, under "Resting and waking up".
 TO PLAY
 -------
 In Valheim, go to Join Game and join by the code the control panel shows
-(crossplay), or add the server by its address.
+(crossplay), or add the server by its address. The first start of a new
+world takes a few minutes while Valheim makes it; the control panel says
+when friends can join.
 
 
 COMING FROM THE WINDOWS VERSION

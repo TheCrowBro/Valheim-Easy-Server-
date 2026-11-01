@@ -1,6 +1,8 @@
 module valheim-easy-server
 
-go 1.27.3
+// Go 1.26 is the newest Go whose Mac programs start on macOS 12 Monterey,
+// the last macOS for a 2013 Mac Pro. CI checks the Mac app still does.
+go 1.26.10
 
 require (
 	fyne.io/systray v1.12.2
