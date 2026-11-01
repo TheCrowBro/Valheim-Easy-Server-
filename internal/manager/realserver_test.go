@@ -108,7 +108,14 @@ func TestRealServer(t *testing.T) {
 	if !strings.Contains(text, "Chainloader startup complete") || !strings.Contains(strings.ToLower(text), "planteverything") {
 		t.Error("BepInEx didn't load the mod")
 	}
+	before := w.Worlds[0].Modified
 	stop()
+	dumpLog(t, m) // how the server stopped, with BepInEx
+	w, err = m.Worlds()
+	if err != nil || len(w.Worlds) != 1 || !w.Worlds[0].Modified.After(before) {
+		t.Fatalf("the world wasn't saved when the server stopped with mods: %+v %v (before %v)", w.Worlds, err, before)
+	}
+	t.Logf("saved again with the mod: %v", w.Worlds[0].Modified)
 }
 
 // waitJobFor waits for the current job to finish.
