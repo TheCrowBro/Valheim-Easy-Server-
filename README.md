@@ -13,6 +13,7 @@ Run a Valheim dedicated server on a spare Windows PC, such as an old Mac Pro run
 - **Add a world by dropping it in.** Drop a world onto the app (a Valheim 1.0 world folder, an older `.fwl` + `.db` pair, or a zip of either) and it goes into the server's worlds folder by itself. The app only asks when the server already has a world with that name: replace it (keeping a backup) or keep both. Replacing the world that's running restarts the server with the new copy. Any world can be downloaded as a zip, and "Import from this PC" copies worlds from the Valheim game installed on the server computer.
 - **Mods per world.** Pick from eight mods for each world, among them Riverheim's new landscapes, More World Locations' 190 new places to explore, Seasonality and Plant Everything, all kept up to date for Valheim 1.0 and downloaded from Thunderstore. The app downloads them with what they need when that world starts and keeps them up to date; worlds without mods run plain Valheim. A pop-up tells players which mods they need and where to download them.
 - **Join code in Discord.** Each time the server is online, it can post the join code in your Discord channel, and say when the server stops. At the end of each day it says who died the most.
+- **Start it from Discord.** Friends type `/valheim` in your Discord: if the computer is asleep, a small helper on your JetKVM wakes it up, and the server starts. The app sets the helper up for you.
 - **Backups.** Valheim's own automatic backups and the app's backups are listed together, and each one can be restored or downloaded. The app makes a backup before anything is replaced, restored over or deleted.
 - **Hibernate or sleep, and wake with Wake-on-LAN.** Saves the world, stops the server and hibernates the computer (or puts it to sleep). Wake it from an IP KVM's Wake-on-LAN, or with the power button, and the server starts again. It can also rest on its own when nobody has played for a while.
 - **Stats.** CPU, memory, GPU and network use for the Valheim server and the whole computer, over 15 minutes to 24 hours. A breakdown by number of players estimates what each extra player costs.
@@ -91,6 +92,32 @@ Each time the server is online, the channel gets a message like this:
 - Turning it on while the server is online posts the code straight away. If the app is closed and opened again while the server runs, the code isn't posted twice.
 - With Crossplay off, the message has the server's internet address instead of a join code. Nobody gets pinged by the message.
 
+## Starting the server from Discord
+
+Friends type **/valheim** in your Discord. If the server computer is asleep, it wakes up and the server starts, and the bot's answer changes to say so once Valheim is ready, usually within a few minutes. If the server is already up, the bot says so, with how many are playing.
+
+Waking a computer takes something on the home network that's always on. A JetKVM is, so the app puts a small program on it, the waker, which stays in Discord as your bot. When someone types /valheim, the waker sends the computer the same Wake-on-LAN signal as the JetKVM's own Wake-on-LAN button, and the app starts the server when it hears it.
+
+Set it up in **Settings → Start the server from Discord**:
+
+1. **Make a Discord bot.** Open [discord.com/developers/applications](https://discord.com/developers/applications), click **New Application** and call it, for example, "Valheim". Click **Bot**, then **Reset Token**, and copy the token into the app. Nothing else there needs changing.
+2. **Let the app into the JetKVM.** Type the JetKVM's address in the app (it shows on the JetKVM's little screen). On the JetKVM's page, go to **Settings → Advanced**, turn on **Developer Mode**, paste the app's key into **SSH Public Key** and click **Update SSH Key**. The app shows the key with a **Copy** button, and can post it in your join-code channel if you're setting the JetKVM up from another computer.
+3. Click **Install on the JetKVM**. The app checks the token with Discord, copies the waker to the JetKVM and starts it. From then on it starts by itself whenever the JetKVM does.
+4. **Add the bot to your Discord server** with the link the app shows next. Someone who manages the Discord server has to open it. /valheim appears straight away.
+
+Then:
+
+- If the app asks, click **Allow through Windows Firewall**, so it hears the wake signal once the computer is awake.
+- Choose **Sleep** under **Resting and waking up**: most computers, Macs included, can't be woken over the network from hibernation.
+- Test it once: click **Sleep**, wait a minute, and type /valheim in Discord.
+
+Good to know:
+
+- With **Post the join code in Discord** on, the bot only answers in that channel's Discord server, and the join code appears in the channel once the server is up. Without it, the bot answers in any Discord server it's added to.
+- Everyone in your Discord server can use /valheim. It only wakes the computer and starts the server; it can't stop the server or change anything.
+- The app keeps the waker up to date: when the app updates itself, and when the server's name or this computer's network address changes. If the JetKVM gets a new address, type it in **Change the bot token or the JetKVM's address** and click **Install again**.
+- The JetKVM needs its system at version 0.2.7 or newer (**Settings → General → Update** on the JetKVM), which starts the waker when the JetKVM restarts.
+
 ## Looking after the server through an IP KVM
 
 The app is made to be used on the server computer itself, so anyone who can see its screen and use its keyboard and mouse can run it, including friends connected through an IP KVM or remote desktop.
@@ -98,7 +125,7 @@ The app is made to be used on the server computer itself, so anyone who can see 
 - The control panel is the **Valheim Easy Server** window. If it was closed, click the shield icon next to the clock or double-click `ValheimEasyServer.exe` again.
 - New to the panel? Click **Tutorial** on the Home page, next to **Start server**.
 - Files you drop on **Add a world** must be on the server computer. Bring them over on a USB stick, through the KVM's virtual drive if it has one, or by downloading them there from a chat or cloud drive.
-- After **Hibernate** (or **Sleep**), wake the computer with the KVM's Wake-on-LAN. The address it needs is in **Settings → Resting and waking up**.
+- After **Hibernate** (or **Sleep**), wake the computer with the KVM's Wake-on-LAN, or type /valheim in Discord if [that's set up](#starting-the-server-from-discord). The address the KVM needs is in **Settings → Resting and waking up**.
 - **Download** saves files on the server computer, because that's the computer the KVM shows. It asks where to save: choose a cloud-drive folder (such as OneDrive) or a USB stick, so you can get the file on your own PC.
 
 ## Worlds
@@ -217,6 +244,11 @@ Every change to this project that passes its tests on GitHub becomes a new [rele
 | Wake-on-LAN doesn't wake the computer | Check that **Settings → Resting and waking up** says the network adapter may wake the computer, that the KVM uses the MAC address shown there, and that the computer is on a cable, not Wi-Fi. If it still won't wake from hibernation, choose **Sleep**, and restart the computer once. |
 | No join code appears | The **How friends join** card says why. If crossplay can't start, Windows couldn't load Valheim's crossplay part (`Party.dll`, "DllNotFoundException: Party" in the log). Install Microsoft's Visual C++ Redistributable (x64), from [aka.ms/vc14/vc_redist.x64.exe](https://aka.ms/vc14/vc_redist.x64.exe), and restart the server. If that doesn't help, turn **Crossplay** off in Settings: friends then join by address, with UDP 2456–2457 forwarded to the server computer, and the Discord post gives the address instead of a code. |
 | The join code doesn't appear in Discord | The **How friends join** card says why. In **Settings → Discord**, click **Send a test**. If Discord says the link doesn't work, the webhook was deleted: make a new one and paste its link. |
+| /valheim doesn't wake the computer | In **Settings → Start the server from Discord**, click **Check again**: it says whether the waker on the JetKVM is running and in Discord. Then check that the JetKVM's own Wake-on-LAN button wakes the computer (see the row above), and that **Sleep** is chosen rather than **Hibernate**. |
+| The computer wakes up, but the server doesn't start | Click **Allow through Windows Firewall** in Settings, so the app hears the wake signal. |
+| /valheim doesn't show up in Discord | Add the bot to the Discord server with the link in **Settings → Start the server from Discord**. With the join code posted in Discord, the bot only works in that channel's Discord server. |
+| "The JetKVM didn't let the app in" | On the JetKVM's page, under **Settings → Advanced**, check that **Developer Mode** is on, and paste the app's key into **SSH Public Key** again. |
+| "The JetKVM doesn't identify itself the way it did before" | That's expected after the JetKVM is reset or its system is updated: click **Trust it and install again**. If neither happened, check the JetKVM's address: another device may have it. |
 | The app doesn't update itself | **Settings → App updates** says why. The computer needs internet access to github.com, and the app's folder must be one it can write to, like `C:\Valheim Server` (not Program Files). A copy without **App updates** in Settings needs replacing once (see [App updates](#app-updates)). |
 | The app doesn't open after an update | It normally puts the previous version back by itself. If not, delete `ValheimEasyServer.exe`, rename `ValheimEasyServer.exe.old` to `ValheimEasyServer.exe`, and double-click it. |
 | Mods (BepInEx) | Install them into the server folder (**Settings → Folders → Open**); the app starts the server the same way. Use **Repair server files** to undo. |
@@ -232,6 +264,8 @@ The app's own log is in `logs\app.log` inside its folder, and the server's logs 
 - **Updates come only from this project.** The app checks the repository by its permanent number, and only downloads that release's own files, over HTTPS. Each download must match its SHA-256 checksum. Releases are built by GitHub Actions, with every action pinned to an exact version and a check for known vulnerabilities. Whoever can push to this repository decides what installed copies run, so protect the GitHub account with two-factor authentication and don't give anyone else write access.
 - **Mods run inside the server.** They come from Thunderstore and are kept up to date, so a mod author losing control of their account would affect your server. Only turn on mods you want.
 - **Admin rights.** Allowing the server through the firewall and turning on Wake-on-LAN show a Windows PowerShell admin prompt. The commands go to Windows directly, never through a file another program could change.
+- **Starting from Discord.** /valheim can only wake the computer and start the server. The app hears the wake signal only from your own network, and starts the server once for each request. The bot token is the bot's password: it's kept in `settings.json` on the server computer and in the waker's settings on the JetKVM, which only the JetKVM's administrator can read. If it gets out, click **Reset Token** in the Discord Developer Portal and install again with the new one.
+- **The JetKVM's Developer Mode** lets whoever has the app's key log in to the JetKVM. Only the app has it (`jetkvm-key.pem` in its folder), and the app checks the JetKVM is the same one each time. To undo it all, click **Turn off** in **Settings → Start the server from Discord** (which takes the waker off the JetKVM), turn off Developer Mode on the JetKVM, and remove the bot from your Discord server.
 
 ## How it works
 
@@ -243,11 +277,12 @@ The app's own log is in `logs\app.log` inside its folder, and the server's logs 
 - understands both Valheim world formats: 1.0 world folders (`_main.N.fwl2`, `.db2`, `.chunk` files) and the older `.fwl` + `.db` pairs;
 - serves the control panel from inside the app to this computer only (127.0.0.1) and opens it in a Microsoft Edge app window. It turns away requests that other websites open in a browser could make: it checks the address the browser used, the browser's own "which site is asking" header, and an anti-forgery header on every change;
 - posts in Discord, when that's turned on, by sending each message to the channel's webhook link;
+- starts the server from Discord with a small program it carries for the JetKVM's ARM processor (`valheim-waker`, built from `cmd/valheim-waker`). It copies it to the JetKVM over SSH with its own key, into `/userdata/valheim-waker`, with a start script in `/userdata/init.d`. The waker stays connected to Discord as your bot. For /valheim, it sends Wake-on-LAN packets to the computer's network adapter for a few minutes, each request with its own random tag, and asks the server whether it's up (a Steam query on the game port + 1). The app listens for those packets on UDP port 9 and starts the server once per tag;
 - updates itself from this project's GitHub releases (see [Security](#security)). It checks the download's SHA-256 checksum, renames the running program to `ValheimEasyServer.exe.old` (Windows allows renaming a running program), puts the new one in its place and starts it on the same port. If the new one's panel doesn't answer within a minute, the old one goes back;
 - reads CPU, GPU, memory and network usage from Windows' performance counters, the same source Task Manager uses;
 - hibernates with `shutdown /h` or sleeps through Windows' own sleep call, and sets up Wake-on-LAN with `powercfg /deviceenablewake` and the network adapter's power settings (magic packet on, pattern wake off).
 
-Its folder holds `settings.json`, `server\` (the Valheim server), `saves\worlds_local\` (worlds), `saves\adminlist.txt` and the other player lists, `backups\`, `logs\` and `steamcmd\`.
+Its folder holds `settings.json`, `jetkvm.json` and `jetkvm-key.pem` (once the JetKVM is set up), `server\` (the Valheim server), `saves\worlds_local\` (worlds), `saves\adminlist.txt` and the other player lists, `backups\`, `logs\` and `steamcmd\`.
 
 ## Building from source
 

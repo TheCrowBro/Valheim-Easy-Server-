@@ -29,6 +29,10 @@ func newFakeDiscord(t *testing.T) *fakeDiscord {
 			w.Write([]byte(`{"message": "Unknown Webhook", "code": 10015}`))
 			return
 		}
+		if r.Method == http.MethodGet { // which Discord server the webhook is in
+			w.Write([]byte(`{"id": "123", "type": 1, "guild_id": "g1", "channel_id": "2"}`))
+			return
+		}
 		var body struct {
 			Content string `json:"content"`
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -124,5 +125,24 @@ func TestPostErrors(t *testing.T) {
 	var de *Error
 	if err := Post(context.Background(), nil, dead.URL+"/api/webhooks/1/x", "hi"); !errors.As(err, &de) || !de.Temporary {
 		t.Errorf("unreachable: %v", err)
+	}
+}
+
+func TestGuild(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/webhooks/1/good":
+			io.WriteString(w, `{"id": "1", "type": 1, "guild_id": "4242", "channel_id": "77"}`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			io.WriteString(w, `{"message": "Unknown Webhook", "code": 10015}`)
+		}
+	}))
+	defer srv.Close()
+	if g, err := Guild(context.Background(), nil, srv.URL+"/api/webhooks/1/good"); err != nil || g != "4242" {
+		t.Fatalf("guild = %q, %v", g, err)
+	}
+	if _, err := Guild(context.Background(), nil, srv.URL+"/api/webhooks/1/gone"); err == nil || !strings.Contains(err.Error(), "webhook link doesn't work") {
+		t.Fatalf("err = %v", err)
 	}
 }

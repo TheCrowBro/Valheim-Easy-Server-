@@ -387,6 +387,17 @@ func (m *Manager) attach(proc *platform.Proc, info runInfo, adopted bool) *serve
 		if err != nil {
 			m.log.Printf("waiting for server: %v", err)
 		}
+		// The app closing waits for what's left to do after the server
+		// exits, such as saving the records, but never for the server.
+		m.mu.Lock()
+		closing := m.closing
+		if !closing {
+			m.exits.Add(1)
+		}
+		m.mu.Unlock()
+		if !closing {
+			defer m.exits.Done()
+		}
 		time.Sleep(700 * time.Millisecond) // let the log reader catch the last lines
 		cancel()
 		m.onExit(run, code)

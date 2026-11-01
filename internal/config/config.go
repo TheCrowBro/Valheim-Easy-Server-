@@ -57,6 +57,13 @@ type Settings struct {
 	DiscordStopped  bool   `json:"discordStopped"`  // also say when the server stops
 	DiscordDaily    bool   `json:"discordDaily"`    // and who died the most each day
 
+	// Starting the server from Discord: a waker on the JetKVM (an IP KVM
+	// that's always on) answers /valheim by waking this computer. These are
+	// set when it's installed, not on the Settings page.
+	DiscordBotToken string `json:"discordBotToken,omitempty"`
+	JetKVM          string `json:"jetkvm,omitempty"` // its address on the home network
+	DiscordWake     bool   `json:"discordWake"`      // the waker is installed: listen for its wake signals
+
 	// WorldOptions holds difficulty settings per world name.
 	WorldOptions map[string]WorldOptions `json:"worldOptions,omitempty"`
 
@@ -247,6 +254,8 @@ func (s *Settings) Normalize() {
 	s.SaveDir = strings.TrimSpace(s.SaveDir)
 	s.ExtraArgs = strings.TrimSpace(s.ExtraArgs)
 	s.DiscordWebhook = strings.TrimSpace(s.DiscordWebhook)
+	s.DiscordBotToken = strings.TrimSpace(s.DiscordBotToken)
+	s.JetKVM = strings.TrimSpace(s.JetKVM)
 	for name, o := range s.WorldOptions {
 		if o.IsZero() {
 			delete(s.WorldOptions, name)

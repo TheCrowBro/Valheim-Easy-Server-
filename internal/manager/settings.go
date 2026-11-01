@@ -20,6 +20,8 @@ func (m *Manager) UpdateSettings(in config.Settings) error {
 	next.World = cur.World
 	next.WorldOptions = cur.Clone().WorldOptions // set on the Worlds page
 	next.Mods = nil                              // each world has its own now
+	// Set when the JetKVM waker is installed, not on the Settings page.
+	next.DiscordBotToken, next.JetKVM, next.DiscordWake = cur.DiscordBotToken, cur.JetKVM, cur.DiscordWake
 	next.Normalize()
 	if errs := next.Validate(); errs != nil {
 		return errs
@@ -37,6 +39,12 @@ func (m *Manager) UpdateSettings(in config.Settings) error {
 	}
 	if err := m.saveSettingsLocked(next); err != nil {
 		return err
+	}
+	// The waker on the JetKVM names the server, asks whether it's up at its
+	// port, and answers only in the join-code channel's Discord server.
+	if cur.DiscordWake && (next.ServerName != cur.ServerName || next.Port != cur.Port ||
+		next.Discord != cur.Discord || next.DiscordWebhook != cur.DiscordWebhook) {
+		m.go_(m.upkeepWaker)
 	}
 	// Turned on, or moved to another channel: post the join code there now.
 	// Likewise when the password is to be included, so friends get it.

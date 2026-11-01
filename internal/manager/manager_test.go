@@ -52,7 +52,7 @@ type testEnv struct {
 	slept      atomic.Int32
 }
 
-func newTestManager(t *testing.T, data string, env *testEnv) *Manager {
+func newTestManager(t *testing.T, data string, env *testEnv, change ...func(*Options)) *Manager {
 	t.Helper()
 	opt := Options{
 		DataDir:         data,
@@ -70,6 +70,9 @@ func newTestManager(t *testing.T, data string, env *testEnv) *Manager {
 			return nil
 		},
 	}
+	for _, c := range change {
+		c(&opt)
+	}
 	m, err := New(opt)
 	if err != nil {
 		t.Fatal(err)
@@ -79,10 +82,11 @@ func newTestManager(t *testing.T, data string, env *testEnv) *Manager {
 	return m
 }
 
-func setup(t *testing.T) *testEnv {
+// setup starts a manager for a test; change sets options before it starts.
+func setup(t *testing.T, change ...func(*Options)) *testEnv {
 	t.Helper()
 	env := &testEnv{data: t.TempDir()}
-	env.m = newTestManager(t, env.data, env)
+	env.m = newTestManager(t, env.data, env, change...)
 	s := env.m.Settings()
 	s.Port = 20000 + rand.Intn(20000)
 	s.SaveIntervalMinutes = 1

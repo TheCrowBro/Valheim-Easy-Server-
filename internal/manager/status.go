@@ -106,6 +106,7 @@ type netInfo struct {
 type checkCache struct {
 	at            time.Time
 	firewall      bool
+	wakeRule      bool // the app may hear Wake-on-LAN signals
 	hibernate     HibernateInfo
 	sleep         HibernateInfo
 	network       []platform.NetAdapter
@@ -210,7 +211,7 @@ func (m *Manager) Status() Status {
 	}
 	st.Checklist = Checklist{
 		Installed:     st.Installed,
-		Firewall:      m.checks.firewall,
+		Firewall:      m.checks.firewall && (m.checks.wakeRule || !s.DiscordWake),
 		Hibernate:     m.checks.hibernate.Available,
 		LaunchOnLogin: m.checks.launchOnLogin,
 	}
@@ -307,9 +308,10 @@ func (m *Manager) checksLoop() {
 			var c checkCache
 			c.at = time.Now()
 			c.firewall = platform.FirewallReady()
+			c.wakeRule = platform.WakeRuleReady()
 			c.hibernate.Available, c.hibernate.Detail = m.opt.HibernateStatus()
 			c.sleep.Available, c.sleep.Detail = m.opt.SleepStatus()
-			c.network = platform.NetAdapters()
+			c.network = m.opt.NetAdapters()
 			c.launchOnLogin, _ = platform.LaunchOnLogin()
 			c.freeDisk, c.freeDiskOK = platform.FreeDisk(save)
 			m.mu.Lock()
@@ -342,9 +344,9 @@ func (m *Manager) recheckSoon() {
 // FixFirewall adds the firewall rules (asks for admin permission).
 func (m *Manager) FixFirewall() error {
 	m.mu.Lock()
-	exe := m.paths.ServerExe
+	exe, wake := m.paths.ServerExe, m.settings.DiscordWake
 	m.mu.Unlock()
-	err := platform.FixFirewall(exe, m.opt.AppExe)
+	err := platform.FixFirewall(exe, m.opt.AppExe, wake)
 	m.recheckSoon()
 	return err
 }

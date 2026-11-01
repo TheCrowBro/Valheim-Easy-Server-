@@ -90,6 +90,9 @@ func main() {
 	}
 
 	opt := manager.Options{DataDir: dataDir, AppExe: exe, Logger: logger, DiscordURL: *devDiscord, AppVersion: version}
+	if *devDiscord != "" {
+		opt.DiscordAPI = strings.TrimRight(*devDiscord, "/") + "/api/v10" // where the waker's bot token is checked
+	}
 	var closeApp func(stopServer, restart bool)
 	var restart atomic.Bool // start the updated program once this one has closed
 	if n, _ := strconv.Atoi(build); n > 0 && runtime.GOOS == "windows" {

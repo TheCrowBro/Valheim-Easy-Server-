@@ -62,6 +62,10 @@ func (s *Server) routes() http.Handler {
 	a("GET /api/settings", s.getSettings)
 	a("POST /api/settings", s.saveSettings)
 	a("POST /api/discord/test", s.testDiscord)
+	a("GET /api/jetkvm", s.jetkvm)
+	a("POST /api/jetkvm/install", s.installWaker)
+	a("POST /api/jetkvm/remove", s.removeWaker)
+	a("POST /api/jetkvm/post", s.postWakerLink)
 	a("POST /api/app/update", s.updateApp)
 	a("GET /api/lists", s.getLists)
 	a("POST /api/lists", s.saveList)
@@ -481,6 +485,7 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 		Version:       s.version,
 	}
 	v.LaunchOnLogin, _ = platform.LaunchOnLogin()
+	v.Settings.DiscordBotToken = "" // it stays in the app; the Discord start setup says whether there is one
 	writeJSON(w, http.StatusOK, v)
 }
 
@@ -511,6 +516,61 @@ func (s *Server) testDiscord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.m.TestDiscord(body.Webhook); err != nil {
+		fail(w, err)
+		return
+	}
+	ok(w)
+}
+
+// --- starting the server from Discord -----------------------------------------
+
+// jetkvm is how starting the server from Discord is set up; ?live=1 asks
+// the JetKVM how the waker is doing first.
+func (s *Server) jetkvm(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.m.WakerView(r.URL.Query().Get("live") == "1"))
+}
+
+func (s *Server) installWaker(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Address string `json:"address"`
+		Token   string `json:"token"`
+		Trust   bool   `json:"trust"` // the JetKVM's identity changed, and that's expected
+	}
+	if err := readJSON(r, &body); err != nil {
+		fail(w, err)
+		return
+	}
+	if err := s.m.InstallWaker(body.Address, body.Token, body.Trust); err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.m.WakerView(false))
+}
+
+func (s *Server) removeWaker(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Force bool `json:"force"` // turn it off here even if the JetKVM can't be reached
+	}
+	if err := readJSON(r, &body); err != nil {
+		fail(w, err)
+		return
+	}
+	if err := s.m.RemoveWaker(body.Force); err != nil {
+		fail(w, err)
+		return
+	}
+	ok(w)
+}
+
+func (s *Server) postWakerLink(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		What string `json:"what"` // "invite" or "key"
+	}
+	if err := readJSON(r, &body); err != nil {
+		fail(w, err)
+		return
+	}
+	if err := s.m.PostWakerLink(body.What); err != nil {
 		fail(w, err)
 		return
 	}

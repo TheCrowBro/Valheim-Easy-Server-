@@ -66,6 +66,22 @@ says what to do first, for example "Before you join: update Valheim to
 1.0.21, install Plant Everything".
 
 
+STARTING THE SERVER FROM DISCORD
+--------------------------------
+Friends can type /valheim in your Discord to wake the computer and start
+the server. A small helper on your JetKVM does the waking. Set it up in
+Settings, under "Start the server from Discord":
+  1. Make a Discord bot: on discord.com/developers/applications, click
+     New Application, then Bot, then Reset Token, and paste the token
+     in the app.
+  2. On the JetKVM's page, under Settings, Advanced: turn on Developer
+     Mode and paste the key the app shows into SSH Public Key.
+  3. Click "Install on the JetKVM", then add the bot to your Discord
+     server with the link the app shows.
+Choose "Sleep" under "Resting and waking up", and test it once: click
+Sleep, wait a minute and type /valheim in Discord.
+
+
 MODS
 ----
 On the Worlds page, click "Add mods" (or "Change") on a world's card and
@@ -154,7 +170,8 @@ it starts again by itself.
 The address the KVM needs (the MAC address) is in Settings, under
 "Resting and waking up". The computer must be connected by a network
 cable. If Wake-on-LAN doesn't wake it from hibernation, choose "Sleep"
-there instead.
+there instead. Friends can also wake it by typing /valheim in Discord,
+once that's set up (see STARTING THE SERVER FROM DISCORD above).
 
 
 UPDATES

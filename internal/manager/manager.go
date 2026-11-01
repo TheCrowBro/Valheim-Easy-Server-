@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"valheim-easy-server/internal/config"
+	"valheim-easy-server/internal/jetkvm"
 	"valheim-easy-server/internal/logparse"
 	"valheim-easy-server/internal/mods"
 	"valheim-easy-server/internal/platform"
@@ -52,11 +54,16 @@ type Options struct {
 	HibernateStatus func() (bool, string)
 	Sleep           func() error
 	SleepStatus     func() (bool, string)
-	NoPublicIP      bool   // don't look up the public IP address
-	ModsURL         string // where mods are downloaded from; Thunderstore when empty
-	DiscordURL      string // where Discord webhook links are sent instead of Discord, for tests
-	AppVersion      string // this program's version, as people see it
-	AppBuild        int    // its build number; 0 for development builds, which don't update themselves
+	NoPublicIP      bool                         // don't look up the public IP address
+	ModsURL         string                       // where mods are downloaded from; Thunderstore when empty
+	DiscordURL      string                       // where Discord webhook links are sent instead of Discord, for tests
+	WakePort        int                          // where Wake-on-LAN signals are heard; 9 when 0
+	DiscordAPI      string                       // Discord's API, where the waker's bot token is checked; for tests
+	WakerBinary     func() ([]byte, error)       // the waker for the JetKVM; the one built in when nil
+	JetKVMDirs      *jetkvm.Target               // for tests: the Base, Run and Arch of a stand-in JetKVM
+	NetAdapters     func() []platform.NetAdapter // platform.NetAdapters when nil
+	AppVersion      string                       // this program's version, as people see it
+	AppBuild        int                          // its build number; 0 for development builds, which don't update themselves
 	Updater         *selfupdate.Updater
 	Relaunch        func() // closes the app and starts the program at AppExe, after an update
 	SampleInterval  time.Duration
@@ -81,9 +88,11 @@ type Manager struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+	exits  sync.WaitGroup // servers that have exited, being wrapped up
 
 	discordQ       chan discordPost // messages for the Discord channel
 	discordPending atomic.Int32     // queued or being posted
+	keyMu          sync.Mutex       // the app's key for the JetKVM is made once
 
 	mu             sync.Mutex
 	settings       config.Settings
@@ -100,8 +109,13 @@ type Manager struct {
 	localCands     []worlds.Candidate
 	idleSince      time.Time
 	keepAwakeUntil time.Time
-	wakeHold       time.Time // after waking up, Windows is kept awake until then
+	wakeHold       time.Time      // after waking up, Windows is kept awake until then
+	wakeConn       net.PacketConn // hears Wake-on-LAN signals, with wake on
+	wakeStart      time.Time      // when an untagged wake signal last started the server
+	wakeTag        string         // the last request a tagged wake signal came with
+	wk             wakerState     // the waker on the JetKVM
 	resumeOnWake   bool
+	closing        bool // Close was called: exits are no longer waited for
 	net            netInfo
 	checks         checkCache
 	modVersions    map[string]string // installed mod packages and their versions
@@ -232,6 +246,9 @@ func New(opt Options) (*Manager, error) {
 	if opt.SleepStatus == nil {
 		m.opt.SleepStatus = platform.SleepStatus
 	}
+	if opt.NetAdapters == nil {
+		m.opt.NetAdapters = platform.NetAdapters
+	}
 	if b, err := stats.Load(filepath.Join(opt.DataDir, "stats.json")); err == nil {
 		m.byPlayers = b
 	} else {
@@ -242,6 +259,7 @@ func New(opt Options) (*Manager, error) {
 	m.loadKnown()
 	m.loadPlayed()
 	m.loadRecords()
+	m.loadWaker()
 	m.machine = platform.Machine()
 	m.idleSince = time.Now()
 	return m, nil
@@ -264,6 +282,8 @@ func (m *Manager) Start() {
 	m.go_(m.updateLoop)
 	m.go_(m.backfillRecords)
 	m.go_(m.dailyLoop)
+	m.go_(m.wakerLoop)
+	m.syncWakeListener()
 
 	m.mu.Lock()
 	autoStart := m.settings.StartWithApp && m.run == nil && m.installedLocked()
@@ -279,10 +299,15 @@ func (m *Manager) Start() {
 // Close stops background work and saves data. A running Valheim server
 // keeps running; the app finds it again next time.
 func (m *Manager) Close() {
+	m.mu.Lock()
+	m.closing = true
+	m.mu.Unlock()
+	m.exits.Wait()                  // a server that just stopped is wrapped up
 	m.flushDiscord(5 * time.Second) // e.g. that the server stopped
 	if m.cancel != nil {
 		m.cancel()
 	}
+	m.syncWakeListener() // stops listening
 	m.wg.Wait()
 	m.saveData()
 	if m.sys != nil {

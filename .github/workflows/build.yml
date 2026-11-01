@@ -43,6 +43,12 @@ jobs:
           GOTOOLCHAIN=$(go env GOVERSION) GOBIN="$RUNNER_TEMP/bin" go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
           "$RUNNER_TEMP/bin/govulncheck" ./...
           GOOS=windows "$RUNNER_TEMP/bin/govulncheck" ./...
+      - name: Build the waker for the JetKVM (ARMv7 Linux), so the tests check it too
+        run: |
+          GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=test" -o waker.tmp ./cmd/valheim-waker
+          gzip -9 -c waker.tmp > internal/jetkvm/dist/valheim-waker-armv7.gz
+          rm waker.tmp
+          ls -l internal/jetkvm/dist/
       - name: Test
         run: go test -race ./...
 
@@ -60,7 +66,7 @@ jobs:
         run: go test -count=1 ./...
       - name: Add the icon and version details
         run: go run github.com/tc-hib/go-winres@v0.3.3 make --in winres/winres.json --arch amd64
-      - name: Build ValheimEasyServer.exe
+      - name: Version
         shell: pwsh
         env:
           REF_TYPE: ${{ github.ref_type }}
@@ -68,7 +74,22 @@ jobs:
           RUN_NUMBER: ${{ github.run_number }}
         run: |
           $version = if ($env:REF_TYPE -eq "tag") { $env:REF_NAME } else { "build-$env:RUN_NUMBER" }
-          go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=$version -X main.build=$env:RUN_NUMBER" -o dist/ValheimEasyServer.exe .
+          "VES_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      # The app carries the waker and puts it on the JetKVM. Both have the
+      # same version, which is how the app knows the JetKVM's copy is current.
+      - name: Build the waker for the JetKVM (ARMv7 Linux)
+        shell: bash
+        run: |
+          GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$VES_VERSION" -o waker.tmp ./cmd/valheim-waker
+          gzip -9 -c waker.tmp > internal/jetkvm/dist/valheim-waker-armv7.gz
+          rm waker.tmp
+          ls -l internal/jetkvm/dist/
+      - name: Build ValheimEasyServer.exe
+        shell: pwsh
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=$env:VES_VERSION -X main.build=$env:RUN_NUMBER" -o dist/ValheimEasyServer.exe .
       - name: Smoke test the app
         shell: pwsh
         run: |

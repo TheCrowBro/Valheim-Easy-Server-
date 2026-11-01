@@ -545,6 +545,22 @@ tr:last-child td { border-bottom: 0; }
 .key-option small { display: block; color: var(--muted); font-size: 13px; }
 .mac { font-size: 20px; letter-spacing: .04em; color: var(--text); }
 
+/* starting the server from Discord */
+#discord-start > .callout { margin-bottom: 12px; }
+.setup-steps { list-style: none; counter-reset: setup; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 22px; }
+.setup-steps > li { counter-increment: setup; position: relative; padding-left: 40px; display: flex; flex-direction: column; gap: 10px; }
+.setup-steps > li::before {
+  content: counter(setup); position: absolute; left: 0; top: -2px; width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 13px; font-weight: 700; background: var(--accent-soft); color: var(--accent-2);
+}
+.setup-steps > li > h3 { font-size: 15px; font-weight: 600; }
+.setup-steps .steps { margin-top: 0; }
+.setup-steps .field { max-width: 520px; }
+.keybox {
+  padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-2);
+  font-size: 12.5px; line-height: 1.5; word-break: break-all; user-select: all; color: var(--text);
+}
+
 /* add a world */
 .add-world { border: 2px dashed var(--line-2); display: flex; flex-direction: column; gap: 14px; transition: border-color .15s, background .15s; }
 .add-world:not(.idle) { border-style: solid; border-width: 1px; }

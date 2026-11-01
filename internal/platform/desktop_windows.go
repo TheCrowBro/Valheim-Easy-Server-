@@ -125,11 +125,19 @@ func SetLaunchOnLogin(on bool, exe string, args string) error {
 	return k.SetStringValue(runValue, fmt.Sprintf(`"%s" %s`, exe, args))
 }
 
-const fwGameRule = "Valheim Easy Server - game"
+const (
+	fwGameRule = "Valheim Easy Server - game"
+	fwWakeRule = "Valheim Easy Server - wake signal"
+)
 
 // FirewallReady reports whether the game server's firewall rule exists.
-func FirewallReady() bool {
-	cmd := exec.Command(system32("netsh.exe"), "advfirewall", "firewall", "show", "rule", "name="+fwGameRule)
+func FirewallReady() bool { return ruleExists(fwGameRule) }
+
+// WakeRuleReady reports whether the app may hear Wake-on-LAN signals.
+func WakeRuleReady() bool { return ruleExists(fwWakeRule) }
+
+func ruleExists(name string) bool {
+	cmd := exec.Command(system32("netsh.exe"), "advfirewall", "firewall", "show", "rule", "name="+name)
 	cmd.SysProcAttr = HiddenProcAttr()
 	return cmd.Run() == nil
 }
@@ -137,17 +145,22 @@ func FirewallReady() bool {
 // FixFirewall allows the game server through Windows Firewall. It first
 // removes any "block" rules Windows created when its firewall pop-up was
 // dismissed. The control panel only listens on this computer, so the app
-// itself needs no rule; any left by older versions are removed. Windows
-// asks for admin permission on the screen; this returns before that is
-// answered.
-func FixFirewall(serverExe, appExe string) error {
-	return runElevatedPowerShell(strings.Join([]string{
+// itself needs no rule, except with wake on, to hear Wake-on-LAN signals
+// (UDP port 9) from the home network; other rules for it, including any
+// left by older versions, are removed. Windows asks for admin permission
+// on the screen; this returns before that is answered.
+func FixFirewall(serverExe, appExe string, wake bool) error {
+	lines := []string{
 		"$server = " + psQuote(serverExe),
 		"$app = " + psQuote(appExe),
 		`netsh advfirewall firewall delete rule name=all "program=$server"`,
 		`netsh advfirewall firewall add rule "name=` + fwGameRule + `" dir=in action=allow "program=$server" enable=yes profile=any`,
 		`netsh advfirewall firewall delete rule name=all "program=$app"`,
-	}, "\n"))
+	}
+	if wake {
+		lines = append(lines, `netsh advfirewall firewall add rule "name=`+fwWakeRule+`" dir=in action=allow "program=$app" protocol=UDP localport=9 remoteip=localsubnet enable=yes profile=any`)
+	}
+	return runElevatedPowerShell(strings.Join(lines, "\n"))
 }
 
 // SingleInstance makes sure only one copy of the app runs per data folder.

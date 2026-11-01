@@ -130,6 +130,38 @@ func Post(ctx context.Context, client *http.Client, link, content string) error 
 	}
 }
 
+// Guild asks Discord which Discord server the webhook at link posts in, and
+// returns its ID. client may be nil.
+func Guild(ctx context.Context, client *http.Client, link string) (string, error) {
+	if client == nil {
+		client = &http.Client{Timeout: 20 * time.Second}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, link, nil)
+	if err != nil {
+		return "", &Error{Msg: "The webhook link isn't valid."}
+	}
+	req.Header.Set("User-Agent", "DiscordBot (https://github.com/TheCrowBro/Valheim-Easy-Server-, 1)")
+	resp, err := client.Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		return "", &Error{Msg: "Couldn't reach Discord. Check that this computer is connected to the internet.", Temporary: true}
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if resp.StatusCode/100 != 2 {
+		return "", statusError(resp.StatusCode, b)
+	}
+	var hook struct {
+		GuildID string `json:"guild_id"`
+	}
+	if json.Unmarshal(b, &hook) != nil || hook.GuildID == "" {
+		return "", &Error{Msg: "Discord didn't say which Discord server the webhook is in."}
+	}
+	return hook.GuildID, nil
+}
+
 func statusError(code int, body []byte) error {
 	var reply struct {
 		Message string `json:"message"`

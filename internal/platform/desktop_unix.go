@@ -47,8 +47,11 @@ func SetLaunchOnLogin(bool, string, string) error { return ErrUnsupported }
 // FirewallReady is always true outside Windows (nothing to set up here).
 func FirewallReady() bool { return true }
 
+// WakeRuleReady is always true outside Windows.
+func WakeRuleReady() bool { return true }
+
 // FixFirewall is only implemented on Windows.
-func FixFirewall(string, string) error { return ErrUnsupported }
+func FixFirewall(string, string, bool) error { return ErrUnsupported }
 
 // SingleInstance does nothing outside Windows.
 func SingleInstance(string) (func(), bool, error) { return func() {}, false, nil }
