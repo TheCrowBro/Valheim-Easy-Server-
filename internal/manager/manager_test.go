@@ -610,8 +610,8 @@ func TestHibernateStopsServerFirst(t *testing.T) {
 	}
 }
 
-// After waking up, the computer stays awake for a while even with nobody
-// on and the shortest idle time: friends need time to join.
+// After someone wakes the computer up, it stays awake for a while even with
+// nobody on and the shortest idle time: friends need time to join.
 func TestWakeKeepsAwake(t *testing.T) {
 	env := setup(t)
 	m := env.m
@@ -621,6 +621,7 @@ func TestWakeKeepsAwake(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.onWake(8 * time.Hour)
+	m.wokenOnPurpose() // see TestWakeWaitsForSomeone
 	now := time.Now()
 	m.mu.Lock()
 	deadline := m.idleDeadlineLocked()

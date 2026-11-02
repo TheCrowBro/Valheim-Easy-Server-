@@ -23,6 +23,22 @@ type Live struct {
 
 const wakeHint = "Wake it with Wake-on-LAN (for example from an IP KVM) or its power button."
 
+// sleptResult ends a sleep job. On Windows, Sleep returns once the computer
+// has woken up again, so it also says when that happened (see sleptSince).
+const sleptResult = "The computer slept and has woken up again."
+
+// How the app tells whether someone is using the computer and what woke it
+// up, whether it can be only half awake (a Mac's dark wake), and whether
+// Sleep returns only once the computer wakes up (a Mac's returns before it
+// sleeps). Replaced in tests.
+var (
+	idleTime     = platform.IdleTime
+	darkWake     = platform.DarkWake
+	wokeBy       = platform.WokeBy
+	darkWakes    = runtime.GOOS == "darwin"
+	sleepReturns = runtime.GOOS == "windows"
+)
+
 // Hibernate saves the world, stops the server and puts the computer to
 // rest: into hibernation, or to sleep if the settings say so.
 func (m *Manager) Hibernate(reason string) error {
@@ -76,7 +92,7 @@ func (m *Manager) Hibernate(reason string) error {
 			return err
 		}
 		if sleep {
-			j.result("The computer slept and has woken up again.") // Sleep returns after waking
+			j.result(sleptResult)
 		} else {
 			j.result("The computer hibernated.")
 		}
@@ -132,7 +148,12 @@ func (m *Manager) sampleLoop() {
 	tick := time.NewTicker(m.opt.SampleInterval)
 	defer tick.Stop()
 	last := time.Now()
+	before := last // the reading before last
 	saved := time.Now()
+	// woke follows the latest wake-up, while it isn't known yet whether
+	// someone wants the computer awake (see wakeWanted).
+	var woke pendingWake
+	var lastWake time.Time
 	for {
 		select {
 		case <-m.ctx.Done():
@@ -140,15 +161,31 @@ func (m *Manager) sampleLoop() {
 		case now := <-tick.C:
 			// The wall clock keeps running while the computer rests (unlike
 			// the clock timers use on macOS and Linux), so a long pause
-			// between readings means it has just woken up.
-			gap := now.Round(0).Sub(last.Round(0))
-			last = now
+			// between readings, or more time than the timers saw, means it
+			// has just woken up.
+			wall := now.Round(0).Sub(last.Round(0))
+			gap := wall
 			if gap <= 0 { // the clock was set back
 				gap = m.opt.SampleInterval
 			}
-			if gap > m.opt.SampleInterval+20*time.Second {
+			// On Windows the timers' clock keeps running while it sleeps, so a
+			// short sleep there only shows when the app's own sleep ends. A
+			// long one shows both ways: count it once.
+			slept := m.rested(wall, now.Sub(last)) || (now.Sub(lastWake) > time.Minute && m.sleptSince(last))
+			asleep := before // taken before it went to rest, even if the app's sleep ended just after a reading
+			before, last = last, now
+			if slept {
+				woke, lastWake = pendingWake{at: now, asleep: asleep}, now
 				m.onWake(gap)
 				continue
+			}
+			// Until someone turns up, keep watching: a computer that woke up
+			// by itself goes back to sleep by itself, and the next wake-up
+			// starts again. A Mac can stay in a dark wake for a long time
+			// (a backup, say) before someone wakes it fully.
+			if !woke.at.IsZero() && m.wakeWanted(&woke) {
+				woke = pendingWake{}
+				m.wokenOnPurpose()
 			}
 			m.updateAwake()
 			m.sample(now, gap)
@@ -213,27 +250,117 @@ func clamp(v float64) float64 {
 	return v
 }
 
-// wakeGrace is how long the computer stays awake after waking up, so
-// friends have time to join. Windows itself goes back to sleep about two
-// minutes after an unattended wake (such as Wake-on-LAN) unless asked not to.
+// wakeGrace is how long the computer stays awake after someone wakes it up
+// (or asks for the server with a wake signal), so friends have time to
+// join. Windows itself goes back to sleep about two minutes after an
+// unattended wake (such as Wake-on-LAN) unless asked not to.
 var wakeGrace = 15 * time.Minute
 
-// onWake runs after the computer comes back from sleep or hibernation.
+// wakeWatch is how long after the computer wakes up the app asks the
+// system what woke it, every wakeAskEvery: Windows says a few seconds after
+// it wakes up.
+var (
+	wakeWatch    = 5 * time.Minute
+	wakeAskEvery = 5 * time.Second
+)
+
+// pendingWake is a wake-up the app has noticed, while it isn't known yet
+// whether someone wants the computer awake.
+type pendingWake struct {
+	at     time.Time          // when the app noticed it
+	asleep time.Time          // a reading from before the computer went to rest
+	cause  platform.WakeCause // what woke it, once the system says
+	asked  time.Time          // when the app last asked the system
+}
+
+// rested reports whether the computer rested between two readings, from
+// the wall-clock time between them and the time timers saw. On macOS and
+// Linux timers don't count the time asleep, which shows even a short sleep.
+func (m *Manager) rested(wall, timer time.Duration) bool {
+	return wall-timer > 5*time.Second || wall > m.opt.SampleInterval+20*time.Second
+}
+
+// sleptSince reports whether a sleep the app started has ended since t,
+// where Sleep returns only once the computer has woken up (Windows).
+func (m *Manager) sleptSince(t time.Time) bool {
+	if !sleepReturns {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	j := m.job
+	return j != nil && j.Kind == "hibernate" && j.Result == sleptResult && j.Finished != nil && j.Finished.After(t)
+}
+
+// onWake runs when the computer has just come back from sleep or
+// hibernation. It may have woken up by itself (a Mac for network
+// maintenance, Windows for updates) and should then go back to sleep, so
+// nothing keeps it awake until someone is known to want it (see wakeWanted).
 func (m *Manager) onWake(gap time.Duration) {
 	m.mu.Lock()
+	m.idleSince = time.Now()
+	m.wakeHold = time.Time{}     // a hold from before it slept doesn't count any more
+	m.net.publicAt = time.Time{} // the address may have changed
+	m.mu.Unlock()
+	m.updateAwake()
+	m.log.Printf("woke up after %s", gap.Round(time.Second))
+	m.notify()
+}
+
+// wakeWanted reports whether someone wants the computer awake since it woke
+// up: a wake signal was heard (it holds the computer awake), a device woke
+// it rather than a timer, or someone is using the computer itself. The
+// device can be the power button or the network adapter: the Wake-on-LAN
+// packet from an IP KVM's own Wake button wakes the computer, but the
+// adapter keeps it, so the app never hears it. A Mac someone uses is fully
+// awake, not in a dark wake; elsewhere, they have used the keyboard or
+// mouse.
+func (m *Manager) wakeWanted(w *pendingWake) bool {
+	m.mu.Lock()
+	heard := m.wakeHold.After(w.at) // onWake dropped any older hold
+	m.mu.Unlock()
+	if heard {
+		return true
+	}
 	now := time.Now()
-	m.idleSince = now
-	m.wakeHold = now.Add(wakeGrace)
+	if w.cause == platform.WakeCauseUnknown && now.Sub(w.at) < wakeWatch && now.Sub(w.asked) >= wakeAskEvery {
+		w.asked = now
+		w.cause = wokeBy(w.asleep)
+	}
+	if w.cause == platform.WakeByDevice {
+		return true
+	}
+	if darkWakes {
+		return !darkWake()
+	}
+	idle, ok := idleTime()
+	return ok && idle < now.Sub(w.at)
+}
+
+// holdAwake keeps the computer awake for a while, so friends have time to
+// join: someone asked for it.
+func (m *Manager) holdAwake() {
+	if darkWake() {
+		platform.AfterWake() // a Wake-on-LAN signal can leave a Mac only half awake
+	}
+	m.mu.Lock()
+	m.wakeHold = time.Now().Add(wakeGrace)
 	if m.keepAwakeUntil.Before(m.wakeHold) {
 		m.keepAwakeUntil = m.wakeHold
 	}
+	m.mu.Unlock()
+	m.updateAwake()
+}
+
+// wokenOnPurpose runs once someone wants the computer awake after it woke
+// up: it stays awake for a while, and the server starts again if it was
+// running before the computer went to sleep.
+func (m *Manager) wokenOnPurpose() {
+	m.holdAwake()
+	m.mu.Lock()
 	resume := m.resumeOnWake && m.settings.StartAfterWake && m.run == nil
 	m.resumeOnWake = false
-	m.net.publicAt = time.Time{} // the address may have changed
 	m.mu.Unlock()
-	platform.AfterWake() // a Mac may be only half awake after Wake-on-LAN
-	m.updateAwake()
-	m.log.Printf("woke up after %s", gap.Round(time.Second))
 	m.addActivity("wake", "", fmt.Sprintf("The computer woke up. It stays awake for at least %d minutes, so friends have time to join.", int(wakeGrace.Minutes())))
 	if resume {
 		m.addActivity("info", "", "Starting the server again in 20 seconds (it was running before the computer went to sleep).")
@@ -284,6 +411,9 @@ func (m *Manager) idleDeadlineLocked() time.Time {
 	if m.run != nil && m.run.tracker.Count() > 0 {
 		return time.Time{}
 	}
+	if m.job != nil && m.job.Finished == nil && m.job.Kind != "hibernate" {
+		return time.Time{} // it waits for the job to end
+	}
 	at := m.idleSince.Add(time.Duration(m.settings.IdleMinutes) * time.Minute)
 	if m.keepAwakeUntil.After(at) {
 		at = m.keepAwakeUntil
@@ -306,8 +436,14 @@ func (m *Manager) checkIdle(now time.Time) {
 	if busy || now.Before(deadline) {
 		return
 	}
-	// Don't hibernate while someone is using the computer itself.
-	if idle, ok := platform.IdleTime(); ok && idle < time.Duration(minutes)*time.Minute {
+	// Don't hibernate while someone is using the computer itself. Count from
+	// their last input instead, so the panel shows when it really will.
+	if idle, ok := idleTime(); ok && idle < time.Duration(minutes)*time.Minute {
+		m.mu.Lock()
+		if used := now.Add(-idle); used.After(m.idleSince) {
+			m.idleSince = used
+		}
+		m.mu.Unlock()
 		return
 	}
 	if ok, _ := m.restStatus(sleep); !ok {

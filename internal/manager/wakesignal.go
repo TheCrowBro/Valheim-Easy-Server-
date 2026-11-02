@@ -6,6 +6,7 @@ package manager
 // them here and starts the server.
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -42,11 +43,24 @@ func (m *Manager) syncWakeListener() {
 
 func (m *Manager) hearWakeSignals(conn net.PacketConn) {
 	defer m.recoverPanic()
-	buf := make([]byte, 512)
+	// Room for any packet: Windows fails a read that doesn't fit rather than
+	// cutting it short. A wake signal is in the first 108 bytes.
+	buf := make([]byte, 64<<10)
+	var complained time.Time
 	for {
 		n, _, err := conn.ReadFrom(buf)
-		if err != nil {
+		if errors.Is(err, net.ErrClosed) {
 			return // stopped listening
+		}
+		if err != nil {
+			// Something odd arrived, or the network changed: keep listening,
+			// or no wake signal would be heard until the app restarts.
+			if time.Since(complained) > time.Hour {
+				complained = time.Now()
+				m.log.Printf("listening for wake signals: %v", err)
+			}
+			time.Sleep(100 * time.Millisecond) // don't spin if it keeps failing
+			continue
 		}
 		if mac, tag, ok := wol.Target(buf[:n]); ok && wol.Mine(mac) {
 			m.wakeSignal(string(tag))
@@ -54,11 +68,14 @@ func (m *Manager) hearWakeSignals(conn net.PacketConn) {
 	}
 }
 
-// wakeSignal starts the server, unless it's running or busy. The waker
-// repeats its signal for a few minutes with the same tag, and each request
-// starts the server once: if someone stops it on purpose meanwhile, it stays
-// stopped. A signal without a tag (from the KVM's own Wake-on-LAN button)
-// starts it at most once a minute.
+// wakeSignal starts the server, unless it's running or busy, and keeps the
+// computer awake for a while: someone wants to play. The waker repeats its
+// signal for a few minutes with the same tag, and each request starts the
+// server once: if someone stops it on purpose meanwhile, it stays stopped.
+// A request heard while the server can't start yet (a job is in progress,
+// or it's stopping) is kept, so a repeat starts it once it can. A signal
+// without a tag (from the KVM's own Wake-on-LAN button) starts it at most
+// once a minute.
 func (m *Manager) wakeSignal(tag string) {
 	m.mu.Lock()
 	m.idleSince = time.Now() // someone wants to play
@@ -66,13 +83,20 @@ func (m *Manager) wakeSignal(tag string) {
 	if tag == "" {
 		fresh = time.Since(m.wakeStart) > time.Minute
 	}
-	m.wakeTag = tag
 	busy := m.job != nil && m.job.Finished == nil
 	start := fresh && m.run == nil && !busy && m.installedLocked()
-	if start && tag == "" {
-		m.wakeStart = time.Now()
+	steady := m.run != nil && !m.run.stopping && !busy // the server is already up
+	if tag != "" && (start || steady) {
+		m.wakeTag = tag // the request is met: its repeats do nothing
+	}
+	if start {
+		m.resumeOnWake = false // this request starts it
+		if tag == "" {
+			m.wakeStart = time.Now()
+		}
 	}
 	m.mu.Unlock()
+	m.holdAwake()
 	if !start {
 		return
 	}
