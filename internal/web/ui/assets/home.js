@@ -53,7 +53,11 @@ function hero(app) {
   else if (st.buildDate && st.installed) facts.push(h('span', null, icon('refresh'), `Server updated ${ago(st.buildDate)}`));
 
   let actions;
-  if (job) {
+  if (job && st.state === 'starting' && ['start', 'restart', 'import'].includes(job.kind)) {
+    // The job waits for the world to load, which can take minutes: Stop
+    // ends that wait (and asks first).
+    actions = [h('button', { class: 'btn btn-lg', 'data-action': 'stop' }, icon('stop'), 'Stop')];
+  } else if (job) {
     actions = st.state === 'stopping' && Date.now() - new Date(job.started) > 30e3
       ? [h('button', { class: 'btn btn-danger', 'data-action': 'force-stop' }, icon('power'), 'Force stop')]
       : [];
@@ -113,12 +117,12 @@ function joinCard(app) {
   const st = app.status;
   const j = st.join;
   const online = st.state === 'online';
-  const pwId = 'join-pw';
+  const shown = !!app.pwShown; // switched by the eye button (app.js)
   const pwRow = [
     h('dt', null, 'Password'),
-    h('dd', null, h('span', { class: 'pw', id: pwId }, '•'.repeat(Math.min(12, j.password.length)))),
+    h('dd', null, h('span', { class: 'pw' }, shown ? j.password : '•'.repeat(Math.min(12, j.password.length)))),
     h('dd', { class: 'row', style: { gap: '4px' } },
-      h('button', { class: 'btn btn-ghost btn-icon btn-sm', 'data-action': 'reveal', 'data-target': pwId, 'data-secret': j.password, 'aria-label': 'Show password' }, icon('eye')),
+      h('button', { class: 'btn btn-ghost btn-icon btn-sm', 'data-action': 'reveal', 'aria-label': shown ? 'Hide password' : 'Show password' }, icon(shown ? 'eyeOff' : 'eye')),
       h('button', { class: 'btn btn-ghost btn-icon btn-sm', 'data-action': 'copy', 'data-text': j.password, 'data-label': 'Password copied', 'aria-label': 'Copy password' }, icon('copy'))),
   ];
   const addrRow = (label, addr) => [
@@ -128,10 +132,10 @@ function joinCard(app) {
   const lan = (j.lanAddrs || []).filter((a) => !a.startsWith('100.'));
   const body = [];
   if (j.crossplay && !j.code && j.problem === 'crossplay') {
-    body.push(codeProblem(j.problem)); // nobody can join, by code or address
+    body.push(codeProblem(j.problem, j.port)); // nobody can join, by code or address
   } else if (j.crossplay) {
     const code = j.code ? j.code.replace(/(\d{3})(\d{3})/, '$1 $2') : '';
-    if (!code && j.problem) body.push(codeProblem(j.problem));
+    if (!code && j.problem) body.push(codeProblem(j.problem, j.port));
     body.push(h('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '14px' } },
       h('div', null, h('div', { class: 'muted small' }, 'Join code'),
         code ? h('div', { class: 'join-code' }, code)
@@ -171,9 +175,10 @@ function reminderNotice(st) {
     h('p', { class: 'text-2' }, 'Things changed since they last played. ', st.discord ? 'The Discord post says this too.' : 'Let them know.')));
 }
 
-// codeProblem says why there's no join code and what to do instead.
-function codeProblem(problem) {
-  const off = ['Turn ', h('b', null, 'Crossplay'), ' off in Settings and restart the server: friends then join by address, with UDP ports 2456–2457 forwarded on your router to this computer.'];
+// codeProblem says why there's no join code and what to do instead. port is
+// the game port, which can be changed in Settings.
+function codeProblem(problem, port) {
+  const off = ['Turn ', h('b', null, 'Crossplay'), ' off in Settings and restart the server: friends then join by address, with UDP ports ', `${port}–${port + 1}`, ' forwarded on your router to this computer.'];
   const text = problem === 'crossplay'
     ? [h('p', null, h('strong', null, 'Crossplay can’t start on this computer, so there’s no join code and nobody can join. '),
       'Windows couldn’t load Valheim’s crossplay part (Party.dll).'),

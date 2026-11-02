@@ -138,6 +138,11 @@ export class ApiError extends Error {
   }
 }
 
+// How to open the app again on the server computer, which depends on its
+// system. app.js sets it from the status (dom.js can't import app.js).
+let reopenHint = 'start ValheimEasyServer.exe again';
+export function setReopenHint(text) { reopenHint = text; }
+
 export async function api(path, { method = 'GET', body } = {}) {
   const opts = { method, headers: {}, credentials: 'same-origin', cache: 'no-store' };
   if (method !== 'GET') opts.headers['X-VES'] = '1';
@@ -149,7 +154,7 @@ export async function api(path, { method = 'GET', body } = {}) {
   try {
     res = await fetch(path, opts);
   } catch {
-    throw new ApiError("Can't reach the app. If it was closed, start ValheimEasyServer.exe again.", 0);
+    throw new ApiError(`Can’t reach the app. If it was closed, ${reopenHint}.`, 0);
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(data.error || `Request failed (${res.status})`, res.status, data);

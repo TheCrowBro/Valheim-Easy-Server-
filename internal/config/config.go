@@ -412,7 +412,10 @@ func (s Settings) Validate() FieldErrors {
 	if s.BackupLongMinutes < 30 || s.BackupLongMinutes > 10080 {
 		errs["backupLongMinutes"] = "The backup interval must be 30 to 10080 minutes."
 	}
-	if s.IdleMinutes < 10 || s.IdleMinutes > 1440 {
+	// Only when resting automatically is on: otherwise the minutes aren't
+	// used, and the Settings page hides their box, so an error there
+	// couldn't be seen or fixed.
+	if s.IdleHibernate && (s.IdleMinutes < 10 || s.IdleMinutes > 1440) {
 		errs["idleMinutes"] = "Choose between 10 and 1440 minutes."
 	}
 	if s.RestMode != RestHibernate && s.RestMode != RestSleep {

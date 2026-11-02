@@ -5,6 +5,10 @@
 import { h, toast } from './dom.js';
 
 export const downloads = {}; // key -> { phase: 'packing' | 'saving', sent, total }
+// Whether a Save window is opening or open. The browser only allows one at a
+// time, and turns away a second one (for example from a double-click) with
+// an error that would otherwise start an extra download to the Downloads folder.
+let picking = false;
 
 export function today(t = new Date()) {
   const d = new Date(t);
@@ -15,9 +19,10 @@ export function today(t = new Date()) {
 // and Chrome do), and otherwise into the Downloads folder. redraw shows the
 // progress kept in downloads[key].
 export async function saveZip(key, url, fileName, note, redraw) {
-  if (downloads[key]) return;
+  if (downloads[key] || picking) return;
   let handle = null;
   if (window.showSaveFilePicker) {
+    picking = true;
     try {
       handle = await window.showSaveFilePicker({
         suggestedName: fileName,
@@ -25,6 +30,8 @@ export async function saveZip(key, url, fileName, note, redraw) {
       });
     } catch (e) {
       if (e.name === 'AbortError') return; // the Save window was closed
+    } finally {
+      picking = false;
     }
   }
   if (!handle) {
@@ -63,7 +70,10 @@ export async function saveZip(key, url, fileName, note, redraw) {
     toast(`Saved “${handle.name}”.${note ? ' ' + note : ''}`, 'good', 12000);
   } catch (e) {
     if (out) await out.abort().catch(() => {});
-    toast(e.message, 'bad', 10000);
+    // The browser reports a connection that broke off (the app stopped
+    // sending, for example because a file couldn't be read) as a TypeError
+    // with a technical message.
+    toast(e instanceof TypeError ? 'The download was interrupted. Please try again.' : e.message, 'bad', 10000);
   } finally {
     delete downloads[key];
     redraw();

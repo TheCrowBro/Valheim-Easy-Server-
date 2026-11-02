@@ -20,6 +20,9 @@ let recs = null;
 let period = 'all';
 let appRef = null;
 let timer = null;
+// What's typed in each list's box. The page is redrawn every couple of
+// seconds, so the boxes show it from here, or a redraw would empty them.
+const drafts = { admins: '', banned: '', permitted: '' };
 
 const LIST_INFO = {
   admins: ['Admins', 'shield', 'Admins can use server commands in Valheim’s console (press F5 in the game), such as kick, ban and save.'],
@@ -49,15 +52,19 @@ async function loadRecords() {
   if (appRef && appRef.page.id === 'players') appRef.render();
 }
 
+// saveList saves a list and reports whether that worked.
 async function saveList(kind, ids) {
+  let saved = false;
   try {
     await api('/api/lists', { method: 'POST', body: { kind, ids } });
     lists[kind] = ids;
+    saved = true;
     toast('Saved. Changes apply the next time the server starts.', 'good');
   } catch (e) {
     toast(e.message, 'bad', 9000);
   }
   load();
+  return saved;
 }
 
 function inList(kind, id) { return !!(lists && id && lists[kind] && lists[kind].includes(id)); }
@@ -165,7 +172,8 @@ function recordsCard(app) {
 function listCard(kind) {
   const [title, ic, help] = LIST_INFO[kind];
   const ids = (lists && lists[kind]) || [];
-  const input = h('input', { class: 'input', placeholder: 'e.g. Steam_76561198012345678', 'data-list-input': kind, 'aria-label': `Add to ${title}` });
+  const input = h('input', { class: 'input', placeholder: 'e.g. Steam_76561198012345678', 'data-list-input': kind, 'aria-label': `Add to ${title}`,
+    value: drafts[kind], oninput: (e) => { drafts[kind] = e.target.value; } });
   return h('section', { class: 'card', 'data-key': 'list:' + kind },
     h('div', { class: 'card-head' }, icon(ic), h('h2', null, title)),
     h('p', { class: 'small text-2', style: { marginBottom: '12px' } }, help),
@@ -202,17 +210,20 @@ export default {
       app.render();
       loadRecords();
     };
-    A['list-add'] = (d) => {
-      const input = document.querySelector(`[data-list-input="${d.kind}"]`);
-      const id = input.value.trim();
-      if (!id) return input.focus();
-      if (d.kind === 'permitted' && !lists.permitted.length) {
-        confirmDialog({ title: 'Only allow listed players?', message: 'Once anyone is on this list, everybody else is blocked from joining, even with the password.', confirm: 'Add and restrict' })
-          .then((ok) => ok && saveList(d.kind, [...lists[d.kind], id]));
-        return;
+    A['list-add'] = async (d) => {
+      const kind = d.kind;
+      const id = drafts[kind].trim();
+      if (!id) return document.querySelector(`[data-list-input="${kind}"]`).focus();
+      if (kind === 'permitted' && !lists.permitted.length &&
+        !await confirmDialog({ title: 'Only allow listed players?', message: 'Once anyone is on this list, everybody else is blocked from joining, even with the password.', confirm: 'Add and restrict' })) return;
+      // The box is only emptied once the ID is saved, so a failed save
+      // doesn't lose it.
+      if (await saveList(kind, [...lists[kind], id]) && drafts[kind].trim() === id) {
+        drafts[kind] = '';
+        const input = document.querySelector(`[data-list-input="${kind}"]`);
+        if (input) input.value = ''; // a redraw leaves the box being typed in alone
+        app.render();
       }
-      input.value = '';
-      saveList(d.kind, [...lists[d.kind], id]);
     };
     A['list-remove'] = (d) => saveList(d.kind, lists[d.kind].filter((x) => x !== d.id));
     A['player-admin'] = async (d) => {

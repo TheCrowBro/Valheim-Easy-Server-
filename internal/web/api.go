@@ -104,7 +104,11 @@ func fail(w http.ResponseWriter, err error) {
 	var be *manager.BusyError
 	switch {
 	case errors.As(err, &fe):
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "Please check the highlighted settings.", "fields": fe})
+		// The messages themselves, not just "check the highlighted
+		// settings": most pages that get these (Worlds, Start on Home)
+		// have no settings to highlight, and some fields, such as the
+		// world name, have no box on the Settings page either.
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": fe.Error(), "fields": fe})
 	case errors.As(err, &ae):
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": ae.Msg, "action": ae.Action})
 	case errors.As(err, &be):
@@ -326,6 +330,11 @@ func (s *Server) downloadBackup(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.log.Printf("download backup %s/%s: %v", name, id, err)
+		// Part of the zip has been sent, so it's too late to report an
+		// error. Cut the connection instead of ending the response
+		// normally, so the browser sees a failed download rather than
+		// saving a broken zip. net/http doesn't log this panic.
+		panic(http.ErrAbortHandler)
 	}
 }
 
@@ -644,15 +653,46 @@ func (s *Server) stats(w http.ResponseWriter, r *http.Request) {
 	if !okRange {
 		d = time.Hour
 	}
-	samples := stats.Downsample(s.m.History(time.Now().Add(-d)), 360)
+	now := time.Now()
+	raw := s.m.History(now.Add(-d))
+	samples := stats.Downsample(raw, 360)
 	if samples == nil {
 		samples = []stats.Sample{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"samples":   samples,
-		"byPlayers": s.m.ByPlayers(),
-		"machine":   s.m.Machine(),
+		"samples":        samples,
+		"runningSeconds": runningSeconds(raw, now),
+		"rangeSeconds":   d.Seconds(),
+		"byPlayers":      s.m.ByPlayers(),
+		"machine":        s.m.Machine(),
 	})
+}
+
+// maxReadingGap is the longest a reading stands for. Readings are taken
+// every few seconds (every 30 seconds in the history kept from before the
+// app last started), and none while the computer sleeps or the app is
+// closed.
+const maxReadingGap = time.Minute
+
+// runningSeconds works out how long the server ran from the readings: each
+// one taken while it ran counts until the next, up to maxReadingGap.
+// Counting readings instead would leave out the time the computer slept
+// (when the server is always stopped), and give the sparser older readings
+// too little weight.
+func runningSeconds(samples []stats.Sample, now time.Time) float64 {
+	var total time.Duration
+	for i, s := range samples {
+		if !s.Running {
+			continue
+		}
+		end := now.UnixMilli()
+		if i+1 < len(samples) {
+			end = samples[i+1].T
+		}
+		gap := time.Duration(end-s.T) * time.Millisecond
+		total += max(0, min(gap, maxReadingGap))
+	}
+	return total.Seconds()
 }
 
 func (s *Server) logs(w http.ResponseWriter, r *http.Request) {

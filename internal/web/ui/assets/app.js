@@ -1,7 +1,7 @@
 // Valheim Easy Server control panel: app shell, live status and the actions
 // every page shares.
 
-import { h, morph, icon, api, toast, confirmDialog, copyText, dur, ago } from './dom.js';
+import { h, morph, icon, api, toast, confirmDialog, copyText, dur, ago, setReopenHint } from './dom.js';
 import home from './home.js';
 import worlds from './worlds.js';
 import players from './players.js';
@@ -80,6 +80,7 @@ function onStatus(st) {
     return;
   }
   if (st.app) app.appVersion = st.app.version;
+  setReopenHint(reopenHint(st));
   const job = st.job;
   // Report each job that finishes after the page loaded, even quick ones
   // that start and end between two refreshes.
@@ -144,9 +145,19 @@ function banners() {
   if (app.offline) {
     out.push(h('div', { class: 'offline-banner', role: 'alert' }, icon('alert'),
       h('div', null, h('b', null, 'Lost contact with the app. '),
-        'If it was closed, start ValheimEasyServer.exe again. This page reconnects by itself.')));
+        `If it was closed, ${reopenHint(app.status)}. This page reconnects by itself.`)));
   }
   return out;
+}
+
+// reopenHint says how to open the app again on the server computer. The
+// last status is kept while the app can't be reached, so its platform is
+// still known.
+function reopenHint(st) {
+  const platform = st && st.platform;
+  if (platform === 'darwin') return 'open Valheim Easy Server again (for example from the Applications folder)';
+  if (platform === 'linux') return 'start Valheim Easy Server again';
+  return 'start ValheimEasyServer.exe again';
 }
 
 export function render(force) {
@@ -175,7 +186,10 @@ async function run(path, body, okMsg) {
     if (okMsg) toast(okMsg, 'good');
   } catch (e) {
     toast(e.message, 'bad', 9000);
-    if (e.data && e.data.fields && app.page.id !== 'settings') go('settings');
+    if (e.data && e.data.fields && app.page.id !== 'settings') {
+      app.pendingFieldErrors = e.data.fields; // for the Settings page to highlight once it has loaded
+      go('settings');
+    }
   }
   poll();
 }
@@ -254,14 +268,11 @@ A['show-settings'] = () => go('settings');
 A['show-worlds'] = () => go('worlds');
 A.tutorial = () => openTutorial(app);
 A['mods-help'] = () => openModsHelp(app.status && app.status.mods, app.status && app.status.modsCode);
-A.reveal = (d, el) => {
-  const target = document.getElementById(d.target);
-  if (!target) return;
-  const shown = target.dataset.shown === '1';
-  target.dataset.shown = shown ? '0' : '1';
-  target.textContent = shown ? '•'.repeat(Math.min(12, d.secret.length)) : d.secret;
-  el.replaceChildren(icon(shown ? 'eye' : 'eyeOff'));
-  el.setAttribute('aria-label', shown ? 'Show password' : 'Hide password');
+// The password on the How friends join card is shown or hidden from here, not
+// by changing the page, so the regular refresh doesn't hide it again.
+A.reveal = () => {
+  app.pwShown = !app.pwShown;
+  render();
 };
 
 // Click and change handling by data-action, so re-rendered parts of the

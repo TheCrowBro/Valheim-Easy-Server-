@@ -18,8 +18,10 @@ let wkForm = { address: '', token: '' };
 let wkErrors = {};
 let wkBusy = '';                      // what's under way, for its button
 let wkChecking = false;               // asking the JetKVM how the waker is
+let wkTimer = null;                   // asks again while the app is busy with the waker
 
 async function loadWaker(live) {
+  clearTimeout(wkTimer);
   wkChecking = live;
   if (appRef && appRef.page.id === 'settings') appRef.render();
   try {
@@ -31,15 +33,42 @@ async function loadWaker(live) {
     wkChecking = false;
   }
   if (appRef && appRef.page.id === 'settings') appRef.render();
+  watchWaker();
 }
 
-async function load() {
+// watchWaker asks again in a few seconds while the app is updating the
+// waker: nothing else tells this page when that's done, and until then
+// the waker's buttons are greyed out.
+function watchWaker() {
+  clearTimeout(wkTimer);
+  if (wk && wk.busy && appRef && appRef.page.id === 'settings') {
+    wkTimer = setTimeout(() => { if (!wkChecking) loadWaker(false); }, 3000);
+  }
+}
+
+// load reads the settings. When the page is opened again with changes that
+// weren't saved, they're kept (on top of the settings as they are now), so
+// visiting another page doesn't lose them.
+async function load(keepChanges) {
+  const was = keepChanges && dirty() ? { view: view.settings, draft } : null;
   try {
     view = await api('/api/settings');
-    draft = structuredClone(view.settings);
-    errors = {};
+    if (was) {
+      draft = structuredClone(view.settings);
+      for (const k of Object.keys(was.draft)) {
+        if (JSON.stringify(was.draft[k]) !== JSON.stringify(was.view[k])) draft[k] = was.draft[k];
+      }
+    } else {
+      draft = structuredClone(view.settings);
+      errors = {};
+    }
   } catch (e) {
     toast(e.message, 'bad');
+  }
+  // Problems another page ran into (for example Start), to show here.
+  if (appRef && appRef.pendingFieldErrors) {
+    errors = { ...errors, ...appRef.pendingFieldErrors };
+    appRef.pendingFieldErrors = null;
   }
   if (appRef && appRef.page.id === 'settings') appRef.render();
 }
@@ -252,7 +281,7 @@ function wakeStatus() {
         h('div', { class: 'row' }, h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'wk-install', disabled: !!wkBusy || wk.busy },
           icon('download'), wkBusy === 'install' ? 'Installing…' : 'Install again')))),
     h('div', { class: 'row', style: { marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--line)' } },
-      h('button', { class: 'btn btn-sm', 'data-action': 'wk-check', disabled: wkChecking || wk.busy }, icon('refresh'), wkChecking ? 'Checking…' : 'Check again'),
+      h('button', { class: 'btn btn-sm', 'data-action': 'wk-check', disabled: wkChecking }, icon('refresh'), wkChecking ? 'Checking…' : 'Check again'),
       h('button', { class: 'btn btn-sm btn-danger', 'data-action': 'wk-remove', disabled: !!wkBusy || wk.busy }, icon('trash'), wkBusy === 'remove' ? 'Turning off…' : 'Turn off')),
   ];
 }
@@ -283,7 +312,8 @@ function automationSection() {
       'Saves power. Wake the computer with Wake-on-LAN (for example from the IP KVM) or its power button. After waking up, it stays awake for at least 15 minutes.', {
       extra: draft.idleHibernate ? h('div', { class: 'row', style: { marginTop: '8px' } }, 'After',
         h('input', { class: `input${errors.idleMinutes ? ' invalid' : ''}`, type: 'number', min: 10, max: 1440, 'data-field': 'idleMinutes', value: draft.idleMinutes, style: { width: '96px' }, 'aria-label': 'Minutes' }),
-        'minutes without players') : null,
+        'minutes without players',
+        errors.idleMinutes ? h('div', { class: 'error', role: 'alert', style: { flexBasis: '100%', color: 'var(--bad-text)', fontSize: '13px' } }, errors.idleMinutes) : null) : null,
     }),
     h('div', { class: 'toggle-row' },
       h('div', { class: 'grow' }, h('div', { class: 'title' }, mac() ? 'Start this app when you log in' : 'Start this app when Windows starts'),
@@ -440,7 +470,7 @@ export default {
   },
   mount(app) {
     appRef = app;
-    load().then(() => loadWaker(true));
+    load(true).then(() => loadWaker(true));
     const A = app.actions;
     A['wk-install'] = async (d) => {
       const trust = d.trust === '1' || d.trust === 'yes';
@@ -451,6 +481,7 @@ export default {
       try {
         wk = await api('/api/jetkvm/install', { method: 'POST', body: { address: (wkForm.address || '').trim(), token: (wkForm.token || '').trim(), trust } });
         wkForm.token = '';
+        watchWaker();
         const st = wk.status;
         toast(st && st.connected && !st.servers ? 'Installed. Last step: add the bot to your Discord server.' : 'Installed. Friends can type /valheim in Discord.', 'good', 8000);
         app.poll();
@@ -606,6 +637,7 @@ export default {
     window.addEventListener('beforeunload', onLeave);
   },
   unmount() {
+    clearTimeout(wkTimer);
     document.removeEventListener('input', onInput);
     document.removeEventListener('change', onInput);
     window.removeEventListener('beforeunload', onLeave);

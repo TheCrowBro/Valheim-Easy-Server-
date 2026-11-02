@@ -3,6 +3,7 @@ package web
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/rand"
 	"encoding/json"
 	"io"
 	"log"
@@ -11,12 +12,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"valheim-easy-server/internal/manager"
+	"valheim-easy-server/internal/stats"
 	"valheim-easy-server/internal/worlds"
 )
 
@@ -225,6 +229,84 @@ func TestMissingBackupIsAnError(t *testing.T) {
 	rec := ts.do("GET", "/api/worlds/backup-download?name=Midgard&id=gone", "127.0.0.1", nil, nil)
 	if rec.Code == http.StatusOK || rec.Header().Get("Content-Type") == "application/zip" {
 		t.Fatalf("a missing backup downloaded: %d %q", rec.Code, rec.Header().Get("Content-Type"))
+	}
+}
+
+// A backup download that fails once part of the zip has been sent must not
+// end like a finished download, or the browser saves a broken zip.
+func TestBrokenBackupDownloadFails(t *testing.T) {
+	ts := newTestServer(t)
+	// A Valheim backup of a deleted world, with a file that can't be read
+	// (as if Valheim removed it while the zip was being made). The sorted
+	// zip order puts it after a big file, so the download has started.
+	dir := filepath.Join(ts.m.Paths().Worlds, "Asgard_backup_auto-20260101120000")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	big := make([]byte, 200<<10)
+	rand.Read(big) // doesn't compress, so it's sent before the zip ends
+	os.WriteFile(filepath.Join(dir, "_main.1.db2"), big, 0o644)
+	os.WriteFile(filepath.Join(dir, "_main.1.fwl2"), worlds.BuildMeta(worlds.Meta{Version: 37, Name: "Asgard"}, true), 0o644)
+	if err := os.Symlink(filepath.Join(dir, "gone"), filepath.Join(dir, "zz.chunk")); err != nil {
+		t.Skipf("can't make a broken link here: %v", err)
+	}
+
+	srv := httptest.NewServer(ts.s)
+	defer srv.Close()
+	res, err := http.Get(srv.URL + "/api/worlds/backup-download?name=Asgard&id=" + url.QueryEscape("v:Asgard_backup_auto-20260101120000"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want the download to start", res.StatusCode)
+	}
+	if b, err := io.ReadAll(res.Body); err == nil {
+		t.Fatalf("the broken download ended normally after %d bytes", len(b))
+	}
+}
+
+// Problems with the settings found by other actions (choosing a world,
+// starting the server) say what's wrong, since those pages have nothing to
+// highlight.
+func TestFieldErrorsSayWhy(t *testing.T) {
+	ts := newTestServer(t)
+	s := ts.m.Settings()
+	s.Password = "frost"
+	if err := ts.m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	rec := ts.do("POST", "/api/worlds/select", "127.0.0.1", strings.NewReader(`{"name":"Frostheim"}`), csrf)
+	var body struct {
+		Error  string            `json:"error"`
+		Fields map[string]string `json:"fields"`
+	}
+	json.NewDecoder(rec.Body).Decode(&body)
+	if rec.Code != http.StatusBadRequest || body.Fields["password"] == "" {
+		t.Fatalf("select = %d %+v", rec.Code, body)
+	}
+	if body.Error != body.Fields["password"] {
+		t.Fatalf("error = %q, want the reason %q", body.Error, body.Fields["password"])
+	}
+}
+
+func TestRunningSeconds(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	at := func(ago time.Duration) int64 { return now.Add(-ago).UnixMilli() }
+	samples := []stats.Sample{
+		{T: at(2 * time.Hour), Running: true}, // then the computer slept for an hour
+		{T: at(time.Hour), Running: true},
+		{T: at(time.Hour - 30*time.Second), Running: true}, // a 30-second reading kept from before the app started
+		{T: at(time.Hour - 60*time.Second)},
+		{T: at(10 * time.Second), Running: true},
+		{T: at(8 * time.Second), Running: true},
+	}
+	// 1 minute (capped) + 30 s + 30 s + 2 s + 8 s (until now)
+	if got, want := runningSeconds(samples, now), 130.0; got != want {
+		t.Fatalf("runningSeconds = %v, want %v", got, want)
+	}
+	if got := runningSeconds(nil, now); got != 0 {
+		t.Fatalf("no readings = %v", got)
 	}
 }
 
