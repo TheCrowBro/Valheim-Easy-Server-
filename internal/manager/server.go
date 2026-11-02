@@ -256,10 +256,11 @@ func (m *Manager) doStart(ctx context.Context, j *jobCtl) error {
 	}
 	info := runInfo{PID: proc.PID(), Started: proc.StartTime(), Launched: time.Now(), LogPath: logPath,
 		World: s.World, ArgsKey: argsKey(s, p.Save), Exe: p.ServerExe, Played: m.startedWith(s), NoCrossplay: !s.Crossplay,
-		codePending: len(s.WorldMods()) > 0}
+		CodeMods: sortedIDs(s.WorldMods())}
+	info.codePending = len(info.CodeMods) > 0
 	run := m.attach(proc, info, false)
 	if info.codePending {
-		m.go_(func() { m.makeModsCode(run, s.WorldMods(), s.World, p) })
+		m.go_(func() { m.makeModsCode(run, info.CodeMods, info.World, p) })
 	}
 	m.addActivity("starting", "", fmt.Sprintf("Starting the server with the world %q.", s.World))
 	m.pruneLogs()
@@ -438,7 +439,15 @@ func (m *Manager) adopt(pi platform.ProcInfo, saved runInfo) bool {
 	if info.Launched.IsZero() {
 		info.Launched = proc.StartTime()
 	}
-	m.attach(proc, info, true)
+	// The app that started it closed before the mods code was made.
+	info.codePending = info.ModsCode == "" && len(info.CodeMods) > 0
+	run := m.attach(proc, info, true)
+	if info.codePending {
+		m.mu.Lock()
+		p := m.paths
+		m.mu.Unlock()
+		m.go_(func() { m.makeModsCode(run, info.CodeMods, info.World, p) })
+	}
 	m.addActivity("info", "", "Found the Valheim server already running and took over watching it.")
 	return true
 }

@@ -68,13 +68,9 @@ func (in *Installer) ProfilePackages(ctx context.Context, ids []string) ([]Packa
 		}
 		for _, p := range pkgs {
 			if _, ok := want[p.Name]; ok {
-				continue // the server's version, so everyone has the same
+				continue // the server runs it: its version, so everyone has the same
 			}
-			if cur, ok := rec.Packages[p.Name]; ok && cur.Version != "" {
-				want[p.Name] = cur.Version
-			} else {
-				want[p.Name] = p.Version
-			}
+			want[p.Name] = p.Version // the latest, which has what the mod needs
 		}
 	}
 	out := make([]Package, 0, len(want))
@@ -93,14 +89,30 @@ func (in *Installer) ProfilePackages(ctx context.Context, ids []string) ([]Packa
 	return out, nil
 }
 
-// ProfileName makes a name for a mod manager profile from a world's name:
-// letters, digits, spaces, dashes and underscores, as profile folders allow.
+// ascii spells letters with accents the way the profile name can use them.
+var ascii = map[rune]string{
+	'à': "a", 'á': "a", 'â': "a", 'ã': "a", 'ä': "a", 'å': "a", 'ā': "a", 'æ': "ae", 'ç': "c", 'č': "c", 'ð': "d", 'đ': "d",
+	'è': "e", 'é': "e", 'ê': "e", 'ë': "e", 'ē': "e", 'ě': "e", 'ì': "i", 'í': "i", 'î': "i", 'ï': "i", 'ī': "i", 'ł': "l",
+	'ñ': "n", 'ń': "n", 'ò': "o", 'ó': "o", 'ô': "o", 'õ': "o", 'ö': "o", 'ø': "o", 'ō': "o", 'œ': "oe", 'ř': "r", 'š': "s",
+	'ś': "s", 'ß': "ss", 'þ': "th", 'ù': "u", 'ú': "u", 'û': "u", 'ü': "u", 'ū': "u", 'ý': "y", 'ÿ': "y", 'ž': "z", 'ź': "z", 'ż': "z",
+}
+
+// ProfileName makes a name for a mod manager profile from a world's name.
+// r2modman only takes ASCII letters and digits, spaces, dashes, dots and
+// underscores, starting with a letter or digit, so letters with accents
+// lose them and anything else becomes a space.
 func ProfileName(world string) string {
 	var b strings.Builder
 	for _, r := range world {
 		switch {
-		case unicode.IsLetter(r), unicode.IsDigit(r), r == '-', r == '_':
+		case r < 128 && (unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' || r == '.'):
 			b.WriteRune(r)
+		case ascii[unicode.ToLower(r)] != "":
+			s := ascii[unicode.ToLower(r)]
+			if unicode.IsUpper(r) {
+				s = strings.ToUpper(s[:1]) + s[1:]
+			}
+			b.WriteString(s)
 		default:
 			b.WriteRune(' ')
 		}

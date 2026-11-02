@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 const (
@@ -34,6 +35,8 @@ const (
 // Fake answers the package and download requests mods.Installer makes.
 type Fake struct {
 	Requests atomic.Int32
+	// HangCodes makes share code uploads hang, as on a bad day.
+	HangCodes atomic.Bool
 
 	mu       sync.Mutex
 	versions map[string]string
@@ -107,6 +110,14 @@ var deps = map[string][]string{
 func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.Requests.Add(1)
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) == 4 && parts[2] == "legacyprofile" && f.HangCodes.Load() {
+		io.Copy(io.Discard, r.Body) // so a client that gives up is noticed
+		select {
+		case <-r.Context().Done():
+		case <-time.After(30 * time.Second):
+		}
+		return
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	switch {

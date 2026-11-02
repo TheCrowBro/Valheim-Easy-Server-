@@ -64,8 +64,9 @@ export function openModsHelp(list, code) {
         h('li', null, 'Get a free mod manager, ', h('b', null, 'Gale'), ' or ', h('b', null, 'r2modman'), ':',
           h('div', { class: 'managers' }, address(GALE, 'Gale'), address(R2MODMAN, 'r2modman'))),
         code
-          ? h('li', null, 'Choose Valheim and import a new profile from this mods code. It installs ', many ? 'every mod' : 'the mod', ' this world uses, at the server’s versions, with everything ', it, ' needs. In r2modman: ',
-            h('b', null, 'Import / Update'), ' → ', h('b', null, 'Import new profile'), ' → ', h('b', null, 'From code'), '. In Gale: import a profile from code.',
+          ? h('li', null, 'Choose Valheim and import a new profile from this mods code. It installs ', many ? 'every mod' : 'the mod', ' this world uses, at the server’s versions, with everything ', many ? 'they need' : 'it needs', '. In r2modman: ',
+            h('b', null, 'Import / Update'), ' → ', h('b', null, 'From code'), ', paste the code, then ', h('b', null, 'Continue'), ' → ', h('b', null, 'Import'), ' → ',
+            h('b', null, 'Import new profile'), '. In Gale: import a profile from code.',
             h('div', { class: 'address' }, h('span', { class: 'muted' }, 'Mods code:'), h('span', { class: 'mono' }, code),
               h('button', { class: 'btn btn-ghost btn-icon btn-sm', type: 'button', 'aria-label': 'Copy the mods code', onclick: () => copyText(code, 'Mods code copied') }, icon('copy'))))
           : h('li', null, 'Choose Valheim and make a new profile for this server. Search for ', h('b', null, many ? 'each mod' : `“${list[0].name}”`),

@@ -56,6 +56,21 @@ func TestModsCode(t *testing.T) {
 		}
 	}
 
+	// The code is for the mods the server started with: while the world's
+	// mods are different, there's none to show.
+	if err := m.SetWorldMods(world, []string{"advancedportals"}); err != nil {
+		t.Fatal(err)
+	}
+	if st := m.Status(); st.ModsCode != "" {
+		t.Fatalf("a code for other mods: %q", st.ModsCode)
+	}
+	if err := m.SetWorldMods(world, []string{"farlands", "advancedportals"}); err != nil {
+		t.Fatal(err)
+	}
+	if st := m.Status(); st.ModsCode != code {
+		t.Fatalf("the code is back as %q, want %q", st.ModsCode, code)
+	}
+
 	restart := func() {
 		t.Helper()
 		if err := m.RestartServer(); err != nil {
@@ -109,4 +124,38 @@ func profileList(t *testing.T, profile string) string {
 	defer f.Close()
 	y, _ := io.ReadAll(f)
 	return string(y)
+}
+
+// If the app closes while the code is still being made, the online post
+// isn't lost: the app that takes over the server makes the code and posts.
+func TestModsCodeWhenTheAppCloses(t *testing.T) {
+	fake := modstest.New()
+	store := httptest.NewServer(fake)
+	defer store.Close()
+	chat := newFakeDiscord(t)
+	env := setup(t)
+	m := env.m
+	m.opt.ModsURL, m.opt.DiscordURL = store.URL, chat.URL
+	install(t, m)
+	turnOnDiscord(t, m)
+	if err := m.SetWorldMods(m.Settings().World, []string{"advancedportals"}); err != nil {
+		t.Fatal(err)
+	}
+	fake.HangCodes.Store(true)
+	join := startOnline(t, m)
+	m.Close() // the server keeps running; the code isn't made yet
+	posted := chat.count("is online")
+
+	fake.HangCodes.Store(false)
+	m2 := newTestManager(t, env.data, env)
+	m2.opt.ModsURL, m2.opt.DiscordURL = store.URL, chat.URL
+	m2.Start()
+	env.m = m2
+	if posted != 0 {
+		t.Errorf("posted %d times while waiting for the code", posted)
+	}
+	chat.wait(t, "Join code: **"+join+"**", 1)
+	if n := chat.count("📦 Mods code: `"); n != 1 || m2.Status().ModsCode == "" {
+		t.Fatalf("after taking over: %d posts with a mods code, status %q", n, m2.Status().ModsCode)
+	}
 }

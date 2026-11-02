@@ -274,6 +274,13 @@ func (m *Manager) idleDeadlineLocked() time.Time {
 	if !m.settings.IdleHibernate {
 		return time.Time{}
 	}
+	can := m.checks.hibernate.Available
+	if m.settings.RestMode == config.RestSleep {
+		can = m.checks.sleep.Available
+	}
+	if !m.checks.at.IsZero() && !can { // it would never happen
+		return time.Time{}
+	}
 	if m.run != nil && m.run.tracker.Count() > 0 {
 		return time.Time{}
 	}

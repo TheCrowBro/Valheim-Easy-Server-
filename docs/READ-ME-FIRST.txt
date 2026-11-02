@@ -106,9 +106,10 @@ Players install the world's mods in their own game too:
   1. Install a free mod manager: Gale or r2modman (from
      thunderstore.io).
   2. Choose Valheim and import a new profile from the "mods code" on the
-     Home page or in the Discord post (in r2modman: Import / Update,
-     Import new profile, From code). It installs every mod the world uses,
-     at the server's versions. Or make a profile and search for each mod.
+     Home page or in the Discord post (in r2modman: Import / Update, From
+     code, paste the code, Continue, Import, Import new profile). It
+     installs every mod the world uses, at the server's versions. Or make
+     a profile and search for each mod.
   3. Start Valheim from the mod manager, then join as usual.
 On the Home page, "Which mods do I need?" shows which ones players can't
 join without, and where to download each one. If joining fails because

@@ -69,7 +69,7 @@ func (m *Manager) announceLocked(run *serverRun) (p discordPost, ok bool) {
 	run.info.Announced = key
 	run.discordAt, run.discordErr = time.Time{}, ""
 
-	msg := onlineMessage{Server: s.ServerName, World: run.info.World, Code: code, ModsCode: run.info.ModsCode, Reminder: m.reminderLocked(run)}
+	msg := onlineMessage{Server: s.ServerName, World: run.info.World, Code: code, ModsCode: m.modsCodeLocked(run), Reminder: m.reminderLocked(run)}
 	if s.DiscordPassword {
 		msg.Password = s.Password
 	}

@@ -74,7 +74,9 @@ func TestProfileName(t *testing.T) {
 	for in, want := range map[string]string{
 		"Midgard":                  "Valheim Midgard",
 		"  Sky/Island: 2! ":        "Valheim Sky Island 2",
-		"Björn's_World-3":          "Valheim Björn s_World-3",
+		"Björn's_World-3":          "Valheim Bjorn s_World-3",
+		"Ragnarök Æsir Þing":       "Valheim Ragnarok Aesir Thing",
+		"Mars.2":                   "Valheim Mars.2",
 		"🐺":                        "Valheim",
 		strings.Repeat("Long", 20): "Valheim " + strings.Repeat("Long", 10),
 	} {
@@ -110,6 +112,11 @@ func TestProfilePackages(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("packages %v, want %v", got, want)
 		}
+	}
+	// A world whose mods are all just for players' own games: the latest.
+	only, err := in.ProfilePackages(ctx, []string{"farlands"})
+	if err != nil || len(only) != 2 || only[0] != (Package{Loader, "5.4.2400"}) || only[1] != (Package{modstest.FarLands, "1.0.6"}) {
+		t.Fatalf("players' mods only: %v %v", only, err)
 	}
 	if none, err := in.ProfilePackages(ctx, nil); none != nil || err != nil {
 		t.Fatalf("a world without mods: %v %v", none, err)

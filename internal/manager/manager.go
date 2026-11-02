@@ -181,9 +181,11 @@ type runInfo struct {
 	Announced   string `json:"announced,omitempty"`
 	Played      played `json:"played"`                // the mods and password it started with
 	NoCrossplay bool   `json:"noCrossplay,omitempty"` // started without crossplay, so no join code
-	// ModsCode imports the world's mods in a mod manager (see modscode.go).
-	ModsCode    string `json:"modsCode,omitempty"`
-	codePending bool   // the mods code is being made: the Discord post waits
+	// ModsCode imports the world's mods in a mod manager (see modscode.go),
+	// the mods in CodeMods (sorted), which the server started with.
+	ModsCode    string   `json:"modsCode,omitempty"`
+	CodeMods    []string `json:"codeMods,omitempty"`
+	codePending bool     // the mods code is being made: the Discord post waits
 }
 
 // New loads settings and saved data. Call Start to begin.

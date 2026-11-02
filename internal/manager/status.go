@@ -179,7 +179,7 @@ func (m *Manager) Status() Status {
 			st.LastSave = &ls
 		}
 		st.Join.Code = r.tracker.JoinCode
-		st.ModsCode = r.info.ModsCode
+		st.ModsCode = m.modsCodeLocked(r)
 		st.Join.PublicAddr = r.tracker.PublicAddr
 		if r.ready && !r.info.NoCrossplay && r.tracker.JoinCode == "" {
 			switch {

@@ -69,7 +69,7 @@ func SleepStatus() (available bool, detail string) {
 		return false, "Windows didn't say whether sleep is available."
 	}
 	if caps[5] == 0 {
-		return false, "Windows can't put this computer to sleep (it may be missing a chipset or graphics driver). Use hibernation instead."
+		return false, "Windows can't put this computer to sleep: a chipset or graphics driver may be missing. Install the computer's drivers (on a Mac, Boot Camp's), then restart it."
 	}
 	return true, ""
 }

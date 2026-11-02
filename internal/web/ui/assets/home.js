@@ -153,7 +153,7 @@ function joinCard(app) {
   }
   body.push(discordLine(st));
   const mods = st.mods || [];
-  if (mods.length) body.unshift(modsNotice(mods, st.needsRestart ? '' : st.modsCode));
+  if (mods.length) body.unshift(modsNotice(mods, st.modsCode));
   if (st.state === 'online' && (st.reminder || []).length) body.unshift(reminderNotice(st));
   return h('section', { class: 'card', 'aria-label': 'How to join' },
     h('div', { class: 'card-head' }, h('h2', null, 'How friends join'),

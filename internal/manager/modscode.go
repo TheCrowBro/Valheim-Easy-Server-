@@ -36,7 +36,11 @@ func (m *Manager) makeModsCode(run *serverRun, ids []string, world string, p con
 		if code != "" {
 			run.info.ModsCode = code
 		}
-		post, announce := m.announceLocked(run)
+		var post discordPost
+		announce := false
+		if !m.closing && m.ctx.Err() == nil { // closing: the app that takes over posts it
+			post, announce = m.announceLocked(run)
+		}
 		m.mu.Unlock()
 		if announce {
 			m.queueDiscord(post)
@@ -50,6 +54,22 @@ func (m *Manager) makeModsCode(run *serverRun, ids []string, world string, p con
 	if code, err = m.modsCode(ctx, ids, world, p); err != nil {
 		m.log.Printf("mods share code: %v", err)
 	}
+}
+
+// modsCodeLocked is the running world's mods code, while the world's mods
+// are still the ones it was made for.
+func (m *Manager) modsCodeLocked(run *serverRun) string {
+	if !slices.Equal(run.info.CodeMods, sortedIDs(m.settings.WorldOptions[run.info.World].Mods)) {
+		return ""
+	}
+	return run.info.ModsCode
+}
+
+func sortedIDs(ids []string) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	return slices.Sorted(slices.Values(ids))
 }
 
 // modsCode returns the share code for the world's mods: the one made
