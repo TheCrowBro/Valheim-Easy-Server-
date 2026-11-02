@@ -27,12 +27,15 @@ const wakeHint = "Wake it with Wake-on-LAN (for example from an IP KVM) or its p
 // has woken up again, so it also says when that happened (see sleptSince).
 const sleptResult = "The computer slept and has woken up again."
 
-// How the app tells whether someone is using the computer, and whether
+// How the app tells whether someone is using the computer and what woke it
+// up, whether it can be only half awake (a Mac's dark wake), and whether
 // Sleep returns only once the computer wakes up (a Mac's returns before it
 // sleeps). Replaced in tests.
 var (
 	idleTime     = platform.IdleTime
 	darkWake     = platform.DarkWake
+	wokeBy       = platform.WokeBy
+	darkWakes    = runtime.GOOS == "darwin"
 	sleepReturns = runtime.GOOS == "windows"
 )
 
@@ -145,10 +148,12 @@ func (m *Manager) sampleLoop() {
 	tick := time.NewTicker(m.opt.SampleInterval)
 	defer tick.Stop()
 	last := time.Now()
+	before := last // the reading before last
 	saved := time.Now()
-	// woke is when the computer last woke up, while it isn't known yet
-	// whether someone wants it awake (see wakeWanted).
-	var woke, lastWake time.Time
+	// woke follows the latest wake-up, while it isn't known yet whether
+	// someone wants the computer awake (see wakeWanted).
+	var woke pendingWake
+	var lastWake time.Time
 	for {
 		select {
 		case <-m.ctx.Done():
@@ -167,20 +172,20 @@ func (m *Manager) sampleLoop() {
 			// short sleep there only shows when the app's own sleep ends. A
 			// long one shows both ways: count it once.
 			slept := m.rested(wall, now.Sub(last)) || (now.Sub(lastWake) > time.Minute && m.sleptSince(last))
-			last = now
+			asleep := before // taken before it went to rest, even if the app's sleep ended just after a reading
+			before, last = last, now
 			if slept {
-				woke, lastWake = now, now
+				woke, lastWake = pendingWake{at: now, asleep: asleep}, now
 				m.onWake(gap)
 				continue
 			}
-			if !woke.IsZero() {
-				switch {
-				case m.wakeWanted(woke):
-					woke = time.Time{}
-					m.wokenOnPurpose()
-				case now.Sub(woke) > wakeWatch:
-					woke = time.Time{} // nobody came: it woke up by itself
-				}
+			// Until someone turns up, keep watching: a computer that woke up
+			// by itself goes back to sleep by itself, and the next wake-up
+			// starts again. A Mac can stay in a dark wake for a long time
+			// (a backup, say) before someone wakes it fully.
+			if !woke.at.IsZero() && m.wakeWanted(&woke) {
+				woke = pendingWake{}
+				m.wokenOnPurpose()
 			}
 			m.updateAwake()
 			m.sample(now, gap)
@@ -251,9 +256,22 @@ func clamp(v float64) float64 {
 // unattended wake (such as Wake-on-LAN) unless asked not to.
 var wakeGrace = 15 * time.Minute
 
-// wakeWatch is how long after the computer wakes up the app watches for a
-// sign that someone wants it awake.
-var wakeWatch = 5 * time.Minute
+// wakeWatch is how long after the computer wakes up the app asks the
+// system what woke it, every wakeAskEvery: Windows says a few seconds after
+// it wakes up.
+var (
+	wakeWatch    = 5 * time.Minute
+	wakeAskEvery = 5 * time.Second
+)
+
+// pendingWake is a wake-up the app has noticed, while it isn't known yet
+// whether someone wants the computer awake.
+type pendingWake struct {
+	at     time.Time          // when the app noticed it
+	asleep time.Time          // a reading from before the computer went to rest
+	cause  platform.WakeCause // what woke it, once the system says
+	asked  time.Time          // when the app last asked the system
+}
 
 // rested reports whether the computer rested between two readings, from
 // the wall-clock time between them and the time timers saw. On macOS and
@@ -290,21 +308,33 @@ func (m *Manager) onWake(gap time.Duration) {
 }
 
 // wakeWanted reports whether someone wants the computer awake since it woke
-// up at woke: a wake signal was heard (it holds the computer awake), or
-// someone is using the computer itself. A Mac someone woke is fully awake,
-// not in a dark wake; elsewhere, they have used the keyboard or mouse.
-func (m *Manager) wakeWanted(woke time.Time) bool {
+// up: a wake signal was heard (it holds the computer awake), a device woke
+// it rather than a timer, or someone is using the computer itself. The
+// device can be the power button or the network adapter: the Wake-on-LAN
+// packet from an IP KVM's own Wake button wakes the computer, but the
+// adapter keeps it, so the app never hears it. A Mac someone uses is fully
+// awake, not in a dark wake; elsewhere, they have used the keyboard or
+// mouse.
+func (m *Manager) wakeWanted(w *pendingWake) bool {
 	m.mu.Lock()
-	heard := m.wakeHold.After(woke) // onWake dropped any older hold
+	heard := m.wakeHold.After(w.at) // onWake dropped any older hold
 	m.mu.Unlock()
 	if heard {
 		return true
 	}
-	if runtime.GOOS == "darwin" {
+	now := time.Now()
+	if w.cause == platform.WakeCauseUnknown && now.Sub(w.at) < wakeWatch && now.Sub(w.asked) >= wakeAskEvery {
+		w.asked = now
+		w.cause = wokeBy(w.asleep)
+	}
+	if w.cause == platform.WakeByDevice {
+		return true
+	}
+	if darkWakes {
 		return !darkWake()
 	}
 	idle, ok := idleTime()
-	return ok && idle < time.Since(woke)
+	return ok && idle < now.Sub(w.at)
 }
 
 // holdAwake keeps the computer awake for a while, so friends have time to

@@ -5,32 +5,48 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"valheim-easy-server/internal/platform"
 )
 
 // fakeUser stands in for someone at the computer: its keyboard and mouse,
-// and whether a Mac is fully awake. Call it before setup, so it's put back
-// once the manager has closed.
+// whether a Mac is fully awake, and what the system says woke it up. Call
+// it before setup, so it's put back once the manager has closed.
 func fakeUser(t *testing.T) *presence {
 	t.Helper()
 	p := &presence{}
 	p.away()
-	oldIdle, oldDark := idleTime, darkWake
+	oldIdle, oldDark, oldWokeBy := idleTime, darkWake, wokeBy
 	idleTime = func() (time.Duration, bool) { return time.Duration(p.idle.Load()), true }
 	darkWake = p.dark.Load
-	t.Cleanup(func() { idleTime, darkWake = oldIdle, oldDark })
+	wokeBy = func(since time.Time) platform.WakeCause {
+		p.since.Store(since.UnixNano())
+		return platform.WakeCause(p.cause.Load())
+	}
+	t.Cleanup(func() { idleTime, darkWake, wokeBy = oldIdle, oldDark, oldWokeBy })
 	return p
 }
 
 type presence struct {
-	idle atomic.Int64 // since the last input
-	dark atomic.Bool  // a Mac only half awake
+	idle  atomic.Int64 // since the last input
+	dark  atomic.Bool  // a Mac only half awake
+	cause atomic.Int32 // what the system says woke it up
+	since atomic.Int64 // the app asked about a wake-up after this (Unix nanoseconds)
 }
 
-// away: nobody has touched the computer for hours, and a Mac is in a dark
-// wake.
+// away: nobody has touched the computer for hours, a Mac is in a dark
+// wake, and a timer woke it up.
 func (p *presence) away() {
 	p.idle.Store(int64(3 * time.Hour))
 	p.dark.Store(true)
+	p.cause.Store(int32(platform.WakeByTimer))
+}
+
+// set replaces a setting of the app's for a test.
+func set[T any](t *testing.T, v *T, to T) {
+	old := *v
+	*v = to
+	t.Cleanup(func() { *v = old })
 }
 
 // here: someone is using the computer.
@@ -53,7 +69,7 @@ func TestWakeWaitsForSomeone(t *testing.T) {
 	m.mu.Unlock()
 
 	m.onWake(2 * time.Hour)
-	woke := time.Now()
+	woke := &pendingWake{at: time.Now(), asleep: time.Now().Add(-2 * time.Hour)}
 	time.Sleep(10 * time.Millisecond)
 	m.mu.Lock()
 	awake, resume := m.wantAwakeLocked(time.Now()), m.resumeOnWake
@@ -70,6 +86,14 @@ func TestWakeWaitsForSomeone(t *testing.T) {
 	m.wakeSignal("") // nothing is installed to start, but someone asked
 	if !m.wakeWanted(woke) {
 		t.Fatal("a wake signal doesn't count")
+	}
+
+	// The network adapter (Wake-on-LAN from the KVM's own button, which the
+	// app doesn't hear) or the power button woke it: that counts too, even
+	// with nobody at the computer.
+	user.cause.Store(int32(platform.WakeByDevice))
+	if !m.wakeWanted(&pendingWake{at: time.Now()}) {
+		t.Fatal("a wake-up by a device doesn't count")
 	}
 
 	m.wokenOnPurpose()
@@ -174,5 +198,104 @@ func TestIdleDeadlineFollowsInput(t *testing.T) {
 	waitJob(t, m, currentJobID(m))
 	if n := env.slept.Load() + env.hibernated.Load(); n != 0 {
 		t.Fatalf("rested %d times while someone used the computer", n)
+	}
+}
+
+// Wake-on-LAN from the IP KVM's own Wake button wakes the computer, but
+// the network adapter keeps the packet, so the app hears nothing; nobody
+// touches the computer either. Once Windows says a device woke it, it stays
+// awake and the server starts again, as after any wake-up someone asked
+// for.
+func TestKVMWakeKeepsAwake(t *testing.T) {
+	set(t, &sleepReturns, true) // as on Windows
+	set(t, &wakeAskEvery, 100*time.Millisecond)
+	user := fakeUser(t)
+	user.cause.Store(int32(platform.WakeCauseUnknown)) // Windows hasn't said yet
+	var sleptAt atomic.Int64
+	env := setup(t, func(o *Options) {
+		o.Sleep = func() error {
+			sleptAt.Store(time.Now().UnixNano())
+			return nil
+		}
+	})
+	m := env.m
+	install(t, m)
+	if err := m.StartServer(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "server online", 20*time.Second, func() bool { return m.Status().State == StateOnline })
+	m.mu.Lock()
+	m.wakeHold = time.Now().Add(time.Hour) // a hold from before it slept
+	m.mu.Unlock()
+	if err := m.Hibernate(""); err != nil {
+		t.Fatal(err)
+	}
+	if job := waitJob(t, m, currentJobID(m)); job.Error != "" || job.Result != sleptResult {
+		t.Fatalf("sleep job: %+v", job)
+	}
+	waitFor(t, "the app to ask what woke it", 5*time.Second, func() bool { return user.since.Load() != 0 })
+	time.Sleep(500 * time.Millisecond)
+	m.mu.Lock()
+	held := !m.wakeHold.IsZero()
+	m.mu.Unlock()
+	if held || hasText(m, "wake", "The computer woke up") {
+		t.Fatal("kept awake before Windows said what woke it")
+	}
+
+	user.cause.Store(int32(platform.WakeByDevice)) // Windows has logged it
+	waitFor(t, "the computer to stay awake", 5*time.Second, func() bool {
+		return hasText(m, "wake", "The computer woke up. It stays awake")
+	})
+	m.mu.Lock()
+	awake := m.wantAwakeLocked(time.Now().Add(wakeGrace - time.Minute))
+	m.mu.Unlock()
+	if !awake || !hasText(m, "info", "Starting the server again in 20 seconds") {
+		t.Fatalf("after a wake-up from the KVM: kept awake %v, starting again %v", awake,
+			hasText(m, "info", "Starting the server again in 20 seconds"))
+	}
+	// It asked about a wake-up after the computer went to sleep, not an
+	// earlier one.
+	if since := user.since.Load(); since >= sleptAt.Load() {
+		t.Fatalf("asked about a wake-up after %s, but it slept at %s",
+			time.Unix(0, since).Format(time.StampMilli), time.Unix(0, sleptAt.Load()).Format(time.StampMilli))
+	}
+}
+
+// A Mac can stay in a dark wake (for a backup, say) for longer than the app
+// asks what woke it. If someone then wakes it fully, that still counts: it
+// stays awake and the server starts again.
+func TestLongDarkWakeThenFullWake(t *testing.T) {
+	set(t, &darkWakes, true)
+	set(t, &sleepReturns, true) // so the test's sleep shows as a wake-up
+	set(t, &wakeWatch, 300*time.Millisecond)
+	user := fakeUser(t) // a maintenance dark wake
+	env := setup(t)
+	m := env.m
+	m.mu.Lock()
+	m.wakeHold = time.Now().Add(time.Hour) // a hold from before it slept
+	m.mu.Unlock()
+	if err := m.Hibernate(""); err != nil {
+		t.Fatal(err)
+	}
+	waitJob(t, m, currentJobID(m))
+	m.mu.Lock()
+	m.resumeOnWake = true // the server ran when it went to sleep
+	m.mu.Unlock()
+	waitFor(t, "the wake to be noticed", 5*time.Second, func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return m.wakeHold.IsZero()
+	})
+	time.Sleep(2 * wakeWatch)
+	if hasText(m, "wake", "The computer woke up") {
+		t.Fatal("kept awake in a maintenance dark wake")
+	}
+
+	user.dark.Store(false) // someone pressed a key
+	waitFor(t, "the computer to stay awake", 5*time.Second, func() bool {
+		return hasText(m, "wake", "The computer woke up. It stays awake")
+	})
+	if !hasText(m, "info", "Starting the server again in 20 seconds") {
+		t.Fatal("the server doesn't start again")
 	}
 }

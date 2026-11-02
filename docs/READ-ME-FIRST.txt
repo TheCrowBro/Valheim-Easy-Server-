@@ -167,7 +167,8 @@ WAKING THE COMPUTER UP
 ----------------------
 After "Sleep", wake the computer with Wake-on-LAN from your IP KVM, or
 press its power button. If the server was running before, it starts again
-by itself.
+by itself. When the computer wakes up by itself (for Windows updates, say),
+the app lets it go back to sleep.
 
 The address the KVM needs (the MAC address) is in Settings, under
 "Resting and waking up". The computer must be connected by a network
