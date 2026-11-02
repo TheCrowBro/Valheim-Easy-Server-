@@ -35,3 +35,15 @@ func psEncode(script string) string {
 	}
 	return base64.StdEncoding.EncodeToString(b)
 }
+
+// psAdminArgs is the PowerShell command line for a script that runs as
+// admin. Each character of the script takes up about 2.7 characters here.
+func psAdminArgs(script string) string {
+	return "-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand " + psEncode(script)
+}
+
+// shellExecuteMax is the longest command line Windows takes when it asks
+// for admin permission (ShellExecute's limit, much shorter than the usual
+// 32,767 characters), counting the program's path. Scripts that need
+// admin rights are kept short enough to fit.
+const shellExecuteMax = 2048

@@ -94,7 +94,7 @@ func main() {
 
 	// One copy per data folder: a second start just opens the window.
 	id := sha256.Sum256([]byte(strings.ToLower(dataDir)))
-	release, already, err := platform.SingleInstance(hex.EncodeToString(id[:8]))
+	release, already, err := platform.SingleInstance(dataDir, hex.EncodeToString(id[:8]))
 	if err != nil {
 		logger.Printf("single instance check: %v", err)
 		release = func() {}

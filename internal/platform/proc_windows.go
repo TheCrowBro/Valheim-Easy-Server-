@@ -43,6 +43,10 @@ func HiddenProcAttr() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
 }
 
+// KillGroupOnCancel leaves the usual cancel in place on Windows, where
+// steamcmd.exe is SteamCMD itself rather than a script that starts it.
+func KillGroupOnCancel(*exec.Cmd) {}
+
 // StartDetached starts a program that keeps running if this app closes.
 func StartDetached(exe string, args []string, dir string, env []string) (*Proc, error) {
 	consoleMu.Lock()

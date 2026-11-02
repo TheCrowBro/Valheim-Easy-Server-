@@ -249,6 +249,22 @@ func parseFirewallOn(out string) bool {
 	return strings.Contains(s, "enabled")
 }
 
+// parseFirewallBlockAll reads `socketfilterfw --getglobalstate` or
+// `--getblockall`: whether "Block all incoming connections" is on, which
+// turns friends away whichever apps the firewall lets through. macOS
+// versions word it differently: "(State = 2)", "Block all ENABLED!",
+// "Firewall has block all state set to enabled.".
+func parseFirewallBlockAll(out string) bool {
+	s := strings.ToLower(out)
+	if i := strings.Index(s, "state = "); i >= 0 {
+		return len(s) > i+8 && s[i+8] == '2'
+	}
+	if strings.Contains(s, "disabled") {
+		return false
+	}
+	return strings.Contains(s, "block all") && strings.Contains(s, "enabled") || strings.Contains(s, "block all non-essential")
+}
+
 // parseFirewallApp reads `socketfilterfw --listapps`: whether the program
 // at path is on the list, and whether it may accept connections.
 func parseFirewallApp(out, path string) (listed, allowed bool) {

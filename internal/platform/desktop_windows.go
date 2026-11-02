@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -98,15 +97,35 @@ func fileExists(p string) bool {
 const runKey = `Software\Microsoft\Windows\CurrentVersion\Run`
 const runValue = "ValheimEasyServer"
 
-// LaunchOnLogin reports whether the app starts when this user signs in.
+// approvedKey is where Task Manager and Settings → Apps → Startup note
+// which startup entries are switched off.
+const approvedKey = `Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run`
+
+// LaunchOnLogin reports whether Windows starts the app, from where it is
+// now (it may have been moved since), when this user signs in.
 func LaunchOnLogin() (bool, error) {
 	k, err := registry.OpenKey(registry.CURRENT_USER, runKey, registry.QUERY_VALUE)
 	if err != nil {
 		return false, nil
 	}
 	defer k.Close()
-	_, _, err = k.GetStringValue(runValue)
-	return err == nil, nil
+	command, _, err := k.GetStringValue(runValue)
+	if err != nil {
+		return false, nil
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return false, err
+	}
+	if p, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = p // as main.go does for the path it gives SetLaunchOnLogin
+	}
+	var approved []byte
+	if a, err := registry.OpenKey(registry.CURRENT_USER, approvedKey, registry.QUERY_VALUE); err == nil {
+		approved, _, _ = a.GetBinaryValue(runValue)
+		a.Close()
+	}
+	return startupEntryRuns(command, approved, exe), nil
 }
 
 // SetLaunchOnLogin adds or removes the app from Windows startup.
@@ -120,21 +139,30 @@ func SetLaunchOnLogin(on bool, exe string, args string) error {
 		if err := k.DeleteValue(runValue); err != nil && !errors.Is(err, registry.ErrNotExist) {
 			return err
 		}
-		return nil
+	} else if err := k.SetStringValue(runValue, fmt.Sprintf(`"%s" %s`, exe, args)); err != nil {
+		return err
 	}
-	return k.SetStringValue(runValue, fmt.Sprintf(`"%s" %s`, exe, args))
+	// Someone may have switched the entry off in Task Manager or Settings,
+	// which Windows keeps apart from the entry itself. Without that mark
+	// Windows runs the entry, so turning it on here works again.
+	a, err := registry.OpenKey(registry.CURRENT_USER, approvedKey, registry.SET_VALUE)
+	if err != nil {
+		return nil // nothing was ever switched off
+	}
+	defer a.Close()
+	if err := a.DeleteValue(runValue); err != nil && !errors.Is(err, registry.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
-const (
-	fwGameRule = "Valheim Easy Server - game"
-	fwWakeRule = "Valheim Easy Server - wake signal"
-)
+// FirewallReady reports whether the game server at this path has its
+// firewall rule.
+func FirewallReady(serverExe string) bool { return ruleExists(fwRuleName(fwGameRule, serverExe)) }
 
-// FirewallReady reports whether the game server's firewall rule exists.
-func FirewallReady(serverExe string) bool { return ruleExists(fwGameRule) }
-
-// WakeRuleReady reports whether the app may hear Wake-on-LAN signals.
-func WakeRuleReady(appExe string) bool { return ruleExists(fwWakeRule) }
+// WakeRuleReady reports whether the app at this path may hear Wake-on-LAN
+// signals.
+func WakeRuleReady(appExe string) bool { return ruleExists(fwRuleName(fwWakeRule, appExe)) }
 
 func ruleExists(name string) bool {
 	cmd := exec.Command(system32("netsh.exe"), "advfirewall", "firewall", "show", "rule", "name="+name)
@@ -144,28 +172,20 @@ func ruleExists(name string) bool {
 
 // FixFirewall allows the game server through Windows Firewall. It first
 // removes any "block" rules Windows created when its firewall pop-up was
-// dismissed. The control panel only listens on this computer, so the app
-// itself needs no rule, except with wake on, to hear Wake-on-LAN signals
-// (UDP port 9) from the home network; other rules for it, including any
-// left by older versions, are removed. Windows asks for admin permission
-// on the screen; this returns before that is answered.
+// dismissed, and this app's rules for where the server or the app used to
+// be. The control panel only listens on this computer, so the app itself
+// needs no rule, except with wake on, to hear Wake-on-LAN signals (UDP
+// port 9) from the home network; other rules for it, including any left by
+// older versions, are removed. Windows asks for admin permission on the
+// screen; this returns before that is answered.
 func FixFirewall(serverExe, appExe string, wake bool) error {
-	lines := []string{
-		"$server = " + psQuote(serverExe),
-		"$app = " + psQuote(appExe),
-		`netsh advfirewall firewall delete rule name=all "program=$server"`,
-		`netsh advfirewall firewall add rule "name=` + fwGameRule + `" dir=in action=allow "program=$server" enable=yes profile=any`,
-		`netsh advfirewall firewall delete rule name=all "program=$app"`,
-	}
-	if wake {
-		lines = append(lines, `netsh advfirewall firewall add rule "name=`+fwWakeRule+`" dir=in action=allow "program=$app" protocol=UDP localport=9 remoteip=localsubnet enable=yes profile=any`)
-	}
-	return runElevatedPowerShell(strings.Join(lines, "\n"))
+	return runElevatedPowerShell(firewallScript(serverExe, appExe, wake))
 }
 
 // SingleInstance makes sure only one copy of the app runs per data folder.
-// It returns already=true if another copy holds the lock.
-func SingleInstance(id string) (release func(), already bool, err error) {
+// On Windows the lock is a named one, named by id, so the folder itself
+// isn't used. It returns already=true if another copy holds the lock.
+func SingleInstance(dataDir, id string) (release func(), already bool, err error) {
 	name, err := windows.UTF16PtrFromString(`Local\ValheimEasyServer-` + id)
 	if err != nil {
 		return nil, false, err

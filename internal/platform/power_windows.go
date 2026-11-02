@@ -100,10 +100,9 @@ func runElevated(exe, args string) error {
 
 // runElevatedPowerShell runs a script with admin rights. It goes in the
 // command line, never as a file that another program could change while
-// Windows asks for permission.
+// Windows asks for permission, so it must fit in shellExecuteMax.
 func runElevatedPowerShell(script string) error {
-	return runElevated(system32(`WindowsPowerShell\v1.0\powershell.exe`),
-		"-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand "+psEncode(script))
+	return runElevated(system32(`WindowsPowerShell\v1.0\powershell.exe`), psAdminArgs(script))
 }
 
 // KeepAwake stops Windows from going to sleep on its own while the server

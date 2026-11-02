@@ -29,6 +29,21 @@ func HiddenProcAttr() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{Setpgid: true}
 }
 
+// KillGroupOnCancel makes cancelling a command started with
+// HiddenProcAttr end its whole process group, not just the program itself.
+// SteamCMD's steamcmd.sh runs the real SteamCMD as a child, which would
+// otherwise carry on downloading, and keep the output open, after a cancel.
+func KillGroupOnCancel(cmd *exec.Cmd) {
+	cmd.Cancel = func() error {
+		// Setpgid made the group's ID the program's own PID.
+		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		if errors.Is(err, syscall.ESRCH) {
+			return os.ErrProcessDone
+		}
+		return err
+	}
+}
+
 // StartDetached starts a program that keeps running if this app closes.
 func StartDetached(exe string, args []string, dir string, env []string) (*Proc, error) {
 	consoleMu.Lock()

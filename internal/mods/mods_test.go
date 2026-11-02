@@ -4,11 +4,13 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"valheim-easy-server/internal/mods/modstest"
@@ -193,6 +195,79 @@ func TestPrepareOffline(t *testing.T) {
 	}
 	if _, err := empty.Prepare(ctx, []string{"nope"}, false, nil); err == nil {
 		t.Fatal("an unknown mod was accepted")
+	}
+}
+
+// Files deleted after an install (by hand, or by antivirus) come back on
+// the next start, even when nothing was updated: the server mustn't start a
+// world without its mods.
+func TestPrepareRestoresMissingFiles(t *testing.T) {
+	in, _, _ := setup(t)
+	ctx := context.Background()
+	if _, err := in.Prepare(ctx, []string{"riverheim"}, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	os.RemoveAll(filepath.Join(in.Dir, "BepInEx", "plugins", modstest.Rivers))
+	os.Remove(filepath.Join(in.Dir, "winhttp.dll"))
+	res, err := in.Prepare(ctx, []string{"riverheim"}, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(res.Changed, "|"); got != "Installed BepInEx 5.4.2351.|Installed Riverheim 1.2.1." {
+		t.Fatalf("changed %q", got)
+	}
+	if !exists(in.Dir, "BepInEx", "plugins", modstest.Rivers, "Riverheim.dll") || !exists(in.Dir, "winhttp.dll") {
+		t.Fatal("the missing files weren't put back")
+	}
+
+	// The loader's own files too, also when checking for updates.
+	os.RemoveAll(filepath.Join(in.Dir, "BepInEx", "core"))
+	res, err = in.Prepare(ctx, []string{"riverheim"}, true, nil)
+	if err != nil || strings.Join(res.Changed, "|") != "Installed BepInEx 5.4.2351." {
+		t.Fatalf("loader: %v %v", res, err)
+	}
+	if !exists(in.Dir, "BepInEx", "core", "BepInEx.Preloader.dll") {
+		t.Fatal("BepInEx wasn't put back")
+	}
+}
+
+// An update that can't be downloaded doesn't stop the server from starting
+// with the versions already installed.
+func TestPrepareKeepsInstalledWhenDownloadFails(t *testing.T) {
+	fake := modstest.New()
+	var down atomic.Bool // Thunderstore answers, but its downloads fail
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if down.Load() && strings.HasPrefix(r.URL.Path, "/package/download/") {
+			http.Error(w, "bad gateway", http.StatusBadGateway)
+			return
+		}
+		fake.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	in := &Installer{Dir: t.TempDir(), URL: srv.URL}
+	ctx := context.Background()
+	if _, err := in.Prepare(ctx, []string{"advancedportals"}, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := in.Prepare(ctx, nil, false, nil); err != nil { // the loader goes off
+		t.Fatal(err)
+	}
+	fake.SetVersion(modstest.Portal, "1.2.1")
+	down.Store(true)
+	res, err := in.Prepare(ctx, []string{"advancedportals"}, true, nil)
+	if err != nil || len(res.Changed) != 0 || !strings.Contains(res.Warning, "Advanced Portals") || !strings.Contains(res.Warning, "502") {
+		t.Fatalf("update that can't be downloaded: %+v %v", res, err)
+	}
+	if in.Installed()[modstest.Portal] != "1.2.0" || read(t, in.Dir, "BepInEx", "plugins", modstest.Portal, "AdvancedPortals.dll") != "portals 1.2.0" {
+		t.Fatal("the installed version was changed")
+	}
+	if !exists(in.Dir, "winhttp.dll") {
+		t.Fatal("the mod loader wasn't turned on")
+	}
+
+	// A mod that isn't installed yet can't be started without.
+	if _, err := in.Prepare(ctx, []string{"advancedportals", "seasonality"}, true, nil); err == nil {
+		t.Fatal("started without a mod that couldn't be downloaded")
 	}
 }
 

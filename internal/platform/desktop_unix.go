@@ -39,9 +39,21 @@ func open(target string) error {
 
 // SingleInstance makes sure only one copy of the app runs per data folder,
 // with a lock on a file that the system lets go of when the app closes.
-// It returns already=true if another copy holds the lock.
-func SingleInstance(id string) (release func(), already bool, err error) {
-	path := filepath.Join(os.TempDir(), "ValheimEasyServer-"+id+".lock")
+// The file is in the data folder: macOS and Linux clear old files out of
+// the temp folder, even while the app runs, and a new lock file there would
+// let a second copy start on the same data. Only where the data folder
+// can't be locked (some network drives) does the lock go in the temp
+// folder, named by id. It returns already=true if another copy holds the
+// lock.
+func SingleInstance(dataDir, id string) (release func(), already bool, err error) {
+	release, already, err = lockFile(filepath.Join(dataDir, ".instance.lock"))
+	if err != nil {
+		return lockFile(filepath.Join(os.TempDir(), "ValheimEasyServer-"+id+".lock"))
+	}
+	return release, already, nil
+}
+
+func lockFile(path string) (release func(), already bool, err error) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, false, err

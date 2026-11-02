@@ -150,6 +150,26 @@ func TestParseFirewall(t *testing.T) {
 	}
 }
 
+// "Block all incoming connections" turns friends away whichever apps the
+// firewall lets through, so it has to be noticed.
+func TestParseFirewallBlockAll(t *testing.T) {
+	for out, want := range map[string]bool{
+		"Firewall is blocking all non-essential incoming connections. (State = 2)": true,
+		"Firewall is enabled. (State = 1)":                                         false,
+		"Firewall is disabled. (State = 0)":                                        false,
+		"Block all ENABLED!":                                                       true,
+		"Block all DISABLED!":                                                      false,
+		"Firewall has block all state set to enabled.":                             true,
+		"Firewall has block all state set to disabled.":                            false,
+		"Firewall is set to block all non-essential incoming connections":          true,
+		"": false,
+	} {
+		if got := parseFirewallBlockAll(out); got != want {
+			t.Errorf("parseFirewallBlockAll(%q) = %v", out, got)
+		}
+	}
+}
+
 func TestLaunchAgentPlist(t *testing.T) {
 	p := launchAgentPlist("com.example.app", "/Applications/A & B.app/Contents/MacOS/app", []string{"--background"})
 	for _, want := range []string{"<string>/Applications/A &amp; B.app/Contents/MacOS/app</string>", "<string>--background</string>", "<key>AbandonProcessGroup</key>"} {
