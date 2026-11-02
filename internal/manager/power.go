@@ -333,9 +333,19 @@ func (m *Manager) wakeWanted(w *pendingWake) bool {
 	if darkWakes {
 		return !darkWake()
 	}
-	idle, ok := idleTime()
-	return ok && idle < now.Sub(w.at)
+	if idle, ok := idleTime(); ok && idle < now.Sub(w.at) {
+		return true // someone is using it
+	}
+	// When Windows hasn't said what woke it (the event can be late, or not
+	// readable), it counts as someone waking it, as it always did: only a
+	// wake Windows says was a timer is left alone. Windows goes back to
+	// sleep about two minutes after a wake nobody holds, so this can't wait
+	// longer than unknownWait.
+	return w.cause == platform.WakeCauseUnknown && now.Sub(w.at) >= unknownWait
 }
+
+// unknownWait is how long the app waits for Windows to say what woke it.
+var unknownWait = 45 * time.Second
 
 // holdAwake keeps the computer awake for a while, so friends have time to
 // join: someone asked for it.

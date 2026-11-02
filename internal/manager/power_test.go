@@ -78,6 +78,19 @@ func TestWakeWaitsForSomeone(t *testing.T) {
 		t.Fatalf("woke up by itself: wanted %v, kept awake %v, still to resume %v", m.wakeWanted(woke), awake, resume)
 	}
 
+	// When the system never says what woke it, it counts after a while,
+	// as it always did (not on a Mac, which tells a dark wake apart).
+	if !darkWakes {
+		if !m.wakeWanted(&pendingWake{at: time.Now().Add(-unknownWait), asked: time.Now()}) {
+			t.Fatal("a wake-up Windows doesn't explain doesn't count")
+		}
+		user.cause.Store(int32(platform.WakeByTimer))
+		if m.wakeWanted(&pendingWake{at: time.Now().Add(-unknownWait), cause: platform.WakeByTimer}) {
+			t.Fatal("a wake timer counts")
+		}
+		user.cause.Store(int32(platform.WakeCauseUnknown))
+	}
+
 	user.here()
 	if !m.wakeWanted(woke) {
 		t.Fatal("someone using the computer doesn't count")
