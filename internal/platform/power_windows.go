@@ -4,6 +4,7 @@ package platform
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
@@ -98,11 +99,41 @@ func runElevated(exe, args string) error {
 	return windows.ShellExecute(0, verb, file, params, nil, windows.SW_HIDE)
 }
 
-// runElevatedPowerShell runs a script with admin rights. It goes in the
-// command line, never as a file that another program could change while
-// Windows asks for permission, so it must fit in shellExecuteMax.
+// runElevatedPowerShell runs a script with admin rights: in the command
+// line, or for a long one, from a file that is checked before it runs (see
+// psAdminCommand).
 func runElevatedPowerShell(script string) error {
-	return runElevated(system32(`WindowsPowerShell\v1.0\powershell.exe`), psAdminArgs(script))
+	exe := system32(`WindowsPowerShell\v1.0\powershell.exe`)
+	args, err := psAdminCommand(exe, script, writeAdminScript)
+	if err != nil {
+		return err
+	}
+	return runElevated(exe, args)
+}
+
+// writeAdminScript saves a script for psAdminCommand in the temp folder,
+// clearing out ones left from earlier: Windows runs them after this
+// returns, once someone allows it, so they can't be removed straight away.
+func writeAdminScript(b []byte) (string, error) {
+	old, _ := filepath.Glob(filepath.Join(os.TempDir(), "ValheimEasyServer-admin-*.ps1"))
+	for _, f := range old {
+		if fi, err := os.Stat(f); err == nil && time.Since(fi.ModTime()) > time.Hour {
+			os.Remove(f)
+		}
+	}
+	f, err := os.CreateTemp("", "ValheimEasyServer-admin-*.ps1")
+	if err != nil {
+		return "", err
+	}
+	_, err = f.Write(b)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
 }
 
 // KeepAwake stops Windows from going to sleep on its own while the server

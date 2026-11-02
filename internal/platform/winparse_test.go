@@ -57,7 +57,7 @@ func TestFirewallRuleFollowsThePath(t *testing.T) {
 // is somewhere with a long path and Discord wake is on.
 func TestFirewallScriptFitsLongPaths(t *testing.T) {
 	powershell := `"C:\WINDOWS\system32\WindowsPowerShell\v1.0\powershell.exe" `
-	user := `C:\Users\Laurence Simmonds PC` // a long user name: Windows allows 20 characters
+	user := `C:\Users\Astrid Lothbrok PC` // a long user name: Windows allows 20 characters
 	for _, c := range []struct{ where, server, app string }{
 		{"the recommended folder",
 			`C:\Valheim Server\server\valheim_server.exe`,
@@ -73,6 +73,7 @@ func TestFirewallScriptFitsLongPaths(t *testing.T) {
 			user + `\AppData\Local\Temp\Temp1_ValheimEasyServer-windows.zip\ValheimEasyServer.exe`},
 	} {
 		n := len(powershell + psAdminArgs(firewallScript(c.server, c.app, true)))
+		t.Logf("%s: %d of %d characters", c.where, n, shellExecuteMax)
 		if n >= shellExecuteMax {
 			t.Errorf("%s: the command line is %d characters, over Windows' limit of %d", c.where, n, shellExecuteMax)
 		}
