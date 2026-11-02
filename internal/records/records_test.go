@@ -128,6 +128,31 @@ func TestOddLogs(t *testing.T) {
 	}
 }
 
+// Someone who played through the night and left after 5:00 in the morning
+// was still on at 4:59, later at night than someone who went to bed at 22:15.
+func TestNightOwlPlayedThroughTheNight(t *testing.T) {
+	night := []Event{
+		ev(at(0, 21, 0), Join, "AllNighter"),
+		ev(at(0, 21, 0), Join, "EarlyToBed"),
+		ev(at(0, 22, 15), Leave, "EarlyToBed"),
+		ev(at(1, 6, 0), Leave, "AllNighter"),
+		ev(at(1, 5, 30), Join, "EarlyRiser"), // came after 5:00, so not on at night
+		ev(at(1, 12, 0), Leave, "EarlyRiser"),
+	}
+	allFrom, allTo, _ := Period("all", now)
+	todayFrom, todayTo, _ := Period("today", now)
+	for _, period := range [][2]time.Time{{allFrom, allTo}, {at(0, 0, 0), at(2, 0, 0)}, {todayFrom, todayTo}} {
+		s := Compute(night, period[0], period[1], now)
+		if r := record(t, s, "nightOwl"); !reflect.DeepEqual(r.Names, []string{"AllNighter"}) || r.At == nil || !r.At.Equal(at(1, 4, 59).Add(59*time.Second)) {
+			t.Errorf("%v to %v: night owl = %+v", period[0], period[1], r)
+		}
+	}
+	s := Compute(night[4:], allFrom, allTo, now)
+	if r := record(t, s, "nightOwl"); r.ID != "" {
+		t.Errorf("on only in the day, but night owl = %+v", r)
+	}
+}
+
 func TestNobodyPlayed(t *testing.T) {
 	from, to, _ := Period("today", now)
 	s := Compute(nil, from, to, now)

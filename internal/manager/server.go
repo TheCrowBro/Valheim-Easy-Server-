@@ -389,6 +389,10 @@ func (m *Manager) attach(proc *platform.Proc, info runInfo, adopted bool) *serve
 	run := &serverRun{proc: proc, info: info, done: make(chan struct{}), readyCh: make(chan struct{}),
 		cancelTail: cancel, replaying: adopted}
 	run.tracker.NoJoinCode = info.NoCrossplay
+	// Friends who connect at the same time are told apart by the account
+	// each last played from. Apply only runs from handleEvent, which already
+	// holds m.mu, so this mustn't lock it again.
+	run.tracker.KnownPlatformID = m.knownPlatformIDLocked
 	m.mu.Lock()
 	m.run = run
 	m.idleSince = time.Now()
@@ -702,6 +706,20 @@ func (m *Manager) handleEvent(run *serverRun, ev logparse.Event) {
 			if a.Kind == "join" {
 				m.idleSince = time.Now()
 				savePlayed = m.notePlayedLocked(run) || savePlayed
+			}
+		}
+		// The server's own count of who's connected. Lines a player makes up
+		// can wrongly empty the player list, but the server keeps logging
+		// its true count about every 10 minutes, so this stops the computer
+		// going to sleep while friends play. A made-up count above 0 can
+		// only keep it awake.
+		if ev.Count > 0 && (ev.Kind == logparse.PeerCount || (ev.Kind == logparse.JoinCode && ev.Addr != "")) {
+			now := time.Now()
+			m.idleSince = now
+			// And at least until the next count, even with the shortest
+			// idle time, which is just as long as the gap between counts.
+			if hold := now.Add(15 * time.Minute); m.keepAwakeUntil.Before(hold) {
+				m.keepAwakeUntil = hold
 			}
 		}
 	}

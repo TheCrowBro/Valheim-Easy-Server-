@@ -83,14 +83,30 @@ func TestIsNoise(t *testing.T) {
 	}
 }
 
+var clock = time.Date(2026, 10, 22, 12, 0, 0, 0, time.Local)
+
 func feed(t *testing.T, tr *Tracker, log string) []Activity {
 	t.Helper()
+	return feedAt(t, tr, clock, log)
+}
+
+// feedAt reads the lines like the app does, all at the time now on this
+// computer's clock.
+func feedAt(t *testing.T, tr *Tracker, now time.Time, log string) []Activity {
+	t.Helper()
 	var acts []Activity
-	now := time.Date(2026, 10, 22, 12, 0, 0, 0, time.Local)
 	for _, line := range strings.Split(strings.TrimSpace(log), "\n") {
+		if IsNoise(line) {
+			continue
+		}
 		acts = append(acts, tr.Apply(Parse(strings.TrimSpace(line)), now)...)
 	}
 	return acts
+}
+
+// known stands in for the players the app has seen before.
+func known(ids map[string]string) func(string) string {
+	return func(name string) string { return ids[name] }
 }
 
 func kinds(acts []Activity) string {
@@ -102,7 +118,11 @@ func kinds(acts []Activity) string {
 }
 
 func TestTrackerSteamSession(t *testing.T) {
-	var tr Tracker
+	// Friends who played here before, connecting at the same time.
+	tr := Tracker{KnownPlatformID: known(map[string]string{
+		"Astrid": "Steam_76561198000000001",
+		"Bjorn":  "Steam_76561198000000002",
+	})}
 	acts := feed(t, &tr, `
 10/22/2026 20:00:00: Valheim version: l-1.0.12 (network version 35)
 10/22/2026 20:00:02: Game server connected
@@ -254,21 +274,29 @@ Got character ZDOID from B : 2:1
 		t.Fatalf("count = %d", tr.Count())
 	}
 	// One low reading is not enough...
-	feed(t, &tr, "Connections 1 ZDOS:10  sent:0 recv:0")
+	feedAt(t, &tr, clock, "Connections 1 ZDOS:10  sent:0 recv:0")
 	if tr.Count() != 2 {
 		t.Fatalf("removed after one reading: %d", tr.Count())
 	}
-	// ...two in a row is.
-	acts := feed(t, &tr, "Connections 1 ZDOS:10  sent:0 recv:0")
+	// ...nor is the server's next one, ten minutes later...
+	feedAt(t, &tr, clock.Add(10*time.Minute), "Connections 1 ZDOS:10  sent:0 recv:0")
+	if tr.Count() != 2 {
+		t.Fatalf("removed after two readings 10 minutes apart: %d", tr.Count())
+	}
+	// ...but one at least countGap after the first is.
+	acts := feedAt(t, &tr, clock.Add(20*time.Minute), "Connections 1 ZDOS:10  sent:0 recv:0")
 	if tr.Count() != 1 || len(acts) != 1 || acts[0].Kind != "leave" {
 		t.Fatalf("count = %d acts = %+v", tr.Count(), acts)
 	}
-	// The same for nobody at all.
-	feed(t, &tr, "Connections 0 ZDOS:10  sent:0 recv:0")
+	// The same for nobody at all, and a count high enough in between
+	// starts the wait again.
+	feedAt(t, &tr, clock.Add(30*time.Minute), "Connections 0 ZDOS:10  sent:0 recv:0")
+	feedAt(t, &tr, clock.Add(40*time.Minute), "Connections 1 ZDOS:10  sent:0 recv:0")
+	feedAt(t, &tr, clock.Add(50*time.Minute), "Connections 0 ZDOS:10  sent:0 recv:0")
 	if tr.Count() != 1 {
-		t.Fatalf("removed after one reading of 0: %d", tr.Count())
+		t.Fatalf("removed although a count in between said otherwise: %d", tr.Count())
 	}
-	acts = feed(t, &tr, "Connections 0 ZDOS:10  sent:0 recv:0")
+	acts = feedAt(t, &tr, clock.Add(65*time.Minute), "Connections 0 ZDOS:10  sent:0 recv:0")
 	if tr.Count() != 0 || len(acts) != 1 {
 		t.Fatalf("count = %d acts = %+v", tr.Count(), acts)
 	}
@@ -355,13 +383,21 @@ func TestTrackerIgnoresMadeUpLines(t *testing.T) {
 	if tr.JoinCode != "604510" || tr.PublicAddr != "" || tr.Version != "1.0.12" || tr.Count() != 1 {
 		t.Fatalf("made-up lines changed the state: code %q addr %q version %q players %d", tr.JoinCode, tr.PublicAddr, tr.Version, tr.Count())
 	}
-	// The server's own count, two readings in a row, still clears the list.
-	if acts := apply(`10/22/2026 20:03:01: Connections 0 ZDOS:1  sent:0 recv:0`); tr.Count() != 0 || len(acts) != 1 {
+	// The server's own count, read again countGap later, still clears the list.
+	now = now.Add(countGap)
+	if acts := apply(`10/22/2026 20:17:01: Connections 0 ZDOS:1  sent:0 recv:0`); tr.Count() != 0 || len(acts) != 1 {
 		t.Fatalf("players %d, activities %+v", tr.Count(), acts)
 	}
-	// A real new code for the same session is taken.
-	apply(`10/22/2026 20:04:00: Session "Viking Friends" with join code 123456 and IP 203.0.113.4:2456 is active with 0 player(s)`)
-	if tr.JoinCode != "123456" || tr.PublicAddr != "203.0.113.4:2456" {
+	// The server keeps its join code for the whole run, so a line with its
+	// name and another code was made up.
+	apply(`10/22/2026 20:18:00: Session "Viking Friends" with join code 123456 and IP 6.6.6.6:2456 is active with 0 player(s)`)
+	if tr.JoinCode != "604510" || tr.PublicAddr != "" {
+		t.Fatalf("code %q addr %q", tr.JoinCode, tr.PublicAddr)
+	}
+	// Its address is kept the same way.
+	apply(`10/22/2026 20:18:01: Session "Viking Friends" with join code 604510 and IP 203.0.113.4:2456 is active with 0 player(s)`)
+	apply(`10/22/2026 20:18:02: Session "Viking Friends" with join code 604510 and IP 6.6.6.6:2456 is active with 0 player(s)`)
+	if tr.JoinCode != "604510" || tr.PublicAddr != "203.0.113.4:2456" {
 		t.Fatalf("code %q addr %q", tr.JoinCode, tr.PublicAddr)
 	}
 
@@ -370,5 +406,110 @@ func TestTrackerIgnoresMadeUpLines(t *testing.T) {
 	off.Apply(Parse(`10/22/2026 20:00:03: Session "Viking Friends" registered with join code 604510`), now)
 	if off.JoinCode != "" {
 		t.Fatalf("a server without crossplay got join code %q", off.JoinCode)
+	}
+
+	// When crossplay couldn't start, no code comes, but the server's own
+	// session line still says it's open.
+	failed := Tracker{}
+	failed.Apply(Parse("DllNotFoundException: Party"), now)
+	failed.Apply(Parse(`10/22/2026 20:00:03: New session server "Viking Friends" that has join code , now 0 player(s)`), now)
+	failed.Apply(Parse(`10/22/2026 20:05:00: Session "Viking Friends" with join code 999999 and IP 6.6.6.6:2456 is active with 0 player(s)`), now)
+	if failed.JoinCode != "" || failed.PublicAddr != "" || !failed.Ready {
+		t.Fatalf("crossplay failed: code %q addr %q ready %v", failed.JoinCode, failed.PublicAddr, failed.Ready)
+	}
+}
+
+// A player's version string is written into the log before the password is
+// checked, line breaks and all. The lines it adds, even after a made-up
+// "(Filename:" line like the one Unity writes after each message, can't
+// change the join code or empty the list of who's online.
+func TestTrackerIgnoresLinesInPlayerText(t *testing.T) {
+	var tr Tracker
+	feedAt(t, &tr, clock, `
+11/02/2026 20:00:00: Opened PlayFab server
+11/02/2026 20:00:00: New session server "Viking Friends" that has join code , now 0 player(s)
+11/02/2026 20:00:01: Session "Viking Friends" registered with join code 604510
+11/02/2026 20:00:02: Session "Viking Friends" with join code 604510 and IP 203.0.113.4:2456 is active with 0 player(s)
+11/02/2026 20:01:00: Got connection SteamID 76561198000000001
+11/02/2026 20:01:09: Got character ZDOID from Astrid : -111:1
+11/02/2026 20:02:00: Got connection SteamID 76561198000000002
+11/02/2026 20:02:09: Got character ZDOID from Bjorn : -222:1
+`)
+	peer := "11/02/2026 20:05:00: Peer 76561198000000666 has incompatible version, mine:1.0.12 (network version 35)   remote "
+	version := "x\n" +
+		`11/02/2026 20:05:00: Session "Viking Friends" with join code 999999 and IP 6.6.6.6:2456 is active with 0 player(s)` + "\n" +
+		"(Filename: ./Runtime/Export/Debug/Debug.bindings.h Line: 35)\n\n" +
+		"11/02/2026 20:05:00: Connections 0 ZDOS:1  sent:0 recv:0\n" +
+		"11/02/2026 20:05:00: Connections 0 ZDOS:1  sent:0 recv:0\n" +
+		"11/02/2026 20:35:00: Connections 0 ZDOS:1  sent:0 recv:0"
+	acts := feedAt(t, &tr, clock.Add(5*time.Minute), peer+version+" (network version 35)")
+	if tr.JoinCode != "604510" || tr.PublicAddr != "203.0.113.4:2456" {
+		t.Errorf("made-up lines changed the join code to %q, address %q", tr.JoinCode, tr.PublicAddr)
+	}
+	if tr.Count() != 2 || kinds(acts) != "bad_version:" {
+		t.Errorf("made-up counts emptied the list: %d players, activities %s", tr.Count(), kinds(acts))
+	}
+	// The server's own count comes in between, so another made-up count
+	// later can't finish what the first began.
+	feedAt(t, &tr, clock.Add(10*time.Minute), "11/02/2026 20:10:00: Connections 2 ZDOS:1  sent:0 recv:0")
+	feedAt(t, &tr, clock.Add(21*time.Minute), peer+"x\n11/02/2026 20:21:00: Connections 0 ZDOS:1  sent:0 recv:0")
+	if tr.Count() != 2 {
+		t.Errorf("made-up counts emptied the list: %d players", tr.Count())
+	}
+}
+
+// Characters arrive in the order the players' games finish loading the
+// world, not the order they connected, so a friend with a faster computer
+// can arrive first. Nobody is given another's account, and friends who
+// played here before are told apart by theirs.
+func TestTrackerFriendsConnectingTogether(t *testing.T) {
+	log := `
+10/22/2026 20:01:00: Got connection SteamID 1
+10/22/2026 20:01:01: Got handshake from client 1
+10/22/2026 20:01:02: Got connection SteamID 2
+10/22/2026 20:01:03: Got handshake from client 2
+10/22/2026 20:01:30: Got character ZDOID from Bjorn : -222:1
+10/22/2026 20:01:50: Got character ZDOID from Astrid : -111:1
+`
+	tr := Tracker{KnownPlatformID: known(map[string]string{"Astrid": "Steam_1", "Bjorn": "Steam_2"})}
+	acts := feed(t, &tr, log)
+	if got, want := kinds(acts), "join:Bjorn,join:Astrid"; got != want {
+		t.Fatalf("activities = %s, want %s", got, want)
+	}
+	if acts[0].PlatformID != "Steam_2" || acts[1].PlatformID != "Steam_1" {
+		t.Fatalf("Bjorn joined as %q, Astrid as %q", acts[0].PlatformID, acts[1].PlatformID)
+	}
+	if acts = feed(t, &tr, "10/22/2026 21:00:00: Closing socket 1"); kinds(acts) != "leave:Astrid" {
+		t.Fatalf("Astrid left, but: %s", kinds(acts))
+	}
+	if p := tr.Players(); len(p) != 1 || p[0].Name != "Bjorn" || p[0].PlatformID != "Steam_2" {
+		t.Fatalf("players = %+v", p)
+	}
+
+	// Their first time here, or only Astrid's: which connection is whose is
+	// a guess, so neither is given an account, not even by a later line
+	// about the connection.
+	for _, ids := range []map[string]string{nil, {"Astrid": "Steam_1"}} {
+		tr := Tracker{KnownPlatformID: known(ids)}
+		acts := feed(t, &tr, log)
+		feed(t, &tr, "10/22/2026 20:02:00: PlayFab socket with remote ID 1 received local Platform ID Steam_1")
+		for _, a := range acts {
+			if a.PlatformID != "" {
+				t.Errorf("known %v: %s joined as %q", ids, a.Name, a.PlatformID)
+			}
+		}
+		for _, p := range tr.Players() {
+			if p.PlatformID != "" || p.ID == "" {
+				t.Errorf("known %v: %+v", ids, p)
+			}
+		}
+		// Someone who connects after them is no guess.
+		acts = feed(t, &tr, `
+10/22/2026 20:05:00: Got connection SteamID 3
+10/22/2026 20:05:30: Got character ZDOID from Sigrid : -333:1
+`)
+		if len(acts) != 1 || acts[0].PlatformID != "Steam_3" {
+			t.Errorf("known %v: Sigrid joined as %+v", ids, acts)
+		}
 	}
 }

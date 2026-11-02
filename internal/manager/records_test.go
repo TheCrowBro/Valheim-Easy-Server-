@@ -176,6 +176,51 @@ func TestRecordsFromOldLogs(t *testing.T) {
 	}
 }
 
+// In an old log, two friends who played before connected at the same time
+// and the second finished loading first. The one who left first is still
+// the one who left.
+func TestRecordsFromOldLogsFriendsTogether(t *testing.T) {
+	env := &testEnv{data: t.TempDir()}
+	known := `[{"name": "Astrid", "platformId": "Steam_76561198000000001"},
+		{"name": "Bjorn", "platformId": "Steam_76561198000000002"}]`
+	if err := os.WriteFile(filepath.Join(env.data, "players.json"), []byte(known), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newTestManager(t, env.data, env)
+	t.Cleanup(m.Close)
+	day := time.Now().AddDate(0, 0, -2)
+	at := func(h, min int) string {
+		return time.Date(day.Year(), day.Month(), day.Day(), h, min, 0, 0, time.Local).Format("01/02/2006 15:04:05") + ": "
+	}
+	log := strings.Join([]string{
+		at(20, 0) + "Got connection SteamID 76561198000000001",
+		at(20, 0) + "Got handshake from client 76561198000000001",
+		at(20, 0) + "Got connection SteamID 76561198000000002",
+		at(20, 0) + "Got handshake from client 76561198000000002",
+		at(20, 0) + "Got character ZDOID from Bjorn : -123:1",
+		at(20, 0) + "Got character ZDOID from Astrid : -456:1",
+		at(20, 30) + "Closing socket 76561198000000001",
+		at(21, 0) + "World saved ( 10.1ms )",
+	}, "\n") + "\n"
+	logs := m.Paths().Logs
+	if err := os.MkdirAll(logs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(logs, "server-"+day.Format("2006-01-02")+"_20-00-00.log"), []byte(log), 0o644)
+	m.Start()
+	played := map[string]float64{}
+	waitFor(t, "the old log to be read", 10*time.Second, func() bool {
+		sum, _ := m.Records("week")
+		for _, p := range sum.Players {
+			played[p.Name] = p.PlaySeconds
+		}
+		return len(played) == 2
+	})
+	if played["Astrid"] != 30*60 || played["Bjorn"] != 60*60 {
+		t.Fatalf("played = %v", played)
+	}
+}
+
 func TestDailyDiscordPost(t *testing.T) {
 	fake := newFakeDiscord(t)
 	env := setup(t)

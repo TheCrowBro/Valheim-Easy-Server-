@@ -154,8 +154,16 @@ func Compute(events []Event, from, to, now time.Time) Summary {
 		for d := Midnight(a); d.Before(b); d = d.AddDate(0, 0, 1) {
 			p.days[d.Format("2006-01-02")] = true
 		}
-		if m, ok := nightMinutes(b); ok && m > p.night {
-			p.night, p.Latest = m, &b
+		// The latest at night they were on is when they left, unless they
+		// played on past 5:00 that morning: then they were still on at 4:59,
+		// later at night than any time that evening.
+		c := b
+		y, mo, d := b.Date()
+		if five := time.Date(y, mo, d, 5, 0, 0, 0, b.Location()); a.Before(five) && !b.Before(five) {
+			c = five.Add(-time.Second)
+		}
+		if m, ok := nightMinutes(c); ok && m > p.night {
+			p.night, p.Latest = m, &c
 		}
 	}
 
