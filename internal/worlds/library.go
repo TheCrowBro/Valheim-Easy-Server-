@@ -513,29 +513,39 @@ func addFile(zw *zip.Writer, name, path string) error {
 
 // ExportFile zips a world into a new file in dir and returns its path. The
 // zip holds the world laid out the way Valheim keeps it, plus a note on how
-// to play it. If the world's files change while they are being zipped
-// (the server saved), it starts again, so the copy is never half old and
-// half new.
+// to play it. It holds the library lock while it reads the world, so a
+// download can't keep a file open while a restore, replace or delete is
+// moving the world's files.
 func (l *Library) ExportFile(name, dir string) (string, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	world, err := l.Get(name)
 	if err != nil {
 		return "", err
 	}
 	notes := map[string]string{"How to play this world.txt": playNote(world)}
+	return l.zipWorld(world, dir, ".download-*.zip", notes)
+}
+
+// zipWorld zips a world (plus notes) into a new temporary file in dir and
+// returns its path. The world may be running, so if its files change while
+// they are being zipped (the server saved), it starts again: the copy is
+// never half old and half new, and a file a save deleted doesn't fail it.
+func (l *Library) zipWorld(world World, dir, pattern string, notes map[string]string) (string, error) {
 	for try := 0; try < 3; try++ {
 		files, err := worldEntries(world, l.Worlds)
 		if err != nil {
 			return "", err
 		}
 		before := fingerprint(files)
-		f, err := os.CreateTemp(dir, ".download-*.zip")
+		f, err := os.CreateTemp(dir, pattern)
 		if err != nil {
 			return "", err
 		}
-		err = writeZipNotes(f, files, notes)
-		if exportCopied != nil {
-			exportCopied()
+		if zipping != nil {
+			zipping()
 		}
+		err = writeZipNotes(f, files, notes)
 		if cerr := f.Close(); err == nil {
 			err = cerr
 		}
@@ -555,8 +565,9 @@ func (l *Library) ExportFile(name, dir string) (string, error) {
 
 var exportRetryDelay = 2 * time.Second
 
-// exportCopied, when set, runs after each copy is zipped (for tests).
-var exportCopied func()
+// zipping, when set, runs after a world's files are listed and just before
+// they are zipped, so tests can save the world at the worst moment.
+var zipping func()
 
 // fingerprint summarises files' names, sizes and times, to notice changes.
 func fingerprint(files map[string]string) string {
@@ -632,10 +643,6 @@ func (l *Library) backupLocked(name, reason string) (Backup, error) {
 	if err != nil {
 		return Backup{}, err
 	}
-	files, err := worldEntries(world, l.Worlds)
-	if err != nil {
-		return Backup{}, err
-	}
 	dir := filepath.Join(l.Backups, name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return Backup{}, err
@@ -645,19 +652,14 @@ func (l *Library) backupLocked(name, reason string) (Backup, error) {
 	for i := 2; fileExists(final); i++ {
 		final = filepath.Join(dir, fmt.Sprintf("%s-%d_%s_%s.zip", stamp, i, reason, world.Format))
 	}
-	tmp, err := os.CreateTemp(dir, ".backup-*.tmp")
+	// A manual backup can be of the running world, which may save while
+	// it is being zipped.
+	tmp, err := l.zipWorld(world, dir, ".backup-*.tmp", nil)
 	if err != nil {
-		return Backup{}, err
-	}
-	defer os.Remove(tmp.Name())
-	if err := writeZip(tmp, files); err != nil {
-		tmp.Close()
 		return Backup{}, fmt.Errorf("couldn't write the backup: %w", err)
 	}
-	if err := tmp.Close(); err != nil {
-		return Backup{}, err
-	}
-	if err := os.Rename(tmp.Name(), final); err != nil {
+	defer os.Remove(tmp)
+	if err := os.Rename(tmp, final); err != nil {
 		return Backup{}, err
 	}
 	l.prune(name, filepath.Base(final))
@@ -680,19 +682,129 @@ func (l *Library) prune(name, keep string) {
 	}
 }
 
-// removeLive deletes a world's live files: the folder, the old-format pair
-// and its .old files. Valheim's own backups are left alone.
+// removeLive deletes whatever is saved under a world's name: its folder and
+// its .fwl and .db. It is used to clear a copy that was only half placed.
+// Valheim's own backups, including the .fwl.old/.db.old "previous save",
+// are left alone.
 func (l *Library) removeLive(name string) error {
 	base := filepath.Join(l.Worlds, name)
 	if err := os.RemoveAll(base); err != nil {
 		return fmt.Errorf("couldn't remove the world folder (is the server using it?): %w", err)
 	}
-	for _, ext := range []string{".fwl", ".db", ".fwl.old", ".db.old"} {
+	for _, ext := range []string{".fwl", ".db"} {
 		if err := os.Remove(base + ext); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("couldn't remove %s (is the server using it?): %w", name+ext, err)
 		}
 	}
 	return nil
+}
+
+// asidePrefix starts the name of the hidden folder in the worlds folder
+// where a world's files wait while the world is replaced or deleted. The
+// world list doesn't look inside such a folder, so it never shows as a
+// world.
+const asidePrefix = ".removing-"
+
+// renameFile is os.Rename; tests change it to make a move fail.
+var renameFile = os.Rename
+
+// aside is a world taken out of the worlds folder by setAside.
+type aside struct {
+	dir   string
+	moves [][2]string // from, to
+}
+
+// setAside takes a world out of the worlds folder: its folder, or its .fwl
+// and .db, go into a new hidden folder. Moving files is all or nothing,
+// unlike deleting them: on Windows a file another program has open (a
+// download, a backup tool) makes the move fail, and then everything already
+// moved goes back, so the world is left exactly as it was. Valheim's own
+// backups, including the .fwl.old/.db.old "previous save", stay where they
+// are.
+func (l *Library) setAside(name string) (*aside, error) {
+	l.clearAsides()
+	dir, err := os.MkdirTemp(l.Worlds, asidePrefix)
+	if err != nil {
+		return nil, err
+	}
+	a := &aside{dir: dir}
+	base := filepath.Join(l.Worlds, name)
+	var moves [][2]string
+	if st, err := os.Stat(base); err == nil && st.IsDir() {
+		moves = append(moves, [2]string{base, filepath.Join(dir, name)})
+		// An old-format copy hidden by the 1.0 folder isn't in the folder's
+		// backup. It is kept under a name like Valheim gives its own
+		// copies, so it isn't lost and doesn't come back as the world.
+		if fileExists(base + ".fwl") {
+			keep := l.backupName(name)
+			for _, ext := range []string{".fwl", ".db"} {
+				if fileExists(base + ext) {
+					moves = append(moves, [2]string{base + ext, keep + ext})
+				}
+			}
+		}
+	} else {
+		for _, ext := range []string{".fwl", ".db"} {
+			if fileExists(base + ext) {
+				moves = append(moves, [2]string{base + ext, filepath.Join(dir, name+ext)})
+			}
+		}
+	}
+	for _, mv := range moves {
+		if err := renameFile(mv[0], mv[1]); err != nil {
+			a.undo()
+			return nil, fmt.Errorf("couldn't remove %s (is the server or another program using it?), so nothing was changed: %w", filepath.Base(mv[0]), err)
+		}
+		a.moves = append(a.moves, mv)
+	}
+	return a, nil
+}
+
+// undo puts a world taken out by setAside back as it was.
+func (a *aside) undo() error {
+	var first error
+	for i := len(a.moves) - 1; i >= 0; i-- {
+		if err := renameFile(a.moves[i][1], a.moves[i][0]); err != nil && first == nil {
+			first = err
+		}
+	}
+	if first == nil {
+		os.RemoveAll(a.dir)
+	}
+	return first
+}
+
+// drop deletes the old files once the world's new copy is in place (or the
+// world is deleted). It is only tidying: if a file can't be deleted yet,
+// the hidden folder is cleared the next time a world is taken out.
+func (a *aside) drop() { os.RemoveAll(a.dir) }
+
+// clearAsides deletes hidden folders left by an earlier drop that failed.
+func (l *Library) clearAsides() {
+	entries, err := os.ReadDir(l.Worlds)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), asidePrefix) {
+			os.RemoveAll(filepath.Join(l.Worlds, e.Name()))
+		}
+	}
+}
+
+// backupName returns a free Valheim-style backup name (without extension)
+// for an old-format copy of a world, stamped with when it was last saved.
+func (l *Library) backupName(name string) string {
+	_, mod := pairInfo(filepath.Join(l.Worlds, name))
+	if mod.IsZero() {
+		mod = time.Now()
+	}
+	stamp := mod.Format("20060102-150405")
+	keep := filepath.Join(l.Worlds, name+"_backup_"+stamp)
+	for i := 2; fileExists(keep+".fwl") || fileExists(keep+".db"); i++ {
+		keep = filepath.Join(l.Worlds, fmt.Sprintf("%s_backup_%s-%d", name, stamp, i))
+	}
+	return keep
 }
 
 // Delete removes a world, keeping a zip backup and Valheim's own backups so
@@ -703,7 +815,12 @@ func (l *Library) Delete(name string) error {
 	if _, err := l.backupLocked(name, "deleted"); err != nil {
 		return fmt.Errorf("couldn't make a safety backup, so nothing was deleted: %w", err)
 	}
-	return l.removeLive(name)
+	a, err := l.setAside(name)
+	if err != nil {
+		return err
+	}
+	a.drop()
+	return nil
 }
 
 // Rename renames an old-format world (its .fwl records the name, so that is
@@ -766,6 +883,35 @@ func (l *Library) exists(name string) bool {
 // Exists reports whether a world (either format) has this name.
 func (l *Library) Exists(name string) bool { return l.exists(name) }
 
+// liveName reports whether a world called name exists, and the name it is
+// saved under. Windows and macOS ignore letter case in file names, so
+// there "midgard" is the world "Midgard", and replacing it has to back up
+// and remove "Midgard".
+func (l *Library) liveName(name string) (string, bool) {
+	if !l.exists(name) {
+		return "", false
+	}
+	return l.savedName(name), true
+}
+
+// savedName returns the name of the world whose name is name apart from
+// letter case, preferring an exact match, or name itself if there's none.
+func (l *Library) savedName(name string) string {
+	res, err := l.scan()
+	if err != nil {
+		return name
+	}
+	if _, ok := res.worlds[name]; ok {
+		return name
+	}
+	for n := range res.worlds {
+		if strings.EqualFold(n, name) {
+			return n
+		}
+	}
+	return name
+}
+
 // Restore puts a backup back as the live world. The current world, if any,
 // is backed up first.
 func (l *Library) Restore(name, id string) error {
@@ -781,30 +927,35 @@ func (l *Library) Restore(name, id string) error {
 		return err
 	}
 	defer os.RemoveAll(tmp)
-	if l.exists(name) {
-		if _, err := l.backupLocked(name, "before-restore"); err != nil {
-			return fmt.Errorf("couldn't back up the current world first, so nothing was changed: %w", err)
-		}
-		if err := l.removeLive(name); err != nil {
-			return err
-		}
+	if !l.exists(name) {
+		return place(c, name, l.Worlds, true)
 	}
-	return place(c, name, l.Worlds, true)
-}
-
-// putBack restores a backup of a world that has just been removed.
-func (l *Library) putBack(name string, b Backup) error {
-	c, tmp, err := l.stageBackup(name, b)
+	if _, err := l.backupLocked(name, "before-restore"); err != nil {
+		return fmt.Errorf("couldn't back up the current world first, so nothing was changed: %w", err)
+	}
+	a, err := l.setAside(name)
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tmp)
-	return place(c, name, l.Worlds, true)
+	if err := place(c, name, l.Worlds, true); err != nil {
+		l.removeLive(name) // whatever was half copied
+		if uerr := a.undo(); uerr != nil {
+			return fmt.Errorf("couldn't restore the backup (%v), and putting the current world back failed too (%v). Restore it from its \"Automatic copy before a restore\" backup.", err, uerr)
+		}
+		return fmt.Errorf("couldn't restore the backup, so the world was left as it was: %w", err)
+	}
+	a.drop()
+	return nil
 }
 
 // stageBackup unpacks or copies a backup into a new temporary folder and
 // returns the world found there. The caller removes the folder.
 func (l *Library) stageBackup(name string, b Backup) (Candidate, string, error) {
+	// The save folder may not exist yet (a new save folder chosen in
+	// Advanced settings), and the temporary folder goes inside it.
+	if err := os.MkdirAll(filepath.Dir(l.Worlds), 0o755); err != nil {
+		return Candidate{}, "", err
+	}
 	tmp, err := os.MkdirTemp(filepath.Dir(l.Worlds), ".restore-")
 	if err != nil {
 		return Candidate{}, "", err
