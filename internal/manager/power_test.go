@@ -312,3 +312,26 @@ func TestLongDarkWakeThenFullWake(t *testing.T) {
 		t.Fatal("the server doesn't start again")
 	}
 }
+
+// A restart owed from an earlier sleep isn't forgotten when the computer
+// wakes up by itself (a timer) and the app puts it back to sleep: the next
+// time someone wakes it, the server starts again.
+func TestResumeOwedThroughTimerWakes(t *testing.T) {
+	fakeUser(t) // nobody there; a timer woke it
+	env := setup(t)
+	m := env.m
+	m.mu.Lock()
+	m.resumeOnWake = true // the server ran when it first went to sleep
+	m.mu.Unlock()
+	m.onWake(time.Hour)
+	if err := m.Hibernate("Nobody has played for 60 minutes."); err != nil {
+		t.Fatal(err)
+	}
+	waitJob(t, m, currentJobID(m))
+	m.mu.Lock()
+	owed := m.resumeOnWake
+	m.mu.Unlock()
+	if !owed {
+		t.Fatal("going back to sleep after a timer wake forgot to start the server again")
+	}
+}

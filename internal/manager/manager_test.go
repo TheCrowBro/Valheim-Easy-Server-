@@ -1057,3 +1057,59 @@ func TestFirstWorldAddedIsPlayed(t *testing.T) {
 		t.Fatalf("the new world has the deleted one's options: %+v", o)
 	}
 }
+
+// A log read back when the app takes over a running server is timed by its
+// own lines: a player the server's counts say left long ago isn't listed.
+func TestReplayedCountsUseTheirOwnTimes(t *testing.T) {
+	env := setup(t)
+	m := env.m
+	install(t, m)
+	if err := m.StartServer(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "server online", 20*time.Second, func() bool { return m.Status().State == StateOnline })
+	m.mu.Lock()
+	run := m.run
+	run.replaying = true
+	m.mu.Unlock()
+	at := func(d time.Duration) string {
+		return time.Now().Add(-3*time.Hour+d).Format("01/02/2006 15:04:05") + ": "
+	}
+	for _, line := range []string{
+		at(0) + "Got connection SteamID 76561198000000001",
+		at(time.Second) + "Got character ZDOID from Astrid : -111:1",
+		at(30*time.Minute) + "Connections 0 ZDOS:1  sent:0 recv:0",
+		at(50*time.Minute) + "Connections 0 ZDOS:1  sent:0 recv:0",
+	} {
+		m.handleLine(run, line)
+	}
+	m.mu.Lock()
+	n := run.tracker.Count()
+	run.replaying = false
+	m.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("%d players listed after the server counted none for 20 minutes", n)
+	}
+}
+
+// When a world's saved name changes (a replace in other letter case), the
+// selection and its options follow.
+func TestMoveWorldSettings(t *testing.T) {
+	env := setup(t)
+	m := env.m
+	s := m.Settings()
+	s.World = "Midgard"
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetWorldMods("Midgard", []string{"planteverything"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.moveWorldSettings("Midgard", "midgard"); err != nil {
+		t.Fatal(err)
+	}
+	s = m.Settings()
+	if s.World != "midgard" || len(s.WorldOptions["midgard"].Mods) != 1 || len(s.WorldOptions["Midgard"].Mods) != 0 {
+		t.Fatalf("world %q, options %+v", s.World, s.WorldOptions)
+	}
+}

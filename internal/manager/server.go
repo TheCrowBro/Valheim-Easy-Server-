@@ -734,7 +734,11 @@ func (m *Manager) handleEvent(run *serverRun, ev logparse.Event) {
 	for _, p := range run.tracker.Players() {
 		sinceByName[p.Name] = p.Since
 	}
-	acts := run.tracker.Apply(ev, time.Now())
+	now := time.Now()
+	if run.replaying && !ev.Time.IsZero() && ev.Time.Before(now) {
+		now = ev.Time // a log read back all at once: time its player counts by its own lines
+	}
+	acts := run.tracker.Apply(ev, now)
 	noteEventsLocked(run, acts)
 	if run.tracker.Ready && !run.ready {
 		run.ready, run.readyAt = true, time.Now()

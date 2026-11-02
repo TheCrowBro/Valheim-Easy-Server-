@@ -67,7 +67,10 @@ func (m *Manager) Hibernate(reason string) error {
 			}
 		}
 		m.mu.Lock()
-		m.resumeOnWake = running
+		// A restart still owed from an earlier sleep stays owed: the computer
+		// may have woken by itself (a timer) and gone back to sleep since,
+		// and only someone waking it uses that up (wokenOnPurpose).
+		m.resumeOnWake = running || m.resumeOnWake
 		m.mu.Unlock()
 		text := "The computer is going into hibernation. " + wakeHint
 		if sleep {

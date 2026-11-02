@@ -237,6 +237,9 @@ type Choice struct {
 type Placed struct {
 	Name     string `json:"name"`
 	Replaced bool   `json:"replaced"`
+	// Was is the name the replaced world was saved under, when it differs
+	// (only in letter case, on Windows and macOS).
+	Was string `json:"was,omitempty"`
 }
 
 // Import copies (or, with move, moves) the chosen candidates into the
@@ -319,7 +322,11 @@ func (l *Library) Import(cands []Candidate, choices []Choice, busy func(string) 
 		if old != nil {
 			old.drop()
 		}
-		done = append(done, Placed{Name: j.name, Replaced: j.replace})
+		p := Placed{Name: j.name, Replaced: j.replace}
+		if j.replace && j.saved != j.name {
+			p.Was = j.saved
+		}
+		done = append(done, p)
 	}
 	return done, nil
 }

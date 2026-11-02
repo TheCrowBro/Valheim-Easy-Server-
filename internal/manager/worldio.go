@@ -201,6 +201,19 @@ func (m *Manager) startImport(cands []worlds.Candidate, choices []worlds.Choice,
 		if serr := m.clearWorldOptions(added); serr != nil {
 			m.log.Printf("clearing the options of added worlds: %v", serr)
 		}
+		for _, p := range done {
+			if p.Was == "" {
+				continue
+			}
+			// The world is now saved under the new copy's spelling: the
+			// selection and its options follow, as with a rename.
+			if serr := m.moveWorldSettings(p.Was, p.Name); serr != nil {
+				m.log.Printf("moving %q's settings to %q: %v", p.Was, p.Name, serr)
+			}
+			if running == p.Was {
+				running = p.Name
+			}
+		}
 		if restart {
 			j.step("Starting the server again…", -1)
 			if serr := m.doStart(ctx, j, running); serr != nil {
@@ -241,6 +254,27 @@ func (m *Manager) clearWorldOptions(names []string) error {
 			delete(next.WorldOptions, name)
 			changed = true
 		}
+	}
+	if !changed {
+		return nil
+	}
+	return m.saveSettingsLocked(next)
+}
+
+// moveWorldSettings moves the selection and the options of the world from
+// to the name to, when a world's name changes.
+func (m *Manager) moveWorldSettings(from, to string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	next := m.settings.Clone()
+	changed := false
+	if next.World == from {
+		next.World, changed = to, true
+	}
+	if o, ok := next.WorldOptions[from]; ok {
+		delete(next.WorldOptions, from)
+		next.WorldOptions[to] = o
+		changed = true
 	}
 	if !changed {
 		return nil

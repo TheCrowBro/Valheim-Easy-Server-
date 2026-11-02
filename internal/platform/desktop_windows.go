@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -158,11 +159,26 @@ func SetLaunchOnLogin(on bool, exe string, args string) error {
 
 // FirewallReady reports whether the game server at this path has its
 // firewall rule.
-func FirewallReady(serverExe string) bool { return ruleExists(fwRuleName(fwGameRule, serverExe)) }
+func FirewallReady(serverExe string) bool {
+	return ruleExists(fwRuleName(fwGameRule, serverExe)) || legacyRuleFor(fwGameRule, serverExe)
+}
 
 // WakeRuleReady reports whether the app at this path may hear Wake-on-LAN
 // signals.
-func WakeRuleReady(appExe string) bool { return ruleExists(fwRuleName(fwWakeRule, appExe)) }
+func WakeRuleReady(appExe string) bool {
+	return ruleExists(fwRuleName(fwWakeRule, appExe)) || legacyRuleFor(fwWakeRule, appExe)
+}
+
+// legacyRuleFor reports whether a rule made by builds before rule names
+// carried the path's fingerprint lets this program through. Allow removes
+// those rules and makes new ones. netsh translates its labels, but not the
+// program's path, so that's what is looked for.
+func legacyRuleFor(name, program string) bool {
+	cmd := exec.Command(system32("netsh.exe"), "advfirewall", "firewall", "show", "rule", "name="+name, "verbose")
+	cmd.SysProcAttr = HiddenProcAttr()
+	out, err := cmd.Output()
+	return err == nil && strings.Contains(strings.ToLower(string(out)), strings.ToLower(filepath.Clean(program)))
+}
 
 func ruleExists(name string) bool {
 	cmd := exec.Command(system32("netsh.exe"), "advfirewall", "firewall", "show", "rule", "name="+name)

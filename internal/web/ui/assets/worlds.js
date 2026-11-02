@@ -312,8 +312,13 @@ function registerActions(app) {
   };
   A['world-mods'] = (d) => modsModal(app, d.name);
   A['world-mod-help'] = (d) => {
-    const st = app.status; // the code is for the running world, while its mods are the ones it started with
-    openModsHelp(worldMods(d.name), st && st.runningWorld === d.name ? st.modsCode : '');
+    const st = app.status;
+    const list = worldMods(d.name);
+    const ids = (l) => (l || []).map((m) => m.id).sort().join();
+    // The code is for the mods the running server started with: only show
+    // it with a list of those.
+    const same = st && st.runningWorld === d.name && ids(st.mods) === ids(list);
+    openModsHelp(list, same ? st.modsCode : '');
   };
   A['world-download'] = (d) => {
     const st = app.status;

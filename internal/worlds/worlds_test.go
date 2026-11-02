@@ -349,7 +349,7 @@ func TestUploadZipAndImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(done) != 2 || done[0] != (Placed{"Midgard", true}) || done[1] != (Placed{"Old Times", false}) {
+	if len(done) != 2 || done[0] != (Placed{Name: "Midgard", Replaced: true}) || done[1] != (Placed{Name: "Old Times"}) {
 		t.Fatalf("imported = %+v", done)
 	}
 	mid, _ := l.Get("Midgard")
