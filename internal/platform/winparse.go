@@ -10,9 +10,11 @@ import (
 	"strings"
 )
 
+// All of this app's firewall rules have names that start with fwRules.
 const (
-	fwGameRule = "Valheim Easy Server - game"
-	fwWakeRule = "Valheim Easy Server - wake signal"
+	fwRules    = "Valheim Easy Server - "
+	fwGameRule = fwRules + "game"
+	fwWakeRule = fwRules + "wake signal"
 )
 
 // fwRuleName names a firewall rule after the program it lets through, so a
@@ -27,19 +29,23 @@ func fwRuleName(rule, program string) string {
 // firewallScript is what FixFirewall runs as admin. It first removes this
 // app's rules from older versions and for old places, and any "block" rules
 // Windows made for the server or the app when its firewall pop-up was
-// dismissed.
+// dismissed. It's kept short, because it goes in a command line with a
+// limit (see shellExecuteMax) and the two paths can be long: one
+// Remove-NetFirewallRule covers all of this app's rules, $fw saves writing
+// "advfirewall firewall" each time, and netsh makes a rule switched on and
+// for every network unless told otherwise, so the script doesn't say so.
 func firewallScript(serverExe, appExe string, wake bool) string {
 	lines := []string{
 		"$server = " + psQuote(serverExe),
 		"$app = " + psQuote(appExe),
-		"Remove-NetFirewallRule -DisplayName " + psQuote(fwGameRule+"*") + " -ErrorAction SilentlyContinue",
-		"Remove-NetFirewallRule -DisplayName " + psQuote(fwWakeRule+"*") + " -ErrorAction SilentlyContinue",
-		`netsh advfirewall firewall delete rule name=all "program=$server"`,
-		`netsh advfirewall firewall add rule "name=` + fwRuleName(fwGameRule, serverExe) + `" dir=in action=allow "program=$server" enable=yes profile=any`,
-		`netsh advfirewall firewall delete rule name=all "program=$app"`,
+		"Remove-NetFirewallRule -DisplayName " + psQuote(fwRules+"*") + " -ErrorAction SilentlyContinue",
+		"$fw = 'advfirewall', 'firewall'",
+		`netsh $fw delete rule name=all "program=$server"`,
+		`netsh $fw add rule "name=` + fwRuleName(fwGameRule, serverExe) + `" dir=in action=allow "program=$server"`,
+		`netsh $fw delete rule name=all "program=$app"`,
 	}
 	if wake {
-		lines = append(lines, `netsh advfirewall firewall add rule "name=`+fwRuleName(fwWakeRule, appExe)+`" dir=in action=allow "program=$app" protocol=UDP localport=9 remoteip=localsubnet enable=yes profile=any`)
+		lines = append(lines, `netsh $fw add rule "name=`+fwRuleName(fwWakeRule, appExe)+`" dir=in action=allow "program=$app" protocol=UDP localport=9 remoteip=localsubnet`)
 	}
 	return strings.Join(lines, "\n")
 }

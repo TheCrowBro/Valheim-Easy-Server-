@@ -31,11 +31,15 @@ func TestFirewallRuleFollowsThePath(t *testing.T) {
 	for _, want := range []string{
 		`"name=` + name + `"`,
 		`"name=` + fwRuleName(fwWakeRule, app) + `"`,
-		"Remove-NetFirewallRule -DisplayName '" + fwGameRule + "*'",
-		"Remove-NetFirewallRule -DisplayName '" + fwWakeRule + "*'",
+		"Remove-NetFirewallRule -DisplayName '" + fwRules + "*'",
 	} {
 		if !strings.Contains(script, want) {
 			t.Errorf("the script has no %s:\n%s", want, script)
+		}
+	}
+	for _, rule := range []string{fwGameRule, fwWakeRule} {
+		if !strings.HasPrefix(rule, fwRules) {
+			t.Errorf("rules for old places named %q aren't removed", rule)
 		}
 	}
 	removed := strings.Index(script, "Remove-NetFirewallRule")
@@ -45,6 +49,33 @@ func TestFirewallRuleFollowsThePath(t *testing.T) {
 	}
 	if strings.Contains(firewallScript(server, app, false), fwWakeRule+" (") {
 		t.Error("a wake rule without wake on")
+	}
+}
+
+// Windows only takes a command line of up to shellExecuteMax characters
+// when it asks for admin permission, so Allow must still work when the app
+// is somewhere with a long path and Discord wake is on.
+func TestFirewallScriptFitsLongPaths(t *testing.T) {
+	powershell := `"C:\WINDOWS\system32\WindowsPowerShell\v1.0\powershell.exe" `
+	user := `C:\Users\Laurence Simmonds PC` // a long user name: Windows allows 20 characters
+	for _, c := range []struct{ where, server, app string }{
+		{"the recommended folder",
+			`C:\Valheim Server\server\valheim_server.exe`,
+			`C:\Valheim Server\ValheimEasyServer.exe`},
+		{"Downloads",
+			user + `\Downloads\Valheim Easy Server\server\valheim_server.exe`,
+			user + `\Downloads\ValheimEasyServer.exe`},
+		{"unzipped on a OneDrive desktop",
+			user + `\OneDrive - Personal\Desktop\ValheimEasyServer-windows\server\valheim_server.exe`,
+			user + `\OneDrive - Personal\Desktop\ValheimEasyServer-windows\ValheimEasyServer.exe`},
+		{"run from inside the zip",
+			user + `\AppData\Roaming\Valheim Easy Server\server\valheim_server.exe`,
+			user + `\AppData\Local\Temp\Temp1_ValheimEasyServer-windows.zip\ValheimEasyServer.exe`},
+	} {
+		n := len(powershell + psAdminArgs(firewallScript(c.server, c.app, true)))
+		if n >= shellExecuteMax {
+			t.Errorf("%s: the command line is %d characters, over Windows' limit of %d", c.where, n, shellExecuteMax)
+		}
 	}
 }
 
