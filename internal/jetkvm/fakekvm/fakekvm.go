@@ -21,6 +21,9 @@ import (
 
 // Waker stands in for the waker program: it checks the bot token ("bad"
 // isn't accepted), and runs until it's stopped, saying it's in Discord.
+// Like the real one, it says nothing for a moment while it starts, then
+// that it's in Discord, and only a little later that /valheim is set up in
+// the Discord server it's in.
 const Waker = `#!/bin/sh
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -38,9 +41,15 @@ if [ -n "$check" ]; then
 	echo "ok Valheim Bot"
 	exit 0
 fi
-echo "fake waker started"
-echo '{"version": "build-7", "connected": true, "bot": "Valheim Bot", "servers": 1, "updated": "2026-11-01T12:00:00Z"}' >"$status"
 trap 'exit 0' TERM
+say() { echo "$1" >"$status.tmp" && mv -f "$status.tmp" "$status"; }
+echo "fake waker started"
+sleep 0.2
+say '{"version": "build-7", "connected": false, "servers": 0, "updated": "2026-11-01T12:00:00Z"}'
+sleep 0.1
+say '{"version": "build-7", "connected": true, "bot": "Valheim Bot", "servers": 0, "updated": "2026-11-01T12:00:00Z"}'
+sleep 0.6
+say '{"version": "build-7", "connected": true, "bot": "Valheim Bot", "servers": 1, "updated": "2026-11-01T12:00:01Z"}'
 while :; do sleep 0.1; done
 `
 

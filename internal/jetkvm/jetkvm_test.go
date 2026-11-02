@@ -61,11 +61,14 @@ func TestInstall(t *testing.T) {
 	defer cancel()
 	cfg := waker.Config{Token: "secret", MAC: "3C:07:54:5A:21:9F", Query: "192.168.1.20:2457", Name: "Viking's Night"}
 
+	// The stand-in waker says nothing for a moment as it starts, and that
+	// it's in Discord a little before /valheim is set up in the Discord
+	// server it's in: Install waits for both.
 	st, hostKey, err := Install(ctx, target, []byte(fakekvm.Waker), cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !st.Connected || st.Bot != "Valheim Bot" || !bytes.Equal(hostKey, kvm.HostKey.Marshal()) {
+	if !st.Connected || st.Bot != "Valheim Bot" || st.Servers != 1 || !bytes.Equal(hostKey, kvm.HostKey.Marshal()) {
 		t.Fatalf("status %+v, host key %x", st, hostKey)
 	}
 	dir := filepath.Join(kvm.Base, "valheim-waker")
@@ -111,7 +114,7 @@ func TestInstall(t *testing.T) {
 	}
 
 	// Installing again replaces the running copy.
-	if st, _, err := Install(ctx, target, []byte(fakekvm.Waker), cfg); err != nil || !st.Connected {
+	if st, _, err := Install(ctx, target, []byte(fakekvm.Waker), cfg); err != nil || !st.Connected || st.Servers != 1 {
 		t.Fatalf("reinstall: %+v %v", st, err)
 	}
 	if again, _ := os.ReadFile(filepath.Join(kvm.Run, "valheim-waker.pid")); bytes.Equal(again, pid) {
@@ -137,6 +140,25 @@ func TestInstall(t *testing.T) {
 	}
 }
 
+// A bot that isn't in a Discord server yet: Install waits a few seconds
+// for one, then says so, for the app to show how to add it.
+func TestInstallInNoServer(t *testing.T) {
+	key := testKey(t)
+	kvm := fakekvm.New(t, key.PublicKey())
+	target := Target{Addr: kvm.Addr, Key: key, Base: kvm.Base, Run: kvm.Run, Arch: "-"}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	lonely := strings.ReplaceAll(fakekvm.Waker, `"servers": 1`, `"servers": 0`)
+	start := time.Now()
+	st, _, err := Install(ctx, target, []byte(lonely), waker.Config{Token: "secret", MAC: "3C:07:54:5A:21:9F"})
+	if err != nil || !st.Connected || st.Servers != 0 {
+		t.Fatalf("status %+v, %v", st, err)
+	}
+	if d := time.Since(start); d > 10*time.Second {
+		t.Fatalf("waited %v for a Discord server", d)
+	}
+}
+
 func TestStoppedSaysWhy(t *testing.T) {
 	key := testKey(t)
 	kvm := fakekvm.New(t, key.PublicKey())
@@ -156,6 +178,12 @@ func TestStoppedSaysWhy(t *testing.T) {
 	var stopped *ErrStopped
 	if _, err := Status(ctx, target); !errors.As(err, &stopped) || !strings.Contains(stopped.Log, "Discord doesn’t accept the bot token.") {
 		t.Fatalf("status = %v", err)
+	}
+	// Just after the JetKVM restarts there's no log yet: it's stopped all
+	// the same, so the app starts it again.
+	os.Remove(filepath.Join(kvm.Run, "valheim-waker.log"))
+	if _, err := Status(ctx, target); !errors.As(err, &stopped) || stopped.Log != "" {
+		t.Fatalf("status without a log = %v", err)
 	}
 }
 

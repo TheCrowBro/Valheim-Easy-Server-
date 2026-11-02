@@ -335,6 +335,54 @@ func TestOnlyItsOwnServer(t *testing.T) {
 	})
 }
 
+// Changes to the status at the same time (say, /valheim being set up in
+// two Discord servers at once) are saved one at a time: the file always
+// makes sense, and it ends up with the newest status.
+func TestStatusFileAtOnce(t *testing.T) {
+	b := New(Config{}, log.New(io.Discard, "", 0))
+	b.StatusFile = filepath.Join(t.TempDir(), "status.json")
+	b.setStatus(func(s *Status) {})
+	// The app reads it whenever it likes.
+	stop := make(chan struct{})
+	bad := make(chan string, 1)
+	go func() {
+		defer close(bad)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			var st Status
+			if data, _ := os.ReadFile(b.StatusFile); json.Unmarshal(data, &st) != nil {
+				bad <- string(data)
+				return
+			}
+		}
+	}()
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 200 {
+				// Different lengths, so mixed-up writes would show.
+				b.setStatus(func(s *Status) { s.Servers, s.Bot = s.Servers+1, strings.Repeat("x", i*20) })
+			}
+		}()
+	}
+	wg.Wait()
+	close(stop)
+	if data, ok := <-bad; ok {
+		t.Fatalf("the app read %q", data)
+	}
+	var st Status
+	data, _ := os.ReadFile(b.StatusFile)
+	if err := json.Unmarshal(data, &st); err != nil || st.Servers != 1600 {
+		t.Fatalf("status file = %s (%v)", data, err)
+	}
+}
+
 func TestBadToken(t *testing.T) {
 	f := newFakeDiscord(t, "secret")
 	b := testBot(t, f, "wrong")

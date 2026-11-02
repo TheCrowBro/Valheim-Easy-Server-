@@ -96,6 +96,7 @@ type Bot struct {
 	// Valheim to answer.
 	wakeEvery, wakeFor, waitFor time.Duration
 
+	fileMu     sync.Mutex // saving the status file, one change at a time
 	mu         sync.Mutex
 	appID      string
 	sessionID  string
@@ -299,12 +300,6 @@ func (b *Bot) register(ctx context.Context, guild string) {
 	} else {
 		b.guilds[guild] = true
 	}
-	n := 0
-	for _, ok := range b.guilds {
-		if ok {
-			n++
-		}
-	}
 	b.mu.Unlock()
 	if err != nil {
 		var ae *apiError
@@ -315,7 +310,17 @@ func (b *Bot) register(ctx context.Context, guild string) {
 		b.setStatus(func(s *Status) { s.Error = err.Error() })
 		return
 	}
-	b.setStatus(func(s *Status) { s.Servers = n })
+	// Counted as the status changes, not before: another Discord server set
+	// up at the same moment could otherwise save its newer count first, and
+	// this older one over it.
+	b.setStatus(func(s *Status) {
+		s.Servers = 0
+		for _, ok := range b.guilds {
+			if ok {
+				s.Servers++
+			}
+		}
+	})
 }
 
 // allowed reports whether the bot answers in a Discord server.
@@ -507,8 +512,13 @@ func (b *Bot) edit(ctx context.Context, appID, token, text string) {
 	}
 }
 
-// setStatus changes the status and saves it for the app.
+// setStatus changes the status and saves it for the app. change runs with
+// b.mu held. Changes are saved one at a time, in the order they're made:
+// two at once would write the same temporary file and mix their bytes, or
+// an older status could land after a newer one.
 func (b *Bot) setStatus(change func(*Status)) {
+	b.fileMu.Lock()
+	defer b.fileMu.Unlock()
 	b.mu.Lock()
 	change(&b.status)
 	b.status.Version, b.status.Updated = b.Version, time.Now().UTC()

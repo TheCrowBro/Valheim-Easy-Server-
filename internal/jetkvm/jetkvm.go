@@ -215,6 +215,9 @@ stop)
 	;;
 status)
 	if running; then cat "$status" 2>/dev/null; else echo stopped; tail -n 5 "$log" 2>/dev/null; fi
+	# What it says is the answer. There's no status yet while the waker
+	# starts, and no log before it first starts, which isn't a failure.
+	exit 0
 	;;
 esac
 `, q(base+"/valheim-waker"), q(run+"/valheim-waker.pid"), q(run+"/valheim-waker.log"), q(run+"/valheim-waker.json"))
@@ -281,11 +284,20 @@ func Install(ctx context.Context, t Target, binary []byte, cfg waker.Config) (wa
 	if out, err := c.run(swap, nil); err != nil {
 		return st, nil, fmt.Errorf("couldn’t start the waker: %s", orErr(out, err))
 	}
-	// Give it a moment to get into Discord.
-	for i := 0; ; i++ {
+	// Give it a moment to get into Discord. It says it's in a little before
+	// it has set up /valheim in the Discord servers it's in, so once it's in
+	// it gets a few seconds more for that. Otherwise a bot that's already in
+	// the Discord server would look as if it still had to be added there.
+	for i, extra := 0, 0; ; i++ {
 		st, err = c.status(initScript)
-		if err != nil || st.Connected || st.Error != "" || i >= 30 {
+		if err != nil || st.Error != "" || i >= 30 {
 			break
+		}
+		if st.Connected {
+			if st.Servers > 0 || extra >= 6 {
+				break
+			}
+			extra++
 		}
 		select {
 		case <-ctx.Done():
