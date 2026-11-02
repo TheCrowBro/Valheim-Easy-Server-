@@ -11,6 +11,8 @@ type Player struct {
 	ID         string    `json:"id,omitempty"`
 	PlatformID string    `json:"platformId,omitempty"`
 	Since      time.Time `json:"since"`
+
+	unsure bool // which connection is theirs was a guess, so their account isn't known
 }
 
 // Activity is something worth showing in the activity feed.
@@ -24,7 +26,15 @@ type Activity struct {
 
 type pending struct {
 	id, platformID string
+	unsure         bool // a guess for an earlier character may have been this one
 }
+
+// countGap is how far apart, by this computer's clock, two low player counts
+// must come before anyone is taken off the list. A player can write made-up
+// count lines into the log, as many as they like at once. But Valheim logs
+// its own count every 10 minutes, so one of those always comes between two
+// low counts this far apart, and starts the wait again if it's high enough.
+const countGap = 15 * time.Minute
 
 // Tracker turns a stream of log events into server and player state.
 // Valheim doesn't log a single "X joined" line, so joins are pieced
@@ -40,7 +50,12 @@ type Tracker struct {
 	LastSave   time.Time
 	Stopping   bool
 	StoppingAt time.Time // when the server said it was shutting down
-	lowStreak  int
+	lowSince   time.Time // by this computer's clock, when the first of a run of low player counts came
+
+	// KnownPlatformID, if set, gives the account a character's name last
+	// played from. It tells apart friends who connect at the same time.
+	// Apply calls it, so it runs under any lock Apply's caller holds.
+	KnownPlatformID func(name string) string
 
 	// NoJoinCode is set for a server started without crossplay, which has
 	// no join code: a line claiming one was made up by a player.
@@ -71,7 +86,9 @@ func (t *Tracker) Players() []Player {
 func (t *Tracker) Count() int { return len(t.players) }
 
 // Apply updates the state with one event and returns what to show in the
-// activity feed. now is used when the line had no timestamp.
+// activity feed. now is used when the line had no timestamp, and to time
+// player counts: a player can write a line with any timestamp they like,
+// but can't change this computer's clock.
 func (t *Tracker) Apply(ev Event, now time.Time) []Activity {
 	at := ev.Time
 	if at.IsZero() {
@@ -110,6 +127,18 @@ func (t *Tracker) Apply(ev Event, now time.Time) []Activity {
 		if ev.Session != t.session {
 			return nil
 		}
+		// A player can also write a line with the server's own name. So the
+		// first code and address are kept for the whole run, and a line
+		// that says otherwise was made up. When crossplay couldn't start,
+		// no code will come at all. The line's player count isn't used
+		// either: the server's "Connections" lines give that.
+		if t.CrossplayFailed {
+			ev.Code, ev.Addr = "", ""
+		}
+		if (t.JoinCode != "" && ev.Code != "" && ev.Code != t.JoinCode) ||
+			(t.PublicAddr != "" && ev.Addr != "" && ev.Addr != t.PublicAddr) {
+			return nil
+		}
 		if ev.Code != "" {
 			t.JoinCode = ev.Code
 		}
@@ -118,13 +147,9 @@ func (t *Tracker) Apply(ev Event, now time.Time) []Activity {
 		}
 		// Valheim opens its crossplay session once the world is loaded, so
 		// this also means it's ready if the line saying so was missed.
-		out := ready()
-		if ev.Count >= 0 && ev.Addr != "" {
-			out = append(out, t.reconcile(ev.Count, at)...)
-		}
-		return out
+		return ready()
 	case PeerCount:
-		return t.reconcile(ev.Count, at)
+		return t.reconcile(ev.Count, at, now)
 	case Connecting, Handshake, PlatformID:
 		t.addPending(ev.ID, ev.PlatformID)
 	case Character:
@@ -138,12 +163,16 @@ func (t *Tracker) Apply(ev Event, now time.Time) []Activity {
 			return nil
 		}
 		p := &Player{Name: ev.Name, Since: at}
-		if len(t.pending) > 0 {
-			p.ID, p.PlatformID = t.pending[0].id, t.pending[0].platformID
-			t.pending = t.pending[1:]
+		if c, sure, ok := t.claim(ev.Name); ok {
+			p.ID = c.id
+			if sure {
+				p.PlatformID = c.platformID
+			} else {
+				p.unsure = true // no account, so nobody bans or makes an admin of the wrong one
+			}
 		}
 		t.players = append(t.players, p)
-		t.lowStreak = 0
+		t.lowSince = time.Time{}
 		return []Activity{act("join", p.Name, p.PlatformID, p.Name+" joined the game.")}
 	case Disconnect:
 		if ev.ID == "" || ev.ID == "0" {
@@ -204,24 +233,28 @@ func (t *Tracker) leaveActivity(p *Player, at time.Time) Activity {
 
 // reconcile trusts the server's own player count when it disagrees with
 // what was pieced together, e.g. when a disconnect line was missed.
-func (t *Tracker) reconcile(count int, at time.Time) []Activity {
+func (t *Tracker) reconcile(count int, at, now time.Time) []Activity {
 	if count < 0 {
 		return nil
 	}
 	if count >= len(t.players) {
-		t.lowStreak = 0
+		t.lowSince = time.Time{}
 		if count == 0 {
 			t.pending = nil
 		}
 		return nil
 	}
-	// Ask for two readings in a row, so a join or leave racing the count
-	// line (or a line a player made up) doesn't remove anyone.
-	t.lowStreak++
-	if t.lowStreak < 2 {
+	// Ask for a low count twice, at least countGap apart with no count high
+	// enough in between, so a join or leave racing the count line doesn't
+	// remove anyone, and neither do count lines a player made up.
+	if t.lowSince.IsZero() || now.Before(t.lowSince) {
+		t.lowSince = now
 		return nil
 	}
-	t.lowStreak = 0
+	if now.Sub(t.lowSince) < countGap {
+		return nil
+	}
+	t.lowSince = time.Time{}
 	if count == 0 {
 		t.pending = nil
 	}
@@ -264,7 +297,7 @@ func (t *Tracker) addPending(id, platformID string) {
 	}
 	for _, p := range t.players {
 		if p.ID == id {
-			if platformID != "" {
+			if platformID != "" && !p.unsure {
 				p.PlatformID = platformID
 			}
 			return
@@ -282,6 +315,38 @@ func (t *Tracker) addPending(id, platformID string) {
 	if len(t.pending) > 20 { // never grow without bound on odd logs
 		t.pending = t.pending[len(t.pending)-20:]
 	}
+}
+
+// claim takes the connection the character that just arrived came in on.
+// Valheim doesn't say which it is, and characters arrive in the order the
+// players' games finish loading the world, not the order they connected.
+// sure is false when it's a guess, as when two friends connect at the same
+// time and one of them hasn't played here before.
+func (t *Tracker) claim(name string) (c pending, sure, ok bool) {
+	if len(t.pending) == 0 {
+		return pending{}, false, false
+	}
+	i := 0
+	sure = len(t.pending) == 1 && !t.pending[0].unsure
+	if !sure && t.KnownPlatformID != nil {
+		if known := t.KnownPlatformID(name); known != "" {
+			for j, p := range t.pending {
+				if p.platformID == known {
+					i, sure = j, true
+					break
+				}
+			}
+		}
+	}
+	c = t.pending[i]
+	t.pending = append(t.pending[:i], t.pending[i+1:]...)
+	if !sure {
+		// Any of the others may be the one this guess should have taken.
+		for j := range t.pending {
+			t.pending[j].unsure = true
+		}
+	}
+	return c, sure, true
 }
 
 func (t *Tracker) dropPending(id string) {
