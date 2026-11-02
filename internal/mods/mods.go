@@ -258,7 +258,10 @@ func (in *Installer) Prepare(ctx context.Context, ids []string, update bool, ste
 		return res, err
 	}
 	for _, p := range pkgs {
-		if cur, ok := rec.Packages[p.Name]; ok && cur.Version == p.Version {
+		// Files that went missing (deleted by hand, or by antivirus) are
+		// downloaded again, even at the same version: without them the
+		// server would start the world without the mod.
+		if cur, ok := rec.Packages[p.Name]; ok && cur.Version == p.Version && in.onDisk(p.Name) {
 			continue
 		}
 		msg := fmt.Sprintf("Downloading %s %s…", Title(p.Name), p.Version)
@@ -270,6 +273,14 @@ func (in *Installer) Prepare(ctx context.Context, ids []string, update bool, ste
 			step(msg, float64(pct))
 		})
 		if err != nil {
+			// A download that failed changed nothing on disk, so when the
+			// installed versions are all there, the server starts with them,
+			// as it does when Thunderstore can't be asked about updates.
+			var de *downloadError
+			if errors.As(err, &de) && ctx.Err() == nil && in.complete(rec, want) {
+				res.Warning = fmt.Sprintf("Couldn't download the update for %s (%v). Starting with the installed versions.", Title(p.Name), de.err)
+				return res, in.turnOn(rec, want)
+			}
 			return res, fmt.Errorf("couldn't install %s: %w", Title(p.Name), err)
 		}
 		rec.Packages[p.Name] = installed{Version: p.Version, Deps: p.Deps}
@@ -545,6 +556,13 @@ func (in *Installer) getJSON(ctx context.Context, u string, v any) error {
 	return json.NewDecoder(io.LimitReader(res.Body, 4<<20)).Decode(v)
 }
 
+// downloadError is a package download that failed before anything in the
+// server folder was changed: the installed version is still all there.
+type downloadError struct{ err error }
+
+func (e *downloadError) Error() string { return e.err.Error() }
+func (e *downloadError) Unwrap() error { return e.err }
+
 // install downloads a package and unpacks it into the server folder. report
 // gets each whole percent of the download, when its size is known.
 func (in *Installer) install(ctx context.Context, p pkg, report func(pct int, size int64)) error {
@@ -553,7 +571,7 @@ func (in *Installer) install(ctx context.Context, p pkg, report func(pct int, si
 	}
 	res, err := in.get(ctx, p.URL)
 	if err != nil {
-		return err
+		return &downloadError{err}
 	}
 	defer res.Body.Close()
 	tmp, err := os.CreateTemp("", "ves-mod-*.zip")
@@ -565,14 +583,14 @@ func (in *Installer) install(ctx context.Context, p pkg, report func(pct int, si
 	pr := &progress{size: res.ContentLength, report: report}
 	n, err := io.Copy(tmp, io.TeeReader(io.LimitReader(res.Body, maxZip+1), pr))
 	if err != nil {
-		return fmt.Errorf("the download broke off: %v", err)
+		return &downloadError{fmt.Errorf("the download broke off: %v", err)}
 	}
 	if n > maxZip {
-		return errors.New("the download is too big")
+		return &downloadError{errors.New("the download is too big")}
 	}
 	zr, err := zip.NewReader(tmp, n)
 	if err != nil {
-		return fmt.Errorf("the download isn't a valid zip file: %v", err)
+		return &downloadError{fmt.Errorf("the download isn't a valid zip file: %v", err)}
 	}
 	if p.Name == Loader {
 		return in.unpackLoader(zr)

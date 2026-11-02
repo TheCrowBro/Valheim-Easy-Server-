@@ -3,6 +3,7 @@
 package platform
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -67,11 +68,19 @@ func SetLaunchOnLogin(on bool, exe, args string) error {
 
 const socketfilterfw = "/usr/libexec/ApplicationFirewall/socketfilterfw"
 
-// firewallOn reports whether the macOS firewall is on. It's off unless
-// someone turned it on in System Settings.
-func firewallOn() bool {
+// firewallState reports whether the macOS firewall is on (it's off unless
+// someone turned it on in System Settings), and whether it's set to block
+// all incoming connections, whichever apps it lets through.
+func firewallState() (on, blockAll bool) {
 	out, err := exec.Command(socketfilterfw, "--getglobalstate").Output()
-	return err == nil && parseFirewallOn(string(out))
+	if err != nil || !parseFirewallOn(string(out)) {
+		return false, false
+	}
+	if parseFirewallBlockAll(string(out)) {
+		return true, true
+	}
+	out, err = exec.Command(socketfilterfw, "--getblockall").Output()
+	return true, err == nil && parseFirewallBlockAll(string(out))
 }
 
 func firewallAllows(path string) bool {
@@ -94,18 +103,34 @@ func appPath(exe string) string {
 
 // FirewallReady reports whether friends can reach the server through the
 // macOS firewall.
-func FirewallReady(serverExe string) bool { return !firewallOn() || firewallAllows(serverExe) }
+func FirewallReady(serverExe string) bool {
+	on, blockAll := firewallState()
+	return !on || !blockAll && firewallAllows(serverExe)
+}
 
 // WakeRuleReady reports whether the app may hear Wake-on-LAN signals
 // through the macOS firewall.
-func WakeRuleReady(appExe string) bool { return !firewallOn() || firewallAllows(appPath(appExe)) }
+func WakeRuleReady(appExe string) bool {
+	on, blockAll := firewallState()
+	return !on || !blockAll && firewallAllows(appPath(appExe))
+}
+
+// errBlockAll is why letting apps through the firewall can't help: with
+// "Block all incoming connections" on, macOS ignores which apps may.
+var errBlockAll = errors.New("The macOS firewall is set to block all incoming connections, so friends can’t reach the server. " +
+	"Turn off “Block all incoming connections” in the firewall’s options (System Settings → Network → Firewall → Options; " +
+	"on macOS 12, System Preferences → Security & Privacy → Firewall → Firewall Options), then try again.")
 
 // FixFirewall lets the server (and, with wake on, the app) through the
 // macOS firewall. macOS asks for an administrator's password on the
 // screen; this returns before that is answered.
 func FixFirewall(serverExe, appExe string, wake bool) error {
-	if !firewallOn() {
+	on, blockAll := firewallState()
+	if !on {
 		return nil
+	}
+	if blockAll {
+		return errBlockAll
 	}
 	programs := []string{serverExe}
 	if wake {

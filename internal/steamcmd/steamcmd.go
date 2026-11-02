@@ -192,6 +192,9 @@ func (s *SteamCMD) run(ctx context.Context, args []string, progress func(Progres
 	cmd := exec.CommandContext(ctx, s.exe(), args...)
 	cmd.Dir = s.Dir
 	cmd.SysProcAttr = platform.HiddenProcAttr()
+	// On macOS and Linux, steamcmd.sh runs the real SteamCMD as a child: a
+	// cancel (or the app quitting) has to stop both.
+	platform.KillGroupOnCancel(cmd)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
@@ -200,6 +203,10 @@ func (s *SteamCMD) run(ctx context.Context, args []string, progress func(Progres
 	if err := platform.StartCmd(cmd); err != nil {
 		return fmt.Errorf("couldn't start SteamCMD: %v", err)
 	}
+	// Stop reading once cancelled, even if something SteamCMD started
+	// outside its process group still holds the output open.
+	stopClosing := context.AfterFunc(ctx, func() { stdout.Close() })
+	defer stopClosing()
 
 	var (
 		success  bool
@@ -224,6 +231,10 @@ func (s *SteamCMD) run(ctx context.Context, args []string, progress func(Progres
 			progress(Progress{Step: "Server files are up to date.", Percent: 100})
 		case reError.MatchString(line):
 			failMsg = FriendlyError(reError.FindStringSubmatch(line)[1])
+		case strings.Contains(strings.ToLower(line), "bad cpu type"):
+			// The shell, not SteamCMD, says when a Mac can't run SteamCMD
+			// (Apple silicon without Rosetta), so there's no "Error!".
+			failMsg = FriendlyError(line)
 		default:
 			if p, ok := ParseProgress(line); ok {
 				progress(p)
