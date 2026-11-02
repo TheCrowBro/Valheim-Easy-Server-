@@ -8,8 +8,10 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"valheim-easy-server/internal/config"
@@ -146,7 +148,10 @@ func (l *Library) Check(cands []Candidate) []Candidate {
 	}
 	for i := range cands {
 		c := &cands[i]
-		c.Exists = c.Name != "" && l.exists(c.Name)
+		saved := ""
+		if c.Name != "" {
+			saved, c.Exists = l.liveName(c.Name)
+		}
 		if c.Problem == "" && c.Name != "" {
 			if msg := config.WorldNameProblem(c.Name); msg != "" && !c.Renamable {
 				c.Problem = msg
@@ -155,7 +160,7 @@ func (l *Library) Check(cands []Candidate) []Candidate {
 		if !c.Exists {
 			continue
 		}
-		if w, err := l.Get(c.Name); err == nil {
+		if w, err := l.Get(saved); err == nil {
 			c.ServerModified, c.ServerSize = w.Modified, w.Size
 		}
 		if c.Renamable && !c.Superseded {
@@ -248,6 +253,7 @@ func (l *Library) Import(cands []Candidate, choices []Choice, busy func(string) 
 	type job struct {
 		c       Candidate
 		name    string
+		saved   string // the name the replaced world is saved under
 		replace bool
 	}
 	var jobs []job
@@ -278,37 +284,40 @@ func (l *Library) Import(cands []Candidate, choices []Choice, busy func(string) 
 			return nil, fmt.Errorf("two worlds would both be called %q", name)
 		}
 		taken[key] = true
-		exists := l.exists(name)
+		saved, exists := l.liveName(name)
 		if exists && ch.Action != "replace" {
 			return nil, fmt.Errorf("there's already a world called %q. Choose Replace or a different name.", name)
 		}
-		if exists && busy(name) {
+		if exists && busy(saved) {
 			return nil, fmt.Errorf("%q is running on the server right now. Stop the server before replacing it.", name)
 		}
-		jobs = append(jobs, job{c, name, exists})
+		jobs = append(jobs, job{c, name, saved, exists})
 	}
 	var done []Placed
 	for _, j := range jobs {
-		var old Backup
+		var old *aside
 		if j.replace {
-			b, err := l.backupLocked(j.name, "before-replace")
-			if err != nil {
+			if _, err := l.backupLocked(j.saved, "before-replace"); err != nil {
 				return done, fmt.Errorf("couldn't back up %q before replacing it, so it was left alone: %w", j.name, err)
 			}
-			old = b
-			if err := l.removeLive(j.name); err != nil {
+			a, err := l.setAside(j.saved)
+			if err != nil {
 				return done, err
 			}
+			old = a
 		}
 		if err := place(j.c, j.name, l.Worlds, move); err != nil {
 			l.removeLive(j.name) // whatever was half copied
 			if !j.replace {
 				return done, fmt.Errorf("couldn't import %q: %w", j.name, err)
 			}
-			if perr := l.putBack(j.name, old); perr != nil {
-				return done, fmt.Errorf("couldn't import %q (%v), and putting the server's old copy back failed too (%v). Restore it from the world's backups.", j.name, err, perr)
+			if uerr := old.undo(); uerr != nil {
+				return done, fmt.Errorf("couldn't import %q (%v), and putting the server's old copy back failed too (%v). Restore it from the world's backups.", j.name, err, uerr)
 			}
 			return done, fmt.Errorf("couldn't import %q, so the server's copy was left as it was: %w", j.name, err)
+		}
+		if old != nil {
+			old.drop()
 		}
 		done = append(done, Placed{Name: j.name, Replaced: j.replace})
 	}
@@ -368,6 +377,9 @@ type Upload struct {
 	Content    string
 	Created    time.Time
 	Candidates []Candidate
+
+	mu   sync.Mutex
+	zips []string // a folder for each uploaded zip's contents, in order
 }
 
 // MaxUploadBytes caps one upload (worlds are rarely more than a few GB).
@@ -410,7 +422,14 @@ func (u *Upload) AddFile(rel string, r io.Reader) error {
 		if n > MaxUploadBytes {
 			return errors.New("the upload is too big")
 		}
-		if err := extractZip(tmp.Name(), u.Content, MaxUploadBytes); err != nil {
+		// Each zip gets its own folder: two zips of the same world (say,
+		// two downloads of it) unpacked into one folder would mix their
+		// files into one broken copy.
+		dest, err := u.newZipDir()
+		if err != nil {
+			return err
+		}
+		if err := extractZip(tmp.Name(), dest, MaxUploadBytes); err != nil {
 			return fmt.Errorf("couldn't open %s: %w", filepath.Base(clean), err)
 		}
 		return nil
@@ -433,9 +452,32 @@ func (u *Upload) AddFile(rel string, r io.Reader) error {
 	return err
 }
 
-// Scan looks for worlds in the upload.
+// newZipDir makes the folder for the next uploaded zip's contents.
+func (u *Upload) newZipDir() (string, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	dir := filepath.Join(u.Dir, "zips", strconv.Itoa(len(u.zips)+1))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	u.zips = append(u.zips, dir)
+	return dir, nil
+}
+
+// Scan looks for worlds in the upload: in the files added as they are, and
+// in each zip separately, so each copy of a world is its own candidate.
 func (u *Upload) Scan(l *Library) []Candidate {
-	u.Candidates = l.Check(Detect(u.Content, 4))
+	cands := Detect(u.Content, 4)
+	u.mu.Lock()
+	zips := append([]string(nil), u.zips...)
+	u.mu.Unlock()
+	for _, dir := range zips {
+		cands = append(cands, Detect(dir, 4)...)
+	}
+	for i := range cands {
+		cands[i].ID = strconv.Itoa(i + 1)
+	}
+	u.Candidates = l.Check(cands)
 	return u.Candidates
 }
 
@@ -565,16 +607,34 @@ func (l *Library) LocalCandidates(sources []Source) []Candidate {
 }
 
 // GameSaveSources lists where the Valheim game keeps worlds for this user.
-func GameSaveSources(home, steamDir string, windows bool) []Source {
-	var base string
-	if windows {
-		base = filepath.Join(home, "AppData", "LocalLow", "IronGate", "Valheim")
-	} else {
-		base = filepath.Join(home, ".config", "unity3d", "IronGate", "Valheim")
+func GameSaveSources(home, steamDir string) []Source {
+	return gameSaveSources(home, steamDir, runtime.GOOS)
+}
+
+// gameSaveSources is GameSaveSources for the system goos. Folders that
+// don't exist are skipped when looking, so listing a guess costs nothing.
+func gameSaveSources(home, steamDir, goos string) []Source {
+	var bases []string
+	switch goos {
+	case "windows":
+		bases = []string{filepath.Join(home, "AppData", "LocalLow", "IronGate", "Valheim")}
+	case "darwin":
+		support := filepath.Join(home, "Library", "Application Support")
+		bases = []string{
+			filepath.Join(support, "IronGate", "Valheim"), // where Unity games keep saves on a Mac
+			filepath.Join(support, "com.coffeestain.Valheim"),
+			// The Mac App Store version is sandboxed. Its folder isn't
+			// documented; this is the one players report.
+			filepath.Join(home, "Library", "Containers", "com.coffeestain.valheim", "Data", "Library", "Application Support", "com.coffeestain.valheim"),
+		}
+	default:
+		bases = []string{filepath.Join(home, ".config", "unity3d", "IronGate", "Valheim")}
 	}
-	sources := []Source{
-		{"Valheim on this computer", filepath.Join(base, "worlds_local")},
-		{"Valheim on this computer (older saves)", filepath.Join(base, "worlds")},
+	var sources []Source
+	for _, base := range bases {
+		sources = append(sources,
+			Source{"Valheim on this computer", filepath.Join(base, "worlds_local")},
+			Source{"Valheim on this computer (older saves)", filepath.Join(base, "worlds")})
 	}
 	if steamDir != "" {
 		users, _ := filepath.Glob(filepath.Join(steamDir, "userdata", "*", "892970", "remote"))

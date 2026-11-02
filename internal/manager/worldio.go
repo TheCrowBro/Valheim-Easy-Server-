@@ -116,7 +116,7 @@ func (m *Manager) ImportUpload(id string, choices []worlds.Choice) (int, error) 
 // LocalWorlds finds worlds saved by the Valheim game on this computer.
 func (m *Manager) LocalWorlds() []worlds.Candidate {
 	home, _ := os.UserHomeDir()
-	sources := worlds.GameSaveSources(home, platform.SteamPath(), isWindows)
+	sources := worlds.GameSaveSources(home, platform.SteamPath())
 	cands := m.library().LocalCandidates(sources)
 	m.markInUse(cands)
 	m.mu.Lock()

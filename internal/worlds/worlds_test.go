@@ -3,6 +3,7 @@ package worlds
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -403,7 +404,7 @@ func TestZipSlipRejected(t *testing.T) {
 func TestLocalCandidates(t *testing.T) {
 	l := newLib(t)
 	home := t.TempDir()
-	src := GameSaveSources(home, "", true)
+	src := gameSaveSources(home, "", "windows")
 	makeFolderWorld(t, src[0].Dir, "MyGame", "S")
 	makeClassicWorld(t, src[1].Dir, "Older", "Older", "S")
 	cands := l.LocalCandidates(src)
@@ -418,6 +419,21 @@ func TestLocalCandidates(t *testing.T) {
 	// Copying must leave the game's own saves in place.
 	if _, err := os.Stat(filepath.Join(src[0].Dir, "MyGame", "_main.1.fwl2")); err != nil {
 		t.Fatal("source world was moved instead of copied")
+	}
+}
+
+// On a Mac the game keeps its saves in Application Support, not where it
+// does on Linux.
+func TestLocalCandidatesOnMac(t *testing.T) {
+	l := newLib(t)
+	home := t.TempDir()
+	makeFolderWorld(t, filepath.Join(home, "Library", "Application Support", "IronGate", "Valheim", "worlds_local"), "MacWorld", "S")
+	cands := l.LocalCandidates(gameSaveSources(home, "", "darwin"))
+	if len(cands) != 1 || cands[0].Name != "MacWorld" {
+		t.Fatalf("candidates = %+v", cands)
+	}
+	if src := gameSaveSources(home, "", "linux"); src[0].Dir != filepath.Join(home, ".config", "unity3d", "IronGate", "Valheim", "worlds_local") {
+		t.Fatalf("Linux sources = %+v", src)
 	}
 }
 
@@ -525,14 +541,14 @@ func TestFailedReplacePutsOldCopyBack(t *testing.T) {
 func TestExportWaitsForSaves(t *testing.T) {
 	old := exportRetryDelay
 	exportRetryDelay = 10 * time.Millisecond
-	t.Cleanup(func() { exportRetryDelay, exportCopied = old, nil })
+	t.Cleanup(func() { exportRetryDelay, zipping = old, nil })
 	l := newLib(t)
 	makeFolderWorld(t, l.Worlds, "Midgard", "S")
 	// The "server" saves while each copy is being zipped, so no
 	// half-and-half copy may be handed out. Each save has a new size, which
 	// shows even where file times are coarse.
 	saves := 0
-	exportCopied = func() {
+	zipping = func() {
 		saves++
 		os.WriteFile(filepath.Join(l.Worlds, "Midgard", "_main.1.db2"), bytes.Repeat([]byte{byte(saves)}, 1000+saves), 0o644)
 	}
@@ -541,7 +557,7 @@ func TestExportWaitsForSaves(t *testing.T) {
 		t.Fatalf("err = %v after %d saves", err, saves)
 	}
 	// Once it settles, the export works.
-	exportCopied = nil
+	zipping = nil
 	if _, err := l.ExportFile("Midgard", t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
@@ -582,5 +598,303 @@ func TestReadMetaLimit(t *testing.T) {
 		t.Fatal(err)
 	} else if m, err := ParseMeta(data); err != nil || m.Name != "Midgard" {
 		t.Fatalf("meta = %+v %v", m, err)
+	}
+}
+
+// A backup of the running world works when the server saves while it is
+// being zipped: the save deletes files that were listed, and the backup
+// starts again with the new ones.
+func TestBackupWhileSaving(t *testing.T) {
+	old := exportRetryDelay
+	exportRetryDelay = 10 * time.Millisecond
+	t.Cleanup(func() { exportRetryDelay, zipping = old, nil })
+	l := newLib(t)
+	makeFolderWorld(t, l.Worlds, "Midgard", "S")
+	dir := filepath.Join(l.Worlds, "Midgard")
+	saves := 0
+	zipping = func() {
+		saves++
+		if saves > 1 {
+			return
+		}
+		// Valheim writes generation 2, then deletes generation 1.
+		for _, f := range []string{"_main.1.fwl2", "_main.1.db2", "_main.1.chunks", "_main.1.ok"} {
+			data, _ := os.ReadFile(filepath.Join(dir, f))
+			os.WriteFile(filepath.Join(dir, strings.Replace(f, ".1.", ".2.", 1)), data, 0o644)
+			os.Remove(filepath.Join(dir, f))
+		}
+	}
+	b, err := l.Backup("Midgard", "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(b.path)
+	entries := zipEntries(t, data)
+	if saves != 2 || entries["Midgard/_main.2.db2"] != 1000 || len(entries) != 5 {
+		t.Fatalf("after %d tries the backup holds %v", saves, entries)
+	}
+
+	// A server that never stops saving gets a clear message, and no half
+	// copy or temporary file is kept.
+	zipping = func() {
+		saves++
+		os.WriteFile(filepath.Join(dir, "_main.2.db2"), bytes.Repeat([]byte{9}, 1000+saves), 0o644)
+	}
+	if _, err := l.Backup("Midgard", "manual"); err == nil || !strings.Contains(err.Error(), "kept saving") {
+		t.Fatalf("err = %v", err)
+	}
+	if files, _ := os.ReadDir(filepath.Join(l.Backups, "Midgard")); len(files) != 1 {
+		t.Fatalf("backup folder holds %v", files)
+	}
+}
+
+// A deleted world can be restored after a new save folder that doesn't
+// exist yet was chosen.
+func TestRestoreIntoMissingSaveFolder(t *testing.T) {
+	l := newLib(t)
+	makeFolderWorld(t, l.Worlds, "Midgard", "S")
+	if err := l.Delete("Midgard"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Dir(l.Worlds)); err != nil {
+		t.Fatal(err)
+	}
+	_, orphans, err := l.List()
+	if err != nil || len(orphans) != 1 || len(orphans[0].Backups) != 1 {
+		t.Fatalf("orphans = %+v, %v", orphans, err)
+	}
+	if err := l.Restore("Midgard", orphans[0].Backups[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if w, err := l.Get("Midgard"); err != nil || w.Seed != "S" {
+		t.Fatalf("restored world = %+v, %v", w, err)
+	}
+}
+
+// caseBlind reports whether dir's file system ignores letter case, as
+// Windows and macOS normally do.
+func caseBlind(t *testing.T, dir string) bool {
+	t.Helper()
+	writeFile(t, filepath.Join(dir, "CaseTest"), nil)
+	defer os.Remove(filepath.Join(dir, "CaseTest"))
+	_, err := os.Stat(filepath.Join(dir, "casetest"))
+	return err == nil
+}
+
+// Where letter case doesn't count, an upload called "midgard" replaces the
+// server's "Midgard": it is backed up and removed under its own name.
+func TestReplaceWorldNamedInOtherCase(t *testing.T) {
+	l := newLib(t)
+	makeFolderWorld(t, l.Worlds, "Midgard", "Server")
+	if got := l.savedName("midgard"); got != "Midgard" {
+		t.Fatalf("saved name = %q", got)
+	}
+	if !caseBlind(t, l.Worlds) {
+		t.Skip("this file system tells letter case apart, so the names don't clash")
+	}
+	u, _ := l.NewUpload()
+	defer u.Remove()
+	makeClassicWorld(t, u.Content, "midgard", "midgard", "Friend")
+	cands := u.Scan(l)
+	if len(cands) != 1 || !cands[0].Exists || cands[0].ServerModified.IsZero() {
+		t.Fatalf("candidates = %+v", cands)
+	}
+	done, err := l.Import(cands, []Choice{{ID: cands[0].ID, Action: "replace"}}, func(string) bool { return false }, true)
+	if err != nil || len(done) != 1 || !done[0].Replaced {
+		t.Fatalf("import = %+v, %v", done, err)
+	}
+	if w, err := l.Get("midgard"); err != nil || w.Seed != "Friend" || w.Format != FormatClassic {
+		t.Fatalf("midgard = %+v, %v", w, err)
+	}
+	files, _ := os.ReadDir(filepath.Join(l.Backups, "Midgard"))
+	if len(files) != 1 || !strings.Contains(files[0].Name(), "before-replace") {
+		t.Fatalf("backups = %v", files)
+	}
+}
+
+// If a world's files can't all be moved out of the way (on Windows, when a
+// download or another program has one open), a restore or replace changes
+// nothing, instead of leaving the world half deleted.
+func TestLockedFileLeavesWorldAlone(t *testing.T) {
+	t.Cleanup(func() { renameFile = os.Rename })
+	locked := func(name string) func(string, string) error {
+		return func(from, to string) error {
+			if filepath.Base(from) == name {
+				return &os.LinkError{Op: "rename", Old: from, New: to, Err: errors.New("the file is being used by another process")}
+			}
+			return os.Rename(from, to)
+		}
+	}
+	l := newLib(t)
+	noHidden := func() {
+		t.Helper()
+		entries, _ := os.ReadDir(l.Worlds)
+		for _, e := range entries {
+			if strings.HasPrefix(e.Name(), asidePrefix) {
+				t.Fatalf("%s left in the worlds folder", e.Name())
+			}
+		}
+	}
+
+	// An old-format world: its .fwl moves, then its .db can't.
+	makeClassicWorld(t, l.Worlds, "Dedicated", "Dedicated", "Now")
+	makeClassicWorld(t, l.Worlds, "Dedicated_backup_auto-20230209191710", "Dedicated", "Then")
+	w, _ := l.Get("Dedicated")
+	var auto Backup
+	for _, b := range w.Backups {
+		if b.Kind == KindAuto {
+			auto = b
+		}
+	}
+	renameFile = locked("Dedicated.db")
+	if err := l.Restore("Dedicated", auto.ID); err == nil || !strings.Contains(err.Error(), "nothing was changed") {
+		t.Fatalf("err = %v", err)
+	}
+	if w, err := l.Get("Dedicated"); err != nil || w.Seed != "Now" || w.NeverSaved {
+		t.Fatalf("Dedicated after a failed restore = %+v, %v", w, err)
+	}
+	noHidden()
+
+	// A 1.0 world whose folder can't be moved.
+	makeFolderWorld(t, l.Worlds, "Midgard", "Server")
+	u, _ := l.NewUpload()
+	defer u.Remove()
+	makeFolderWorld(t, u.Content, "Midgard", "Upload")
+	cands := u.Scan(l)
+	renameFile = locked("Midgard")
+	_, err := l.Import(cands, []Choice{{ID: cands[0].ID, Action: "replace"}}, func(string) bool { return false }, true)
+	if err == nil || !strings.Contains(err.Error(), "nothing was changed") {
+		t.Fatalf("err = %v", err)
+	}
+	if w, err := l.Get("Midgard"); err != nil || w.Seed != "Server" {
+		t.Fatalf("Midgard after a failed replace = %+v, %v", w, err)
+	}
+	if _, err := os.Stat(filepath.Join(l.Worlds, "Midgard", "00_00__0_1.chunk")); err != nil {
+		t.Fatal("Midgard lost files")
+	}
+	noHidden()
+
+	// Once the file is free, the replace works.
+	renameFile = os.Rename
+	if _, err := l.Import(cands, []Choice{{ID: cands[0].ID, Action: "replace"}}, func(string) bool { return false }, true); err != nil {
+		t.Fatal(err)
+	}
+	if w, _ := l.Get("Midgard"); w.Seed != "Upload" {
+		t.Fatalf("Midgard = %+v", w)
+	}
+	noHidden()
+}
+
+// Deleting or restoring a world keeps what its safety backup leaves out:
+// Valheim's "previous save" (.fwl.old/.db.old) and an old-format copy that
+// the 1.0 folder hides.
+func TestRemovingKeepsWhatTheBackupLeavesOut(t *testing.T) {
+	l := newLib(t)
+	makeFolderWorld(t, l.Worlds, "Midgard", "Folder")
+	makeClassicWorld(t, l.Worlds, "Midgard", "Midgard", "Hidden")
+	writeFile(t, filepath.Join(l.Worlds, "Midgard.fwl.old"), meta("Midgard", "Previous"))
+	writeFile(t, filepath.Join(l.Worlds, "Midgard.db.old"), []byte("old"))
+	if err := l.Delete("Midgard"); err != nil {
+		t.Fatal(err)
+	}
+	worlds, orphans, _ := l.List()
+	if len(worlds) != 0 || len(orphans) != 1 {
+		t.Fatalf("after delete: worlds=%+v orphans=%+v", worlds, orphans)
+	}
+	byKind := map[string]Backup{}
+	for _, b := range orphans[0].Backups {
+		byKind[b.Kind] = b
+	}
+	if byKind[KindApp].ID == "" || byKind[KindPrevious].ID == "" || byKind[KindValheim].ID == "" {
+		t.Fatalf("backups = %+v", orphans[0].Backups)
+	}
+	var buf bytes.Buffer
+	if err := l.ExportBackup(&buf, "Midgard", byKind[KindValheim].ID); err != nil {
+		t.Fatal(err)
+	}
+	if entries := zipEntries(t, buf.Bytes()); entries["Midgard.db"] != 700 || entries["Midgard.fwl"] == 0 {
+		t.Fatalf("hidden copy = %v", entries)
+	}
+
+	// Restoring an old-format world's backup keeps its previous save.
+	makeClassicWorld(t, l.Worlds, "Dedicated", "Dedicated", "Now")
+	writeFile(t, filepath.Join(l.Worlds, "Dedicated.fwl.old"), meta("Dedicated", "Previous"))
+	writeFile(t, filepath.Join(l.Worlds, "Dedicated.db.old"), []byte("old"))
+	makeClassicWorld(t, l.Worlds, "Dedicated_backup_auto-20230209191710", "Dedicated", "Then")
+	w, _ := l.Get("Dedicated")
+	for _, b := range w.Backups {
+		if b.Kind == KindAuto {
+			if err := l.Restore("Dedicated", b.ID); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if w, _ := l.Get("Dedicated"); w.Seed != "Then" {
+		t.Fatalf("Dedicated = %+v", w)
+	}
+	if !fileExists(filepath.Join(l.Worlds, "Dedicated.fwl.old")) || !fileExists(filepath.Join(l.Worlds, "Dedicated.db.old")) {
+		t.Fatal("the previous save was deleted")
+	}
+}
+
+func buildZipAt(t *testing.T, mod time.Time, files map[string][]byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, data := range files {
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: name, Method: zip.Deflate, Modified: mod})
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Write(data)
+	}
+	zw.Close()
+	return buf.Bytes()
+}
+
+// Two zips of the same world in one upload stay two separate copies, and
+// the newer one is the one chosen, instead of their files being mixed.
+func TestTwoZipsOfOneWorld(t *testing.T) {
+	l := newLib(t)
+	u, _ := l.NewUpload()
+	defer u.Remove()
+	older := buildZipAt(t, time.Date(2024, 1, 1, 12, 0, 0, 0, time.Local), map[string][]byte{
+		"Midgard/_main.5.fwl2": meta("Midgard", "Five"),
+		"Midgard/_main.5.db2":  []byte("five"),
+		"Midgard/00_00.chunk":  []byte("old chunk"),
+	})
+	newer := buildZipAt(t, time.Date(2025, 1, 1, 12, 0, 0, 0, time.Local), map[string][]byte{
+		"Midgard/_main.9.fwl2": meta("Midgard", "Nine"),
+		"Midgard/_main.9.db2":  []byte("nine"),
+		"Midgard/00_00.chunk":  []byte("new chunk"),
+	})
+	// The newer one comes first, so the older one would win if both were
+	// unpacked into the same folder.
+	if err := u.AddFile("Midgard new.zip", bytes.NewReader(newer)); err != nil {
+		t.Fatal(err)
+	}
+	if err := u.AddFile("Midgard old.zip", bytes.NewReader(older)); err != nil {
+		t.Fatal(err)
+	}
+	cands := u.Scan(l)
+	if len(cands) != 2 || cands[0].ID == cands[1].ID {
+		t.Fatalf("candidates = %+v", cands)
+	}
+	var choices []Choice
+	for _, c := range cands {
+		action := "import"
+		if c.Superseded {
+			action = "skip"
+		} else if c.Seed != "Nine" {
+			t.Fatalf("the older copy was chosen: %+v", cands)
+		}
+		choices = append(choices, Choice{ID: c.ID, Action: action})
+	}
+	if _, err := l.Import(cands, choices, func(string) bool { return false }, true); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(l.Worlds, "Midgard")
+	if chunk, _ := os.ReadFile(filepath.Join(dir, "00_00.chunk")); string(chunk) != "new chunk" || fileExists(filepath.Join(dir, "_main.5.db2")) {
+		t.Fatalf("mixed copy: chunk %q", chunk)
 	}
 }

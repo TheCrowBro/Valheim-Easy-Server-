@@ -267,11 +267,12 @@ func (m *Manager) CreateWorld(name string, o config.WorldOptions, restart bool) 
 	if m.library().Exists(name) {
 		return fmt.Errorf("there's already a world called %q", name)
 	}
-	if !o.IsZero() {
-		o.Off = nil // a new world has nothing to turn off
-		if err := m.changeWorldOptions(name, func(config.WorldOptions) config.WorldOptions { return o }); err != nil {
-			return err
-		}
+	// Set the options even when none were chosen: a deleted world keeps its
+	// options (so restoring it brings them back), and a new world with its
+	// name mustn't get its difficulty and mods.
+	o.Off = nil // a new world has nothing to turn off
+	if err := m.changeWorldOptions(name, func(config.WorldOptions) config.WorldOptions { return o }); err != nil {
+		return err
 	}
 	return m.SelectWorld(name, restart)
 }
