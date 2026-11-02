@@ -88,13 +88,16 @@ func (m *Manager) busyLocked() bool {
 	return false
 }
 
-// noteUpdate reports how the update that restarted the app went.
-func (m *Manager) noteUpdate() {
+// noteUpdate reports how the update that restarted the app went. It
+// returns true when the app was restarted by an update (into the new build,
+// or back to this one when the new build didn't start).
+func (m *Manager) noteUpdate() bool {
 	var rec updateRecord
 	b, err := os.ReadFile(m.dataFile(updateFile))
 	if err != nil || json.Unmarshal(b, &rec) != nil {
-		return
+		return false
 	}
+	updated := rec.To != 0
 	switch {
 	case rec.To == 0:
 	case m.opt.AppBuild == rec.To:
@@ -115,6 +118,7 @@ func (m *Manager) noteUpdate() {
 	m.app.failed = rec.Failed
 	m.mu.Unlock()
 	m.saveUpdateRecord(rec)
+	return updated
 }
 
 func (m *Manager) saveUpdateRecord(rec updateRecord) {

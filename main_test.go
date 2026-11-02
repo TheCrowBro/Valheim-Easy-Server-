@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -11,9 +12,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"valheim-easy-server/internal/manager"
 )
 
 // TestMain lets the test program stand in for an updated copy of the app.
@@ -103,6 +108,126 @@ func TestStartUpdatedGoesBack(t *testing.T) {
 	}
 	if _, err := os.Stat(exe); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// fakeStopper is a server that may be busy with a job for a while.
+type fakeStopper struct {
+	mu       sync.Mutex
+	state    manager.State
+	job      *manager.Job // in progress
+	busyFor  int          // how many more stop requests find the job still running
+	updating bool         // the app is updating, so no job can start
+	stops    int
+	cancels  int
+}
+
+func (f *fakeStopper) StopServer() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.job != nil && !f.job.Cancellable {
+		if f.busyFor > 0 {
+			f.busyFor--
+			return &manager.BusyError{Title: strings.ToLower(f.job.Title)}
+		}
+		f.job = nil // it got to waiting for the world to load, which Stop ends
+	}
+	if f.state == manager.StateStopped {
+		return errors.New("The server isn't running.")
+	}
+	if f.updating {
+		return &manager.BusyError{Title: "updating the app"}
+	}
+	f.stops++
+	f.state = manager.StateStopped
+	return nil
+}
+
+func (f *fakeStopper) CancelJob() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.job != nil && f.job.Cancellable {
+		f.cancels++
+		f.job = nil
+	}
+	return nil
+}
+
+func (f *fakeStopper) Status() manager.Status {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return manager.Status{State: f.state, Job: f.job, App: manager.AppInfo{Updating: f.updating}}
+}
+
+// Stopping the server before the app closes waits for a job in progress,
+// such as a restart, instead of leaving the server running.
+func TestStopAndWait(t *testing.T) {
+	logger := log.New(io.Discard, "", 0)
+	restart := &manager.Job{Kind: "restart", Title: "Restarting the server"}
+
+	f := &fakeStopper{state: manager.StateStarting, job: restart, busyFor: 3}
+	if err := stopAndWait(f, logger); err != nil || f.stops != 1 {
+		t.Fatalf("during a restart: %v, stopped %d times", err, f.stops)
+	}
+
+	f = &fakeStopper{state: manager.StateStopped}
+	if err := stopAndWait(f, logger); err != nil || f.stops != 0 {
+		t.Fatalf("already stopped: %v, stopped %d times", err, f.stops)
+	}
+
+	// Getting ready to start the server is cancelled.
+	f = &fakeStopper{state: manager.StateStopped, job: &manager.Job{Kind: "start", Cancellable: true}}
+	if err := stopAndWait(f, logger); err != nil || f.cancels != 1 || f.stops != 0 {
+		t.Fatalf("while getting ready to start: %v, cancelled %d, stopped %d times", err, f.cancels, f.stops)
+	}
+
+	// While the app updates, nothing can stop it: that's said, not waited
+	// for.
+	f = &fakeStopper{state: manager.StateOnline, updating: true}
+	start := time.Now()
+	if err := stopAndWait(f, logger); err == nil || time.Since(start) > 5*time.Second {
+		t.Fatalf("while updating: %v after %s", err, time.Since(start))
+	}
+}
+
+// A copy run straight from a zip, which Windows unpacks into the temp
+// folder, keeps its files elsewhere: they'd be cleaned up with the temp
+// folder. %TEMP% may name the folder differently from the program's own
+// path, with a short 8.3 name such as JOHNSM~1 (a symbolic link here).
+func TestDataDirNotInTemp(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("a Mac app always keeps its files in Application Support")
+	}
+	temp, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(t.TempDir(), "TEMPOR~1")
+	if err := os.Symlink(temp, other); err != nil {
+		t.Skip("can't make a symbolic link here:", err)
+	}
+	cfg := t.TempDir()
+	for _, name := range []string{"XDG_CONFIG_HOME", "AppData", "LOCALAPPDATA"} {
+		t.Setenv(name, cfg)
+	}
+	setTemp := func(dir string) {
+		for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+			t.Setenv(name, dir)
+		}
+	}
+	unzipped := filepath.Join(temp, "Temp1_ValheimEasyServer-windows.zip")
+	os.MkdirAll(unzipped, 0o755)
+	setTemp(other)
+	if got, err := resolveDataDir("", filepath.Join(unzipped, "ValheimEasyServer.exe")); err != nil || got != filepath.Join(cfg, "ValheimEasyServer") {
+		t.Fatalf("run from the temp folder: %q, %v", got, err)
+	}
+
+	// A folder next to the temp folder isn't in it.
+	beside := temp + "orary"
+	os.MkdirAll(beside, 0o755)
+	setTemp(temp)
+	if got, err := resolveDataDir("", filepath.Join(beside, "ValheimEasyServer.exe")); err != nil || got != beside {
+		t.Fatalf("run from a folder next to the temp folder: %q, %v", got, err)
 	}
 }
 

@@ -170,7 +170,13 @@ func (m *Manager) startImport(cands []worlds.Candidate, choices []worlds.Choice,
 			defer after()
 		}
 		restart := m.replacesRunning(names)
+		running := "" // the world to start again: the selected one may be another
 		if restart {
+			m.mu.Lock()
+			if m.run != nil {
+				running = m.run.info.World
+			}
+			m.mu.Unlock()
 			if err := m.doStop(ctx, j); err != nil {
 				return err
 			}
@@ -183,16 +189,21 @@ func (m *Manager) startImport(cands []worlds.Candidate, choices []worlds.Choice,
 			return m.worldBusyLocked(name)
 		}
 		done, err := m.library().Import(cands, choices, busy, move)
+		var added []string
 		for _, p := range done {
 			if p.Replaced {
 				m.addActivity("import", "", fmt.Sprintf("The world %q was replaced with a new copy. The old one is kept as a backup.", p.Name))
 			} else {
 				m.addActivity("import", "", fmt.Sprintf("The world %q was added.", p.Name))
+				added = append(added, p.Name)
 			}
+		}
+		if serr := m.clearWorldOptions(added); serr != nil {
+			m.log.Printf("clearing the options of added worlds: %v", serr)
 		}
 		if restart {
 			j.step("Starting the server again…", -1)
-			if serr := m.doStart(ctx, j); serr != nil {
+			if serr := m.doStart(ctx, j, running); serr != nil {
 				if err == nil {
 					return fmt.Errorf("%s But the server didn't start again: %w", importResult(done), serr)
 				}
@@ -215,6 +226,26 @@ func (m *Manager) startImport(cands []worlds.Candidate, choices []worlds.Choice,
 		j.result(msg)
 		return nil
 	})
+}
+
+// clearWorldOptions forgets the difficulty and mods saved for worlds that
+// were just added: they belonged to an earlier world of the same name (one
+// that was deleted, say), not to the one added now.
+func (m *Manager) clearWorldOptions(names []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	next := m.settings.Clone()
+	changed := false
+	for _, name := range names {
+		if _, ok := next.WorldOptions[name]; ok {
+			delete(next.WorldOptions, name)
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return m.saveSettingsLocked(next)
 }
 
 func (m *Manager) serverRunning() bool {

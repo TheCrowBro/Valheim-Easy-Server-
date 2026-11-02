@@ -94,6 +94,7 @@ type Manager struct {
 	discordPending atomic.Int32     // queued or being posted
 	keyMu          sync.Mutex       // the app's key for the JetKVM is made once
 	codesMu        sync.Mutex       // modscodes.json
+	runFileMu      sync.Mutex       // runtime.json, written by saveRunInfo
 
 	mu             sync.Mutex
 	settings       config.Settings
@@ -102,6 +103,7 @@ type Manager struct {
 	job            *Job
 	jobCancel      context.CancelFunc
 	jobSeq         int
+	loadWait       *Job // the job that started the server and waits for its world to load
 	lastExit       *ExitInfo
 	live           Live
 	crashes        []time.Time
@@ -178,9 +180,19 @@ type runInfo struct {
 	Exe      string    `json:"exe"`
 	// Announced is the join code posted in Discord ("online" when there's
 	// no code), so it's posted once even if the app restarts.
-	Announced   string `json:"announced,omitempty"`
-	Played      played `json:"played"`                // the mods and password it started with
-	NoCrossplay bool   `json:"noCrossplay,omitempty"` // started without crossplay, so no join code
+	Announced string `json:"announced,omitempty"`
+	// When that post went out, or why it didn't, so a restarted app can
+	// still say.
+	Posted      time.Time `json:"posted,omitempty"`
+	PostError   string    `json:"postError,omitempty"`
+	Played      played    `json:"played"`                // the mods and password it started with
+	NoCrossplay bool      `json:"noCrossplay,omitempty"` // started without crossplay, so no join code
+	// The server name, port and password it started with, which friends
+	// need until a restart applies changed settings. Port is 0 for a
+	// server started by an older version of the app.
+	Server   string `json:"server,omitempty"`
+	Port     int    `json:"port,omitempty"`
+	Password string `json:"password,omitempty"`
 	// ModsCode imports the world's mods in a mod manager (see modscode.go),
 	// the mods in CodeMods (sorted), which the server started with.
 	ModsCode    string   `json:"modsCode,omitempty"`
@@ -211,6 +223,9 @@ func New(opt Options) (*Manager, error) {
 		known:    map[string]*KnownPlayer{},
 		uploads:  map[string]*worlds.Upload{},
 		discordQ: make(chan discordPost, 16),
+		// Job numbers carry on from the clock, so they never repeat after the
+		// app restarts: an open control panel tells jobs apart by number.
+		jobSeq: int(time.Now().UnixMilli()),
 	}
 	settingsPath := filepath.Join(opt.DataDir, "settings.json")
 	s, existed, err := config.Load(settingsPath)
@@ -278,9 +293,7 @@ func (m *Manager) Start() {
 	m.sys = platform.NewSysSampler()
 	m.awake = platform.NewKeepAwake("Valheim server is running")
 	m.library().CleanUploads(time.Hour)
-	if m.canUpdate() {
-		m.noteUpdate()
-	}
+	updated := m.canUpdate() && m.noteUpdate()
 	m.adoptRunning()
 	m.go_(m.sampleLoop)
 	m.go_(m.checksLoop)
@@ -294,6 +307,12 @@ func (m *Manager) Start() {
 	m.mu.Lock()
 	autoStart := m.settings.StartWithApp && m.run == nil && m.installedLocked()
 	m.mu.Unlock()
+	if autoStart && updated {
+		// Nobody opened the app: it restarted to update. A server that was
+		// stopped stays stopped (one that was running is taken over).
+		m.log.Printf("not starting the server: the app restarted after an update")
+		autoStart = false
+	}
 	if autoStart {
 		m.addActivity("info", "", "Starting the server because \"Start the server when the app opens\" is on.")
 		if err := m.StartServer(); err != nil {
@@ -315,6 +334,18 @@ func (m *Manager) Close() {
 	}
 	m.syncWakeListener() // stops listening
 	m.wg.Wait()
+	// A join code post that hasn't gone out yet (Discord may be down) is
+	// left for the app that takes the server over.
+	m.mu.Lock()
+	run := m.run
+	unposted := run != nil && run.info.Announced != "" && run.info.Posted.IsZero() && run.info.PostError == ""
+	if unposted {
+		run.info.Announced = ""
+	}
+	m.mu.Unlock()
+	if unposted {
+		m.saveRunInfo(run)
+	}
 	m.saveData()
 	if m.sys != nil {
 		m.sys.Close()

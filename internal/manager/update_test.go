@@ -168,6 +168,48 @@ func TestAppUpdates(t *testing.T) {
 	}
 }
 
+// The app restarting to update itself doesn't start a server that was
+// stopped, even with "Start the server when the app opens" on.
+func TestUpdateRestartLeavesServerStopped(t *testing.T) {
+	env := setup(t)
+	m := env.m
+	install(t, m)
+	s := m.Settings()
+	s.StartWithApp = true
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	m.Close()
+	exe := filepath.Join(t.TempDir(), selfupdate.ExeName)
+	os.WriteFile(exe, []byte(selfupdate.ProgramHeader+" build 5"), 0o755)
+	open := func() *Manager {
+		m := newTestManager(t, env.data, env)
+		m.opt.AppExe, m.opt.AppBuild, m.opt.AppVersion = exe, 5, "build-5"
+		m.opt.Updater = &selfupdate.Updater{API: "http://127.0.0.1:1"}
+		m.opt.Relaunch = func() { t.Error("the app restarted") }
+		m.Start()
+		env.m = m
+		return m
+	}
+	data, _ := json.Marshal(updateRecord{From: 4, To: 5})
+	os.WriteFile(filepath.Join(env.data, updateFile), data, 0o644)
+	m = open()
+	if !hasText(m, "update", "The app was updated to build 5") {
+		t.Fatal("no activity about the update")
+	}
+	if st := m.Status(); st.Job != nil || st.State != StateStopped {
+		t.Fatalf("after the update: state %s, job %+v", st.State, st.Job)
+	}
+	m.Close()
+
+	// Opened by someone, it starts the server.
+	m = open()
+	if st := m.Status(); st.Job == nil || st.Job.Kind != "start" {
+		t.Fatalf("not started when the app opened: %+v", st.Job)
+	}
+	waitJob(t, m, currentJobID(m))
+}
+
 func waitRelaunch(t *testing.T, relaunched chan struct{}) {
 	t.Helper()
 	select {

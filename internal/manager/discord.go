@@ -51,7 +51,7 @@ const (
 // server has one, and again if the code changes; ok is false when there's
 // nothing new to post. The caller queues it and saves run.info.
 func (m *Manager) announceLocked(run *serverRun) (p discordPost, ok bool) {
-	s := m.settings
+	s := m.joinSettingsLocked(run) // what friends join with, not changes waiting for a restart
 	if !s.Discord || m.run != run || !run.ready || run.stopping || run.replaying || run.info.codePending {
 		return p, false // the mods code comes within seconds
 	}
@@ -67,19 +67,18 @@ func (m *Manager) announceLocked(run *serverRun) (p discordPost, ok bool) {
 		return p, false
 	}
 	run.info.Announced = key
+	run.info.Posted, run.info.PostError = time.Time{}, ""
 	run.discordAt, run.discordErr = time.Time{}, ""
 
 	msg := onlineMessage{Server: s.ServerName, World: run.info.World, Code: code, ModsCode: m.modsCodeLocked(run), Reminder: m.reminderLocked(run)}
 	if s.DiscordPassword {
 		msg.Password = s.Password
 	}
-	for _, id := range s.WorldOptions[run.info.World].Mods {
-		md, ok := mods.Find(id)
-		switch {
-		case ok && md.Players == mods.PlayersOnly:
-			msg.Optional = append(msg.Optional, ModInfo{Mod: md})
-		case ok:
-			msg.Mods = append(msg.Mods, ModInfo{Mod: md, Version: m.modVersions[md.Package]})
+	for _, md := range m.playerModsLocked(run.info.World, run) {
+		if md.Players == mods.PlayersOnly {
+			msg.Optional = append(msg.Optional, ModInfo{Mod: md.Mod})
+		} else {
+			msg.Mods = append(msg.Mods, md)
 		}
 	}
 	what := "the join code"
@@ -97,14 +96,19 @@ func (m *Manager) announceLocked(run *serverRun) (p discordPost, ok bool) {
 		},
 		done: func(err error) {
 			m.mu.Lock()
-			if run.info.Announced == key {
+			current := run.info.Announced == key
+			if current {
 				if err == nil {
 					run.discordAt = time.Now()
 				} else {
 					run.discordErr = err.Error()
 				}
+				run.info.Posted, run.info.PostError = run.discordAt, run.discordErr
 			}
 			m.mu.Unlock()
+			if current {
+				m.saveRunInfo(run) // so an app that takes over can say how it went
+			}
 			if err != nil {
 				m.addActivity("warning", "", fmt.Sprintf("Couldn't post %s in Discord. %v", what, err))
 			} else {
@@ -223,17 +227,20 @@ func stoppedText(server string, why stopReason, code bool) string {
 	return "🔴 " + name + " has stopped. " + back
 }
 
-// publicAddress is the server's internet address, looked up if needed.
+// publicAddress is the server's internet address, looked up again unless
+// it was looked up lately: it may have changed, for example while the
+// computer slept, and nobody may have opened the control panel since.
 func (m *Manager) publicAddress(port int) string {
 	m.mu.Lock()
-	ip := m.net.public
+	ip, at := m.net.public, m.net.publicAt
 	m.mu.Unlock()
-	if ip == "" && !m.opt.NoPublicIP {
-		if ip = fetchPublicIP(); ip != "" {
+	if (ip == "" || at.IsZero() || time.Since(at) > publicMaxAge) && !m.opt.NoPublicIP {
+		if fresh := fetchPublicIP(); fresh != "" {
+			ip = fresh
 			m.mu.Lock()
 			m.net.public, m.net.publicAt = ip, time.Now()
 			m.mu.Unlock()
-		}
+		} // otherwise the last address known is the best guess
 	}
 	if ip == "" {
 		return ""
@@ -315,6 +322,10 @@ func (m *Manager) webhookURL(link string) string {
 // saveRunInfo writes what's known about the running server to
 // runtime.json, so a restarted app knows what was already posted.
 func (m *Manager) saveRunInfo(run *serverRun) {
+	// Saves that overlap are written in the order they read run.info, so
+	// the file ends up with the newest.
+	m.runFileMu.Lock()
+	defer m.runFileMu.Unlock()
 	m.mu.Lock()
 	info, current := run.info, m.run == run
 	path := m.dataFile("runtime.json")

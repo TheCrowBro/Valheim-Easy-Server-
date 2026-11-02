@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -104,9 +105,13 @@ type Checklist struct {
 
 type netInfo struct {
 	public     string
-	publicAt   time.Time
+	publicAt   time.Time // when public was last found; zero after waking up
+	publicTry  time.Time // the last lookup, which may not have worked
 	publicBusy bool
 }
+
+// publicMaxAge is how long a public address that was looked up is trusted.
+const publicMaxAge = 30 * time.Minute
 
 type checkCache struct {
 	at            time.Time
@@ -156,16 +161,13 @@ func (m *Manager) Status() Status {
 			st.BuildDate = &date
 		}
 	}
-	st.Join = JoinInfo{Crossplay: s.Crossplay, Port: s.Port, Password: s.Password, Public: s.Public, LANAddrs: lanAddrs(s.Port)}
+	js := m.joinSettingsLocked(m.run) // what friends join with, not changes waiting for a restart
+	st.Join = JoinInfo{Crossplay: js.Crossplay, Port: js.Port, Password: js.Password, Public: s.Public, LANAddrs: lanAddrs(js.Port)}
 	world := s.World // the mods players need: the running world's, or the next one's
 	if m.run != nil {
 		world = m.run.info.World
 	}
-	for _, id := range s.WorldOptions[world].Mods {
-		if md, ok := mods.Find(id); ok {
-			st.Mods = append(st.Mods, ModInfo{Mod: md, Version: m.modVersions[md.Package]})
-		}
-	}
+	st.Mods = m.playerModsLocked(world, m.run)
 	if r := m.run; r != nil {
 		st.RunningWorld = r.info.World
 		launched := r.info.Launched
@@ -209,9 +211,9 @@ func (m *Manager) Status() Status {
 		st.Discord.Daily = s.DiscordDaily
 	}
 	if st.Join.PublicAddr == "" && m.net.public != "" {
-		st.Join.PublicAddr = net.JoinHostPort(m.net.public, strconv.Itoa(s.Port))
+		st.Join.PublicAddr = net.JoinHostPort(m.net.public, strconv.Itoa(js.Port))
 	}
-	if st.Join.PublicAddr == "" || time.Since(m.net.publicAt) > 30*time.Minute {
+	if st.Join.PublicAddr == "" || time.Since(m.net.publicAt) > publicMaxAge {
 		m.lookupPublicIPLocked()
 	}
 	if at := m.idleDeadlineLocked(); !at.IsZero() {
@@ -241,6 +243,45 @@ func (m *Manager) Status() Status {
 	return st
 }
 
+// joinSettingsLocked is the settings with the server name, port, password
+// and crossplay the running server started with, if one runs: changes to
+// them only apply after a restart, and friends need the ones in use.
+func (m *Manager) joinSettingsLocked(run *serverRun) config.Settings {
+	s := m.settings
+	if run == nil {
+		return s
+	}
+	s.Crossplay = !run.info.NoCrossplay
+	if run.info.Port != 0 { // 0 when started by an older version of the app
+		s.ServerName, s.Port, s.Password = run.info.Server, run.info.Port, run.info.Password
+	}
+	return s
+}
+
+// playerModsLocked lists the mods players need for world. For the running
+// server, that's the server mods it started with, at the versions it
+// loaded, and players' own mods from the settings, which need no restart.
+func (m *Manager) playerModsLocked(world string, run *serverRun) []ModInfo {
+	ids := m.settings.WorldOptions[world].Mods
+	var out []ModInfo
+	if run == nil || run.info.Played.Mods == nil { // stopped, or started by an older version of the app
+		for _, id := range ids {
+			if md, ok := mods.Find(id); ok {
+				out = append(out, ModInfo{Mod: md, Version: m.modVersions[md.Package]})
+			}
+		}
+		return out
+	}
+	for _, md := range mods.Catalog {
+		if v, ok := run.info.Played.Mods[md.ID]; ok {
+			out = append(out, ModInfo{Mod: md, Version: v})
+		} else if md.Players == mods.PlayersOnly && slices.Contains(ids, md.ID) {
+			out = append(out, ModInfo{Mod: md, Version: m.modVersions[md.Package]})
+		}
+	}
+	return out
+}
+
 // lanAddrs lists this computer's local network addresses with the port.
 func lanAddrs(port int) []string {
 	var out []string
@@ -266,27 +307,31 @@ func lanAddrs(port int) []string {
 
 // lookupPublicIPLocked fetches the internet address in the background.
 func (m *Manager) lookupPublicIPLocked() {
-	if m.opt.NoPublicIP || m.net.publicBusy || time.Since(m.net.publicAt) < 2*time.Minute {
+	if m.opt.NoPublicIP || m.net.publicBusy || time.Since(m.net.publicTry) < 2*time.Minute {
 		return
 	}
-	m.net.publicBusy = true
+	m.net.publicBusy, m.net.publicTry = true, time.Now()
 	go func() {
 		defer m.recoverPanic()
 		ip := fetchPublicIP()
 		m.mu.Lock()
 		m.net.publicBusy = false
-		m.net.publicAt = time.Now()
+		// A lookup that didn't work (say, just after waking up, before the
+		// network is back) doesn't make an old address count as fresh.
 		if ip != "" {
-			m.net.public = ip
+			m.net.public, m.net.publicAt = ip, time.Now()
 		}
 		m.mu.Unlock()
 	}()
 }
 
+// publicIPURL answers with this computer's internet address.
+var publicIPURL = "https://api.ipify.org"
+
 func fetchPublicIP() string {
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.ipify.org", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, publicIPURL, nil)
 	if err != nil {
 		return ""
 	}

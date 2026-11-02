@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"net/http/httptest"
@@ -17,6 +18,7 @@ import (
 	"valheim-easy-server/internal/config"
 	"valheim-easy-server/internal/mods"
 	"valheim-easy-server/internal/mods/modstest"
+	"valheim-easy-server/internal/platform"
 	"valheim-easy-server/internal/steamcmd"
 	"valheim-easy-server/internal/worlds"
 )
@@ -299,6 +301,10 @@ func TestModsAtStart(t *testing.T) {
 	if !m.Status().NeedsRestart {
 		t.Fatal("NeedsRestart should be true after turning a mod off")
 	}
+	// Until then the server still has it, so players still need it.
+	if st := m.Status(); len(st.Mods) != 1 || st.Mods[0].Name != "Advanced Portals" || st.Mods[0].Version != "1.2.0" {
+		t.Fatalf("status mods before restarting = %+v", st.Mods)
+	}
 	if err := m.RestartServer(); err != nil {
 		t.Fatal(err)
 	}
@@ -332,11 +338,14 @@ func TestModsAtStart(t *testing.T) {
 	if err := m.SetWorldMods(world, []string{"seasonality", "farlands"}); err != nil {
 		t.Fatal(err)
 	}
-	if m.Status().NeedsRestart {
-		t.Fatal("a mod only players use asked for a restart")
+	if st := m.Status(); st.NeedsRestart || len(st.Mods) != 2 || st.Mods[0].Name != "Seasonality" || st.Mods[1].Name != "FarLands" {
+		t.Fatalf("a mod only players use: restart needed %v, mods %+v", st.NeedsRestart, st.Mods)
 	}
 	if err := m.SetWorldMods(world, []string{"farlands"}); err != nil {
 		t.Fatal(err)
+	}
+	if st := m.Status(); len(st.Mods) != 2 || st.Mods[0].Name != "Seasonality" {
+		t.Fatalf("a mod the server still has was dropped: %+v", st.Mods)
 	}
 	if err := m.RestartServer(); err != nil {
 		t.Fatal(err)
@@ -439,6 +448,181 @@ func TestOnlineWhenOpeningIsNeverSaid(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, "stop", 20*time.Second, func() bool { return m.Status().State == StateStopped })
+}
+
+// Stop works while a restart, or an import that replaced the running
+// world, waits for the world to load, which can take many minutes: it
+// doesn't have to wait for that.
+func TestStopWhileTheWorldLoads(t *testing.T) {
+	env := setup(t)
+	m := env.m
+	s := m.Settings()
+	s.Crossplay = false // a join code would say it's open
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	install(t, m)
+	start := func() {
+		t.Helper()
+		t.Setenv("FAKE_VALHEIM_OPEN", "")
+		if err := m.StartServer(); err != nil {
+			t.Fatal(err)
+		}
+		waitFor(t, "server online", 20*time.Second, func() bool { return m.Status().State == StateOnline })
+		waitJob(t, m, currentJobID(m))
+		t.Setenv("FAKE_VALHEIM_OPEN", "quiet") // the next start never says it's open
+	}
+	stop := func(what string) {
+		t.Helper()
+		waitFor(t, what+" to wait for the world to load", 20*time.Second, func() bool {
+			st := m.Status()
+			return st.State == StateStarting && st.Job != nil && st.Job.Finished == nil &&
+				(strings.HasPrefix(st.Job.Message, "Loading the world") || strings.HasPrefix(st.Job.Message, "Making the new world"))
+		})
+		if err := m.StopServer(); err != nil {
+			t.Fatalf("stop while %s waits for the world: %v", what, err)
+		}
+		waitFor(t, "stop", 20*time.Second, func() bool { return m.Status().State == StateStopped })
+	}
+
+	start()
+	if err := m.RestartServer(); err != nil {
+		t.Fatal(err)
+	}
+	stop("a restart")
+
+	start()
+	u, cands := friendsCopy(t, m, "Midgard")
+	if _, err := m.ImportUpload(u, []worlds.Choice{{ID: cands[0].ID, Action: "replace"}}); err != nil {
+		t.Fatal(err)
+	}
+	stop("replacing the world")
+	if w, err := m.library().Get("Midgard"); err != nil || w.Seed != "FromFriend" {
+		t.Fatalf("Midgard = %+v, %v", w, err)
+	}
+}
+
+// friendsCopy uploads a friend's copy of a world and returns the upload's
+// ID and what was found in it.
+func friendsCopy(t *testing.T, m *Manager, name string) (string, []worlds.Candidate) {
+	t.Helper()
+	u, err := m.NewUpload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(u.Content, name)
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "_main.7.fwl2"), worlds.BuildMeta(worlds.Meta{Version: 37, Name: name, SeedName: "FromFriend", Seed: 5, UID: 6}, true), 0o644)
+	os.WriteFile(filepath.Join(dir, "_main.7.db2"), []byte("friend's world"), 0o644)
+	cands, err := m.FinishUpload(u.ID)
+	if err != nil || len(cands) != 1 {
+		t.Fatalf("candidates = %+v, %v", cands, err)
+	}
+	return u.ID, cands
+}
+
+// When the server can't be forced to stop (Windows refuses for a server
+// started by a copy of the app run as administrator), it isn't shown as
+// stopping from then on, and a later crash still counts as one.
+func TestForceStopThatFails(t *testing.T) {
+	env := &testEnv{data: t.TempDir()}
+	m := newTestManager(t, env.data, env)
+	// A process that has ended can't be killed either.
+	proc, err := platform.StartDetached(fakeServer, []string{"-logfile", filepath.Join(t.TempDir(), "missing", "x.log")}, t.TempDir(), os.Environ())
+	if err != nil {
+		t.Fatal(err)
+	}
+	proc.Wait()
+	run := &serverRun{proc: proc, done: make(chan struct{}), readyCh: make(chan struct{}), ready: true}
+	m.mu.Lock()
+	m.run = run
+	m.mu.Unlock()
+	check := func(wantStopping bool) {
+		t.Helper()
+		if err := m.ForceStop(); err == nil {
+			t.Fatal("killing an ended process worked")
+		}
+		m.mu.Lock()
+		stopping, forced := run.stopping, run.forced
+		m.mu.Unlock()
+		if stopping != wantStopping || forced {
+			t.Fatalf("after a force stop that failed: stopping %v, forced %v", stopping, forced)
+		}
+		if hasActivity(m, "warning", "") {
+			t.Fatal("the feed says the server was forced to stop")
+		}
+	}
+	check(false)
+	if st := m.Status().State; st != StateOnline {
+		t.Fatalf("state %s", st)
+	}
+	// While a stop is in progress, it stays one.
+	m.mu.Lock()
+	run.stopping = true
+	m.mu.Unlock()
+	check(true)
+	m.mu.Lock()
+	m.run = nil
+	m.mu.Unlock()
+}
+
+// Friends are told the password, port and crossplay the running server
+// uses: changed settings only apply after a restart.
+func TestJoinInfoIsTheRunningServers(t *testing.T) {
+	env := setup(t)
+	m := env.m
+	install(t, m)
+	s := m.Settings()
+	s.Crossplay = false
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.StartServer(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "server online", 20*time.Second, func() bool { return m.Status().State == StateOnline })
+	waitJob(t, m, currentJobID(m))
+	old := m.Settings()
+	s.Password, s.Port, s.Crossplay = "newsecret77", old.Port+2, true
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	if st := m.Status(); !st.NeedsRestart || st.Join.Password != old.Password || st.Join.Port != old.Port || st.Join.Crossplay {
+		t.Fatalf("join info before restarting: %+v (restart needed: %v)", st.Join, st.NeedsRestart)
+	}
+	if err := m.RestartServer(); err != nil {
+		t.Fatal(err)
+	}
+	if job := waitJob(t, m, currentJobID(m)); job.Error != "" {
+		t.Fatalf("restart: %s", job.Error)
+	}
+	if st := m.Status(); st.Join.Password != "newsecret77" || st.Join.Port != old.Port+2 || !st.Join.Crossplay {
+		t.Fatalf("join info after restarting: %+v", st.Join)
+	}
+}
+
+// Job numbers don't start again when the app restarts: an open control
+// panel would take the new jobs for ones it has already shown.
+func TestJobNumbersDontRepeat(t *testing.T) {
+	env := &testEnv{data: t.TempDir()}
+	nothing := func(context.Context, *jobCtl) error { return nil }
+	run := func(m *Manager) int {
+		t.Helper()
+		id, err := m.startJob("backup", "Backing up", false, nothing)
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitFor(t, "the job", 5*time.Second, func() bool {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			return m.job.Finished != nil
+		})
+		return id
+	}
+	first := run(newTestManager(t, env.data, env))
+	if again := run(newTestManager(t, env.data, env)); again <= first {
+		t.Fatalf("job %d after the app restarted, %d before", again, first)
+	}
 }
 
 func TestTakesOverRunningServer(t *testing.T) {
@@ -623,6 +807,14 @@ func TestReplaceRunningWorld(t *testing.T) {
 	}
 	waitFor(t, "server online", 30*time.Second, func() bool { return m.Status().State == StateOnline })
 	waitJob(t, m, currentJobID(m))
+	// Another world is picked for next time, and the world keeps its
+	// difficulty when it's replaced.
+	if err := m.SelectWorld("Later", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetWorldOptions("Midgard", config.WorldOptions{Preset: "hard"}); err != nil {
+		t.Fatal(err)
+	}
 
 	// A friend brings their own copy of the world the server is playing.
 	u, err := m.NewUpload()
@@ -650,8 +842,11 @@ func TestReplaceRunningWorld(t *testing.T) {
 		t.Fatalf("job = %+v", job)
 	}
 	st := m.Status()
-	if st.State != StateOnline || st.RunningWorld != "Midgard" {
-		t.Fatalf("after replacing: state=%s world=%q", st.State, st.RunningWorld)
+	if st.State != StateOnline || st.RunningWorld != "Midgard" || st.World != "Later" {
+		t.Fatalf("after replacing: state=%s world=%q, selected %q", st.State, st.RunningWorld, st.World)
+	}
+	if o := m.Settings().WorldOptions["Midgard"]; o.Preset != "hard" {
+		t.Fatalf("the replaced world's options = %+v", o)
 	}
 	w, err := m.library().Get("Midgard")
 	if err != nil || w.Seed != "FromFriend" {
@@ -705,5 +900,26 @@ func TestFirstWorldAddedIsPlayed(t *testing.T) {
 	}
 	if got := m.Settings().World; got != "Our World" {
 		t.Fatalf("a second world changed the selection to %q", got)
+	}
+
+	// A world added under the name of one that was deleted doesn't get the
+	// old one's difficulty and mods.
+	if err := m.SetWorldOptions("Another", config.WorldOptions{Preset: "hard"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetWorldMods("Another", []string{"advancedportals"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.DeleteWorld("Another"); err != nil {
+		t.Fatal(err)
+	}
+	if job := waitJob(t, m, currentJobID(m)); job.Error != "" {
+		t.Fatalf("delete: %s", job.Error)
+	}
+	if job := add("Another"); job.Error != "" {
+		t.Fatalf("adding it again: %+v", job)
+	}
+	if o, ok := m.Settings().WorldOptions["Another"]; ok {
+		t.Fatalf("the new world has the deleted one's options: %+v", o)
 	}
 }
