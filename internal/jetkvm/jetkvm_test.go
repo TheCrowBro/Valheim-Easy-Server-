@@ -185,6 +185,18 @@ func TestStoppedSaysWhy(t *testing.T) {
 	if _, err := Status(ctx, target); !errors.As(err, &stopped) || stopped.Log != "" {
 		t.Fatalf("status without a log = %v", err)
 	}
+	// The start script from older versions of the app fails then, but it's
+	// still stopped, so the app starts it again and updates it.
+	initScript := filepath.Join(kvm.Base, "init.d", "S99valheim-waker")
+	data, _ := os.ReadFile(initScript)
+	older := strings.Replace(string(data), "\texit 0\n\t;;", "\t;;", 1)
+	if older == string(data) {
+		t.Fatal("couldn’t make the older start script")
+	}
+	os.WriteFile(initScript, []byte(older), 0o755)
+	if _, err := Status(ctx, target); !errors.As(err, &stopped) || stopped.Log != "" {
+		t.Fatalf("status from the older start script = %v", err)
+	}
 }
 
 func TestNotLetIn(t *testing.T) {

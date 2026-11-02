@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -339,6 +340,9 @@ func TestOnlyItsOwnServer(t *testing.T) {
 // two Discord servers at once) are saved one at a time: the file always
 // makes sense, and it ends up with the newest status.
 func TestStatusFileAtOnce(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the waker runs on the JetKVM’s Linux; Windows can’t replace a file while it’s being read")
+	}
 	b := New(Config{}, log.New(io.Discard, "", 0))
 	b.StatusFile = filepath.Join(t.TempDir(), "status.json")
 	b.setStatus(func(s *Status) {})

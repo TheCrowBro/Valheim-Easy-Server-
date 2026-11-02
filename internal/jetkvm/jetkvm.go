@@ -345,11 +345,14 @@ func (e *ErrStopped) Error() string {
 func (c *conn) status(initScript string) (waker.Status, error) {
 	var st waker.Status
 	out, err := c.run("if [ -x "+q(initScript)+" ]; then "+q(initScript)+" status; else echo stopped; fi", nil)
-	if err != nil {
-		return st, fmt.Errorf("couldn’t ask the JetKVM about the waker: %s", orErr(out, err))
-	}
+	// Stopped is the answer even if the status check failed: the start
+	// script from older versions of the app fails when there's no log yet,
+	// and the app has to see it's stopped to start it again (and update it).
 	if rest, ok := strings.CutPrefix(out, "stopped"); ok {
 		return st, &ErrStopped{Log: strings.TrimSpace(rest)}
+	}
+	if err != nil {
+		return st, fmt.Errorf("couldn’t ask the JetKVM about the waker: %s", orErr(out, err))
 	}
 	if out == "" {
 		return st, nil // started, but not saying anything yet
