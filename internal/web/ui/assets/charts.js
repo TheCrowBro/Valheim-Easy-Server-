@@ -185,7 +185,9 @@ export class LineChart {
         ctx.stroke();
       }
     }
-    this.drawHover(false);
+    // Keep the tooltip of the chart being pointed at: the charts are
+    // redrawn with each refresh, every few seconds.
+    this.drawHover(!this.tip.hidden);
   }
 
   nearest(t) {

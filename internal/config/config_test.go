@@ -40,7 +40,7 @@ func TestValidation(t *testing.T) {
 		{"serverDir", func(s *Settings) { s.ServerDir = filepath.Join(string(filepath.Separator)+"srv", "a\"b") }},
 		{"saveDir", func(s *Settings) { s.SaveDir = filepath.Join(string(filepath.Separator)+"srv", "a\nb") }},
 		{"port", func(s *Settings) { s.Port = 80 }},
-		{"idleMinutes", func(s *Settings) { s.IdleMinutes = 1 }},
+		{"idleMinutes", func(s *Settings) { s.IdleHibernate, s.IdleMinutes = true, 1 }},
 		{"extraArgs", func(s *Settings) { s.ExtraArgs = `-x "unclosed` }},
 		{"worldOptions", func(s *Settings) {
 			s.WorldOptions = map[string]WorldOptions{s.World: {Modifiers: map[string]string{"combat": "impossible"}}}
@@ -54,6 +54,23 @@ func TestValidation(t *testing.T) {
 		errs := s.Validate()
 		if _, ok := errs[c.field]; !ok {
 			t.Errorf("expected a %s error for %+v, got %v", c.field, s, errs)
+		}
+	}
+}
+
+// The minutes before resting automatically are only checked while that's
+// on: the Settings page hides their box when it's off, so an error there
+// would block every save with nothing to fix in sight.
+func TestIdleMinutesOnlyWhenResting(t *testing.T) {
+	for _, minutes := range []int{0, 5, 5000} {
+		s := Defaults()
+		s.IdleHibernate, s.IdleMinutes = false, minutes
+		if errs := s.Validate(); errs != nil {
+			t.Errorf("%d idle minutes with resting off: %v", minutes, errs)
+		}
+		s.IdleHibernate = true
+		if _, ok := s.Validate()["idleMinutes"]; !ok {
+			t.Errorf("%d idle minutes with resting on: no idleMinutes error", minutes)
 		}
 	}
 }

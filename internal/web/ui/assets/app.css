@@ -429,6 +429,7 @@ tr:last-child td { border-bottom: 0; }
 .console .err { color: var(--bad-text); }
 .console .hl { color: var(--accent-2); }
 .console .ok { color: var(--good-text); }
+.console .skipped { color: #8a96a3; font-style: italic; }
 
 /* modal */
 .modal-backdrop {

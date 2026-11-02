@@ -76,7 +76,9 @@ function summary() {
     tile('Average server CPU', run.length ? fmtPct(avg(run, 'cpu')) : '–', 'while running'),
     tile('Highest server memory', run.length ? fmtBytes(peakMem) : '–', 'while running'),
     tile('Average computer CPU', s.length ? fmtPct(avg(s, 'cpuSys')) : '–', 'whole computer'),
-    tile('Server running', s.length ? Math.round((run.length / s.length) * 100) + '%' : '–', 'of this time range'));
+    // Worked out by the app from how long the readings cover, so time the
+    // computer slept counts as not running.
+    tile('Server running', s.length && data.rangeSeconds ? Math.min(100, Math.round((data.runningSeconds / data.rangeSeconds) * 100)) + '%' : '–', 'of this time range'));
 }
 
 function tableView() {

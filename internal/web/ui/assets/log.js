@@ -21,11 +21,12 @@ function lineClass(text) {
 const timeFmt = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
 function lineEl(l) {
+  if (l.skipped) return h('div', { class: 'skipped' }, l.text);
   return h('div', { class: lineClass(l.text) }, h('span', { class: 't' }, timeFmt.format(new Date(l.time))), l.text);
 }
 
 function matches(l) {
-  return !filter || l.text.toLowerCase().includes(filter);
+  return !filter || l.skipped || l.text.toLowerCase().includes(filter);
 }
 
 function redraw() {
@@ -44,16 +45,24 @@ async function fetchLines() {
       last = 0;
       return fetchLines();
     }
+    const got = res.lines;
+    // The app sends at most the newest 1000 lines. If more came since the
+    // last look (say the page was in a background tab), say that some
+    // are missing here rather than joining the two parts up silently.
+    const missed = last && got.length ? got[0].seq - last - 1 : 0;
+    if (missed > 0) {
+      got.unshift({ skipped: true, text: `… ${missed} line${missed === 1 ? '' : 's'} not shown here. Download the log to see everything. …` });
+    }
     last = res.last;
-    if (!res.lines.length) return;
+    if (!got.length) return;
     const atBottom = consoleEl && consoleEl.scrollHeight - consoleEl.scrollTop - consoleEl.clientHeight < 40;
-    lines.push(...res.lines);
+    lines.push(...got);
     const overflow = lines.length > MAX_LINES;
     if (overflow) lines = lines.slice(-MAX_LINES);
     if (!consoleEl) return;
     if (overflow || filter) return redraw();
     if (consoleEl.firstChild && consoleEl.firstChild.classList && consoleEl.firstChild.classList.contains('muted')) consoleEl.replaceChildren();
-    consoleEl.append(...res.lines.map(lineEl));
+    consoleEl.append(...got.map(lineEl));
     if (follow && atBottom !== false) consoleEl.scrollTop = consoleEl.scrollHeight;
   } catch {
     /* shown by the connection banner */
