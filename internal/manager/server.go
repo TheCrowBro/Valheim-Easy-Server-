@@ -45,7 +45,9 @@ func (m *Manager) StartServer() error {
 	case errs != nil:
 		return errs // the panel shows these next to the settings
 	}
-	return m.runJob("start", "Starting the server", true, m.doStart)
+	return m.runJob("start", "Starting the server", true, func(ctx context.Context, j *jobCtl) error {
+		return m.doStart(ctx, j, "")
+	})
 }
 
 // StopServer saves the world and stops the server.
@@ -60,18 +62,21 @@ func (m *Manager) StopServer() error {
 	return m.runJob("stop", "Stopping the server", false, m.doStop)
 }
 
-// endStartWait finishes a start job that has launched the server and is
-// only waiting for the world to load, so Stop works straight away.
+// endStartWait finishes a job (a start, a restart, or an import that
+// replaced the running world) that has launched the server and is only
+// waiting for the world to load, so Stop works straight away.
 func (m *Manager) endStartWait() {
 	m.mu.Lock()
 	job, cancel := m.job, m.jobCancel
-	waiting := job != nil && job.Finished == nil && job.Kind == "start" && m.run != nil
+	waiting := job != nil && job.Finished == nil && m.loadWait == job && m.run != nil
 	m.mu.Unlock()
 	if !waiting {
 		return
 	}
 	cancel()
-	for i := 0; i < 50; i++ {
+	// What the job does after the wait (such as tidying up an upload) is
+	// quick, but give it a few seconds.
+	for i := 0; i < 250; i++ {
 		m.mu.Lock()
 		done := job.Finished != nil
 		m.mu.Unlock()
@@ -88,7 +93,7 @@ func (m *Manager) RestartServer() error {
 		if err := m.doStop(ctx, j); err != nil {
 			return err
 		}
-		return m.doStart(ctx, j)
+		return m.doStart(ctx, j, "")
 	})
 }
 
@@ -96,15 +101,31 @@ func (m *Manager) RestartServer() error {
 func (m *Manager) ForceStop() error {
 	m.mu.Lock()
 	run := m.run
+	var stopping, forced bool
 	if run != nil {
+		// Marked before killing it, so its exit counts as expected.
+		stopping, forced = run.stopping, run.forced
 		run.stopping, run.forced = true, true
 	}
 	m.mu.Unlock()
 	if run == nil {
 		return errors.New("The server isn't running.")
 	}
+	if err := run.proc.Kill(); err != nil {
+		// It's still running: don't show it as stopping for good, or count
+		// a later crash as a stop. A stop in progress stays one.
+		m.mu.Lock()
+		run.stopping, run.forced = stopping, forced
+		m.mu.Unlock()
+		m.notify()
+		msg := fmt.Sprintf("Couldn't force the server to stop (%v).", err)
+		if runtime.GOOS == "windows" {
+			msg += " It may have been started by a copy of this app that was run as administrator: close it in Task Manager, or run this app as administrator."
+		}
+		return errors.New(msg)
+	}
 	m.addActivity("warning", "", "The server was forced to stop. Anything since the last save is lost.")
-	return run.proc.Kill()
+	return nil
 }
 
 // InstallServer installs or updates the server. repair re-checks all files.
@@ -186,13 +207,18 @@ func (m *Manager) prepareMods(ctx context.Context, j *jobCtl, s config.Settings,
 	return nil
 }
 
-func (m *Manager) doStart(ctx context.Context, j *jobCtl) error {
+// doStart starts the server with world, or the selected world when world
+// is empty.
+func (m *Manager) doStart(ctx context.Context, j *jobCtl, world string) error {
 	m.mu.Lock()
 	if m.run != nil {
 		m.mu.Unlock()
 		return errors.New("The server is already running.")
 	}
 	s, p := m.settings.Clone(), m.paths
+	if world != "" {
+		s.World = world
+	}
 	installed := m.installedLocked()
 	m.mu.Unlock()
 
@@ -256,8 +282,20 @@ func (m *Manager) doStart(ctx context.Context, j *jobCtl) error {
 	}
 	info := runInfo{PID: proc.PID(), Started: proc.StartTime(), Launched: time.Now(), LogPath: logPath,
 		World: s.World, ArgsKey: argsKey(s, p.Save), Exe: p.ServerExe, Played: m.startedWith(s), NoCrossplay: !s.Crossplay,
-		CodeMods: sortedIDs(s.WorldMods())}
+		CodeMods: sortedIDs(s.WorldMods()), Server: s.ServerName, Port: s.Port, Password: s.Password}
 	info.codePending = len(info.CodeMods) > 0
+	// From now on the job only waits for the world to load, which Stop
+	// can end (see endStartWait).
+	m.mu.Lock()
+	m.loadWait = j.job
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		if m.loadWait == j.job {
+			m.loadWait = nil
+		}
+		m.mu.Unlock()
+	}()
 	run := m.attach(proc, info, false)
 	if info.codePending {
 		m.go_(func() { m.makeModsCode(run, info.CodeMods, info.World, p) })
@@ -387,7 +425,12 @@ func sinceText(t time.Time) string {
 func (m *Manager) attach(proc *platform.Proc, info runInfo, adopted bool) *serverRun {
 	ctx, cancel := context.WithCancel(m.ctx)
 	run := &serverRun{proc: proc, info: info, done: make(chan struct{}), readyCh: make(chan struct{}),
-		cancelTail: cancel, replaying: adopted}
+		cancelTail: cancel, replaying: adopted, discordAt: info.Posted, discordErr: info.PostError}
+	if adopted && info.Announced != "" && info.Posted.IsZero() && info.PostError == "" {
+		// The app that posted it didn't note how it went (older versions
+		// don't): it most likely went out soon after the start.
+		run.info.Posted, run.discordAt = info.Launched, info.Launched
+	}
 	run.tracker.NoJoinCode = info.NoCrossplay
 	// Friends who connect at the same time are told apart by the account
 	// each last played from. Apply only runs from handleEvent, which already

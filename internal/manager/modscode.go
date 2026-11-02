@@ -56,10 +56,14 @@ func (m *Manager) makeModsCode(run *serverRun, ids []string, world string, p con
 	}
 }
 
-// modsCodeLocked is the running world's mods code, while the world's mods
-// are still the ones it was made for.
+// modsCodeLocked is the running world's mods code, while the mods players
+// are told they need are still the ones it was made for.
 func (m *Manager) modsCodeLocked(run *serverRun) string {
-	if !slices.Equal(run.info.CodeMods, sortedIDs(m.settings.WorldOptions[run.info.World].Mods)) {
+	var ids []string
+	for _, md := range m.playerModsLocked(run.info.World, run) {
+		ids = append(ids, md.ID)
+	}
+	if !slices.Equal(run.info.CodeMods, sortedIDs(ids)) {
 		return ""
 	}
 	return run.info.ModsCode

@@ -151,7 +151,10 @@ func main() {
 			restart.Store(restartApp)
 			go func() {
 				if stopServer {
-					stopAndWait(m, logger)
+					if err := stopAndWait(m, logger); err != nil {
+						logger.Printf("stop before quitting: %v", err)
+						platform.ShowError(appName, "Couldn't stop the Valheim server before closing: "+err.Error()+"\n\nIt's still running. Open Valheim Easy Server again to stop it.")
+					}
 				}
 				close(done)
 			}()
@@ -380,19 +383,54 @@ func confirmPlayers(m *manager.Manager, what string) bool {
 	return platform.Confirm(appName, fmt.Sprintf("%d player(s) are online. Do you want to %s? The world is saved first.", n, what))
 }
 
-// stopAndWait saves and stops the server before the app closes.
-func stopAndWait(m *manager.Manager, logger *log.Logger) {
-	if err := m.StopServer(); err != nil {
-		logger.Printf("stop before quitting: %v", err)
-		return
-	}
+// serverStopper is what stopAndWait needs from the manager.
+type serverStopper interface {
+	StopServer() error
+	CancelJob() error
+	Status() manager.Status
+}
+
+// stopAndWait saves and stops the server before the app closes. A job in
+// progress, such as a restart or a backup, is waited for first: closing
+// straight away would leave the server running with nothing watching it,
+// or let a restart start it again as the app closes. It returns an error
+// when the server is still running.
+func stopAndWait(m serverStopper, logger *log.Logger) error {
+	stopped := func(s manager.State) bool { return s == manager.StateStopped || s == manager.StateNotInstalled }
 	deadline := time.Now().Add(5 * time.Minute)
-	for time.Now().Before(deadline) {
-		if s := m.Status().State; s == manager.StateStopped || s == manager.StateNotInstalled {
-			return
+	for waited := false; ; waited = true {
+		err := m.StopServer()
+		if err == nil {
+			break
+		}
+		st := m.Status()
+		busy := st.Job != nil && st.Job.Finished == nil // it may still start the server
+		var be *manager.BusyError
+		retry := busy || errors.As(err, &be) && !st.App.Updating
+		if !retry || time.Now().After(deadline) {
+			if stopped(st.State) {
+				return nil
+			}
+			return err
+		}
+		if busy && st.Job.Cancellable {
+			// Getting ready to start the server, or installing it: closing
+			// would cancel that anyway.
+			m.CancelJob()
+		}
+		if !waited {
+			logger.Printf("stop before quitting: %v Waiting for it.", err)
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
+	deadline = time.Now().Add(5 * time.Minute)
+	for time.Now().Before(deadline) {
+		if stopped(m.Status().State) {
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return errors.New("It took too long to save and stop.")
 }
 
 // resolveDataDir picks where the app keeps everything. By default that's
@@ -423,7 +461,7 @@ func resolveDataDir(flagValue, exe string) (string, error) {
 	case "downloads", "desktop":
 		dir = filepath.Join(dir, appName)
 	}
-	if strings.HasPrefix(strings.ToLower(dir), strings.ToLower(os.TempDir())) && os.TempDir() != "" {
+	if inTempDir(dir) {
 		dir = "" // running from a temp folder (e.g. straight out of a zip)
 	}
 	if dir != "" && writable(dir) {
@@ -440,6 +478,29 @@ func resolveDataDir(flagValue, exe string) (string, error) {
 	}
 	dir = filepath.Join(base, "ValheimEasyServer")
 	return dir, os.MkdirAll(dir, 0o755)
+}
+
+// inTempDir reports whether dir is in the temp folder. dir is in its full
+// long form (see main), while %TEMP% can hold a short 8.3 name such as
+// C:\Users\JOHNSM~1\…, so the temp folder is put in that form too.
+func inTempDir(dir string) bool {
+	raw := os.TempDir()
+	if raw == "" {
+		return false
+	}
+	long := raw
+	if t, err := filepath.EvalSymlinks(raw); err == nil {
+		long = t
+	}
+	d := strings.ToLower(filepath.Clean(dir))
+	for _, t := range []string{long, raw} {
+		t = strings.ToLower(filepath.Clean(t))
+		// A folder next to it, such as …\Temporary, isn't in it.
+		if d == t || strings.HasPrefix(d, strings.TrimSuffix(t, string(filepath.Separator))+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 func writable(dir string) bool {

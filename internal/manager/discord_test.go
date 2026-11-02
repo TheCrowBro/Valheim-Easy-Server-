@@ -19,6 +19,7 @@ type fakeDiscord struct {
 	mu    sync.Mutex
 	posts []string
 	gone  atomic.Bool // answer like a deleted webhook
+	down  atomic.Bool // answer like Discord having a problem, which may soon pass
 }
 
 func newFakeDiscord(t *testing.T) *fakeDiscord {
@@ -27,6 +28,10 @@ func newFakeDiscord(t *testing.T) *fakeDiscord {
 		if f.gone.Load() {
 			w.WriteHeader(http.StatusNotFound)
 			w.Write([]byte(`{"message": "Unknown Webhook", "code": 10015}`))
+			return
+		}
+		if f.down.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
 		if r.Method == http.MethodGet { // which Discord server the webhook is in
@@ -184,11 +189,17 @@ func TestDiscordPasswordTurnedOnLater(t *testing.T) {
 	if fake.count("Password:") != 0 {
 		t.Fatalf("the password was posted: %q", fake.all())
 	}
-	s.DiscordPassword = true
+	// A new password, which needs a restart, saved at the same time: the
+	// post has the one the server uses.
+	running := s.Password
+	s.DiscordPassword, s.Password = true, "changedpw42"
 	if err := m.UpdateSettings(s); err != nil {
 		t.Fatal(err)
 	}
-	fake.wait(t, "Password: ||", 1)
+	fake.wait(t, "Password: ||"+running+"||", 1)
+	if fake.count("changedpw42") != 0 {
+		t.Fatalf("the password for the next start was posted: %q", fake.all())
+	}
 	s.DiscordPassword = false
 	if err := m.UpdateSettings(s); err != nil {
 		t.Fatal(err)
@@ -197,6 +208,106 @@ func TestDiscordPasswordTurnedOnLater(t *testing.T) {
 	if n := fake.count("is online"); n != 2 {
 		t.Fatalf("posted online %d times: %q", n, fake.all())
 	}
+}
+
+// A server started without crossplay is posted as online even when
+// crossplay is turned on for its next start: it won't get a join code.
+func TestDiscordCrossplayForTheNextStart(t *testing.T) {
+	fake := newFakeDiscord(t)
+	env := setup(t)
+	m := env.m
+	m.opt.DiscordURL = fake.URL
+	install(t, m)
+	s := m.Settings()
+	s.Crossplay = false
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.StartServer(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "server online", 20*time.Second, func() bool { return m.Status().State == StateOnline })
+	s.Crossplay, s.Discord, s.DiscordWebhook = true, true, "https://discord.com/api/webhooks/123/abc"
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	fake.wait(t, "is online", 1)
+	if st := m.Status(); st.Join.Crossplay || !strings.Contains(fake.all()[0], "add the server by its address") {
+		t.Fatalf("crossplay %v, posted %q", st.Join.Crossplay, fake.all())
+	}
+}
+
+// How the join code post went is still known after the app restarts, and
+// a post that hadn't gone out when the app closed goes out from the app
+// that takes over.
+func TestDiscordPostAfterTakeover(t *testing.T) {
+	old := discordRetries
+	discordRetries = []time.Duration{time.Minute}
+	t.Cleanup(func() { discordRetries = old })
+	fake := newFakeDiscord(t)
+	env := setup(t)
+	m := env.m
+	m.opt.DiscordURL = fake.URL
+	install(t, m)
+	turnOnDiscord(t, m)
+	takeOver := func() *Manager {
+		t.Helper()
+		m := newTestManager(t, env.data, env)
+		m.opt.DiscordURL = fake.URL
+		m.Start()
+		env.m = m
+		waitFor(t, "takeover", 10*time.Second, func() bool {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			return m.run != nil && m.run.ready && !m.run.replaying
+		})
+		return m
+	}
+
+	code := startOnline(t, m)
+	fake.wait(t, "Join code: **"+code+"**", 1)
+	waitFor(t, "the panel to show it was posted", 5*time.Second, func() bool {
+		d := m.Status().Discord
+		return d != nil && d.Posted != nil
+	})
+	m.Close()
+	m = takeOver()
+	if d := m.Status().Discord; d == nil || d.Posted == nil || d.Error != "" {
+		t.Fatalf("after taking over: %+v", d)
+	}
+
+	// It didn't work: the restarted app says why.
+	fake.gone.Store(true)
+	s := m.Settings()
+	s.DiscordWebhook = "https://discord.com/api/webhooks/456/def"
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the error on the panel", 20*time.Second, func() bool {
+		d := m.Status().Discord
+		return d != nil && d.Error != ""
+	})
+	m.Close()
+	m = takeOver()
+	if d := m.Status().Discord; d == nil || d.Posted != nil || !strings.Contains(d.Error, "webhook link doesn't work") {
+		t.Fatalf("after taking over: %+v", d)
+	}
+
+	// Discord is down while the app closes: the app that takes over posts.
+	fake.gone.Store(false)
+	fake.down.Store(true)
+	s.DiscordWebhook = "https://discord.com/api/webhooks/789/ghi"
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	m.Close()
+	fake.down.Store(false)
+	m = takeOver()
+	fake.wait(t, "Join code: **"+code+"**", 2)
+	waitFor(t, "the panel to show it was posted", 5*time.Second, func() bool {
+		d := m.Status().Discord
+		return d != nil && d.Posted != nil && d.Error == ""
+	})
 }
 
 // When crossplay can't start, the panel says so instead of waiting for a
@@ -276,6 +387,9 @@ func TestDiscordAfterTakeoverAndRest(t *testing.T) {
 	if n := fake.count("is online"); n != 1 {
 		t.Fatalf("posted online %d times: %q", n, fake.all())
 	}
+	if d := m2.Status().Discord; d == nil || d.Posted == nil {
+		t.Fatalf("the panel doesn't say it was posted: %+v", d)
+	}
 
 	// Resting: the message goes out before the computer rests.
 	if err := m2.Hibernate(""); err != nil {
@@ -286,6 +400,60 @@ func TestDiscordAfterTakeoverAndRest(t *testing.T) {
 	}
 	if len(atRest) == 0 || !strings.Contains(atRest[len(atRest)-1], "going to rest") {
 		t.Fatalf("posts when the computer went to rest: %q", atRest)
+	}
+}
+
+// The address in the post is looked up again when it may have changed,
+// such as after the computer woke up, even with the control panel closed.
+func TestPublicAddressLookedUpAgain(t *testing.T) {
+	var ip atomic.Value
+	ip.Store("203.0.113.5")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(ip.Load().(string)))
+	}))
+	defer srv.Close()
+	old := publicIPURL
+	publicIPURL = srv.URL
+	t.Cleanup(func() { publicIPURL = old })
+	env := &testEnv{data: t.TempDir()}
+	m := newTestManager(t, env.data, env, func(o *Options) { o.NoPublicIP = false })
+	woke := func() { // as onWake does
+		m.mu.Lock()
+		m.net.publicAt = time.Time{}
+		m.mu.Unlock()
+	}
+	if got := m.publicAddress(2456); got != "203.0.113.5:2456" {
+		t.Fatalf("address %q", got)
+	}
+	ip.Store("203.0.113.9") // the internet provider gave a new one
+	if got := m.publicAddress(2456); got != "203.0.113.5:2456" {
+		t.Fatalf("looked up again straight away: %q", got)
+	}
+	woke()
+	if got := m.publicAddress(2456); got != "203.0.113.9:2456" {
+		t.Fatalf("after waking up: %q", got)
+	}
+
+	// A lookup that doesn't work keeps the last address, and doesn't make
+	// it count as fresh.
+	ip.Store("not an address")
+	woke()
+	if got := m.publicAddress(2456); got != "203.0.113.9:2456" {
+		t.Fatalf("when the lookup didn't work: %q", got)
+	}
+	m.mu.Lock()
+	m.lookupPublicIPLocked() // as the control panel does
+	m.mu.Unlock()
+	waitFor(t, "the lookup", 10*time.Second, func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return !m.net.publicBusy
+	})
+	m.mu.Lock()
+	at := m.net.publicAt
+	m.mu.Unlock()
+	if !at.IsZero() {
+		t.Fatal("an address that couldn't be checked counts as fresh")
 	}
 }
 
