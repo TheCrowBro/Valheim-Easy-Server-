@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"valheim-easy-server/internal/config"
 	"valheim-easy-server/internal/mods"
 	"valheim-easy-server/internal/platform"
 	"valheim-easy-server/internal/steamcmd"
@@ -26,7 +27,8 @@ type Status struct {
 	RunningWorld string                `json:"runningWorld"` // world of the running server
 	Players      []PlayerView          `json:"players"`
 	Join         JoinInfo              `json:"join"`
-	Mods         []ModInfo             `json:"mods,omitempty"` // the mods players need
+	Mods         []ModInfo             `json:"mods,omitempty"`     // the mods players need
+	ModsCode     string                `json:"modsCode,omitempty"` // imports the running world's mods in r2modman or Gale
 	Discord      *DiscordInfo          `json:"discord,omitempty"`
 	Reminder     []string              `json:"reminder,omitempty"` // what players need to do before joining
 	App          AppInfo               `json:"app"`
@@ -41,7 +43,8 @@ type Status struct {
 	Idle         *IdleInfo             `json:"idle,omitempty"`
 	Hibernate    HibernateInfo         `json:"hibernate"`
 	Sleep        HibernateInfo         `json:"sleep"`
-	RestMode     string                `json:"restMode"` // config.RestHibernate or config.RestSleep
+	RestMode     string                `json:"restMode"`     // config.RestHibernate or config.RestSleep
+	CanHibernate bool                  `json:"canHibernate"` // hibernation can be chosen (see config.HibernationOffered)
 	Network      []platform.NetAdapter `json:"network"`
 	Checklist    Checklist             `json:"checklist"`
 	Warnings     []string              `json:"warnings"`
@@ -124,23 +127,24 @@ func (m *Manager) Status() Status {
 	defer m.mu.Unlock()
 	s := m.settings
 	st := Status{
-		Platform:   runtime.GOOS,
-		State:      m.stateLocked(),
-		Installed:  m.installedLocked(),
-		ServerName: s.ServerName,
-		World:      s.World,
-		Players:    []PlayerView{},
-		Live:       m.live,
-		LastExit:   m.lastExit,
-		Hibernate:  m.checks.hibernate,
-		Sleep:      m.checks.sleep,
-		RestMode:   s.RestMode,
-		Network:    append([]platform.NetAdapter{}, m.checks.network...),
-		Activity:   acts,
-		Machine:    m.machine,
-		Now:        time.Now(),
-		Warnings:   []string{},
-		App:        m.appInfoLocked(),
+		Platform:     runtime.GOOS,
+		CanHibernate: config.CanHibernate(),
+		State:        m.stateLocked(),
+		Installed:    m.installedLocked(),
+		ServerName:   s.ServerName,
+		World:        s.World,
+		Players:      []PlayerView{},
+		Live:         m.live,
+		LastExit:     m.lastExit,
+		Hibernate:    m.checks.hibernate,
+		Sleep:        m.checks.sleep,
+		RestMode:     s.RestMode,
+		Network:      append([]platform.NetAdapter{}, m.checks.network...),
+		Activity:     acts,
+		Machine:      m.machine,
+		Now:          time.Now(),
+		Warnings:     []string{},
+		App:          m.appInfoLocked(),
 	}
 	if m.job != nil {
 		j := *m.job
@@ -175,6 +179,7 @@ func (m *Manager) Status() Status {
 			st.LastSave = &ls
 		}
 		st.Join.Code = r.tracker.JoinCode
+		st.ModsCode = r.info.ModsCode
 		st.Join.PublicAddr = r.tracker.PublicAddr
 		if r.ready && !r.info.NoCrossplay && r.tracker.JoinCode == "" {
 			switch {

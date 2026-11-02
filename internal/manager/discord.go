@@ -52,8 +52,8 @@ const (
 // nothing new to post. The caller queues it and saves run.info.
 func (m *Manager) announceLocked(run *serverRun) (p discordPost, ok bool) {
 	s := m.settings
-	if !s.Discord || m.run != run || !run.ready || run.stopping || run.replaying {
-		return p, false
+	if !s.Discord || m.run != run || !run.ready || run.stopping || run.replaying || run.info.codePending {
+		return p, false // the mods code comes within seconds
 	}
 	code := run.tracker.JoinCode
 	key := code
@@ -69,7 +69,7 @@ func (m *Manager) announceLocked(run *serverRun) (p discordPost, ok bool) {
 	run.info.Announced = key
 	run.discordAt, run.discordErr = time.Time{}, ""
 
-	msg := onlineMessage{Server: s.ServerName, World: run.info.World, Code: code, Reminder: m.reminderLocked(run)}
+	msg := onlineMessage{Server: s.ServerName, World: run.info.World, Code: code, ModsCode: run.info.ModsCode, Reminder: m.reminderLocked(run)}
 	if s.DiscordPassword {
 		msg.Password = s.Password
 	}
@@ -141,6 +141,7 @@ type onlineMessage struct {
 	Password      string // empty to leave it out
 	Mods          []ModInfo
 	Optional      []ModInfo // just for players' own games
+	ModsCode      string    // imports all the mods in r2modman or Gale
 	Reminder      []string  // what players need to do first, such as "update Valheim to 1.0.21"
 }
 
@@ -175,7 +176,13 @@ func (o onlineMessage) text() string {
 		if len(o.Mods) > 1 {
 			them = "the mods"
 		}
-		hint += fmt.Sprintf(" Install %s first with the Gale or r2modman mod manager.", them)
+		if o.ModsCode != "" {
+			hint += fmt.Sprintf(" Install %s first: in the r2modman or Gale mod manager, import the mods code as a new profile.", them)
+		} else {
+			hint += fmt.Sprintf(" Install %s first with the Gale or r2modman mod manager.", them)
+		}
+	} else if o.ModsCode != "" {
+		hint += " For the optional mods, import the mods code as a new profile in r2modman or Gale."
 	}
 	if len(o.Optional) > 0 {
 		list := make([]string, 0, len(o.Optional))
@@ -183,6 +190,9 @@ func (o onlineMessage) text() string {
 			list = append(list, fmt.Sprintf("[%s](%s)", md.Name, md.URL))
 		}
 		fmt.Fprintf(&b, "Optional, just for your own game: %s\n", strings.Join(list, ", "))
+	}
+	if o.ModsCode != "" {
+		fmt.Fprintf(&b, "📦 Mods code: `%s`\n", o.ModsCode)
 	}
 	if len(o.Reminder) > 0 {
 		fmt.Fprintf(&b, "📢 **Before you join:** %s.\n", strings.Join(o.Reminder, ", "))

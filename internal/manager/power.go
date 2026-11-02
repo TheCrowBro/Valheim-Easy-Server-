@@ -103,6 +103,9 @@ func (m *Manager) EnableWakeOnLAN() error {
 // EnableHibernation turns hibernation on (Windows asks for admin
 // permission on the screen).
 func (m *Manager) EnableHibernation() error {
+	if !config.CanHibernate() {
+		return &ActionError{Msg: "This version of the app only puts the computer to sleep."}
+	}
 	err := platform.EnableHibernate()
 	m.recheckSoon()
 	return err

@@ -29,13 +29,12 @@ SETTING UP (once, on the server computer)
 
 6. Finish the checklist under "Setup on this computer" on the Home page:
    - Allow it through Windows Firewall (click Yes when Windows asks)
-   - Turn on hibernation
    - Turn on Wake-on-LAN (so your IP KVM can wake the computer)
    - Start this app with Windows
 
 Closing the window doesn't stop anything: the app stays next to the clock
 (the shield icon). Click the icon to open the control panel again. Right-click
-it for Start, Stop, Hibernate and Close.
+it for Start, Stop, Sleep and Close.
 
 
 NEW TO THE CONTROL PANEL?
@@ -106,8 +105,10 @@ with "Update the server before it starts" on, it keeps them up to date.
 Players install the world's mods in their own game too:
   1. Install a free mod manager: Gale or r2modman (from
      thunderstore.io).
-  2. Choose Valheim, make a new profile for this server, search for each
-     mod and install it. Anything else it needs comes with it.
+  2. Choose Valheim and import a new profile from the "mods code" on the
+     Home page or in the Discord post (in r2modman: Import / Update,
+     Import new profile, From code). It installs every mod the world uses,
+     at the server's versions. Or make a profile and search for each mod.
   3. Start Valheim from the mod manager, then join as usual.
 On the Home page, "Which mods do I need?" shows which ones players can't
 join without, and where to download each one. If joining fails because
@@ -163,15 +164,20 @@ stick. A note inside the zip explains how to play the world on your own PC.
 
 WAKING THE COMPUTER UP
 ----------------------
-After "Hibernate" (or "Sleep"), wake the computer with Wake-on-LAN from
-your IP KVM, or press its power button. If the server was running before,
-it starts again by itself.
+After "Sleep", wake the computer with Wake-on-LAN from your IP KVM, or
+press its power button. If the server was running before, it starts again
+by itself.
 
 The address the KVM needs (the MAC address) is in Settings, under
 "Resting and waking up". The computer must be connected by a network
-cable. If Wake-on-LAN doesn't wake it from hibernation, choose "Sleep"
-there instead. Friends can also wake it by typing /valheim in Discord,
-once that's set up (see STARTING THE SERVER FROM DISCORD above).
+cable. Friends can also wake it by typing /valheim in Discord, once that's
+set up (see STARTING THE SERVER FROM DISCORD above).
+
+The app only puts the computer to sleep for now (hibernation is turned off
+in this version). If Windows is set to hibernate a sleeping computer after
+a while (Power Options, Change plan settings, Change advanced power
+settings, Sleep, "Hibernate after"), set that to Never, or Wake-on-LAN
+stops working once it does.
 
 
 UPDATES

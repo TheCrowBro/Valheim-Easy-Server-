@@ -104,6 +104,16 @@ const (
 	RestSleep     = "sleep"
 )
 
+// HibernationOffered is whether the app offers hibernation as well as sleep.
+// It's off for now: the computer only sleeps, which Wake-on-LAN (and so
+// /valheim in Discord) can wake it from. Settings that say hibernate sleep.
+// The hibernation code stays, so it can come back by turning this on.
+const HibernationOffered = false
+
+// CanHibernate reports whether hibernation can be chosen on this computer:
+// only while it's offered, and never on a Mac, which sleeps instead.
+func CanHibernate() bool { return HibernationOffered && runtime.GOOS != "darwin" }
+
 // Presets are the values Valheim accepts for -preset.
 var Presets = []string{"normal", "casual", "easy", "hard", "hardcore", "immersive", "hammer"}
 
@@ -240,7 +250,7 @@ func (s *Settings) fillMissing() {
 	if s.IdleMinutes == 0 {
 		s.IdleMinutes = d.IdleMinutes
 	}
-	if s.RestMode == "" || runtime.GOOS == "darwin" && s.RestMode == RestHibernate { // Macs sleep; they don't hibernate
+	if s.RestMode == "" || s.RestMode == RestHibernate && !CanHibernate() {
 		s.RestMode = d.RestMode
 	}
 }
@@ -256,8 +266,8 @@ func (s *Settings) Normalize() {
 	s.DiscordWebhook = strings.TrimSpace(s.DiscordWebhook)
 	s.DiscordBotToken = strings.TrimSpace(s.DiscordBotToken)
 	s.JetKVM = strings.TrimSpace(s.JetKVM)
-	if runtime.GOOS == "darwin" && s.RestMode == RestHibernate {
-		s.RestMode = RestSleep // Macs sleep; they don't hibernate
+	if s.RestMode == RestHibernate && !CanHibernate() {
+		s.RestMode = RestSleep
 	}
 	for name, o := range s.WorldOptions {
 		if o.IsZero() {
@@ -534,10 +544,10 @@ func ServerExeName() string {
 	return "valheim_server.x86_64"
 }
 
-// defaultRestMode is how the computer rests unless the settings say: Macs
-// sleep (they don't hibernate), and Windows computers hibernate.
+// defaultRestMode is how the computer rests unless the settings say: it
+// sleeps, unless hibernation is offered (never on a Mac).
 func defaultRestMode() string {
-	if runtime.GOOS == "darwin" {
+	if !CanHibernate() {
 		return RestSleep
 	}
 	return RestHibernate

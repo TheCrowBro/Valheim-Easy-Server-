@@ -255,8 +255,12 @@ func (m *Manager) doStart(ctx context.Context, j *jobCtl) error {
 		return fmt.Errorf("Couldn't start the Valheim server: %v", err)
 	}
 	info := runInfo{PID: proc.PID(), Started: proc.StartTime(), Launched: time.Now(), LogPath: logPath,
-		World: s.World, ArgsKey: argsKey(s, p.Save), Exe: p.ServerExe, Played: m.startedWith(s), NoCrossplay: !s.Crossplay}
+		World: s.World, ArgsKey: argsKey(s, p.Save), Exe: p.ServerExe, Played: m.startedWith(s), NoCrossplay: !s.Crossplay,
+		codePending: len(s.WorldMods()) > 0}
 	run := m.attach(proc, info, false)
+	if info.codePending {
+		m.go_(func() { m.makeModsCode(run, s.WorldMods(), s.World, p) })
+	}
 	m.addActivity("starting", "", fmt.Sprintf("Starting the server with the world %q.", s.World))
 	m.pruneLogs()
 

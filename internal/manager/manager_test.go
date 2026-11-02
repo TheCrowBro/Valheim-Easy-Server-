@@ -496,9 +496,9 @@ func TestHibernateStopsServerFirst(t *testing.T) {
 	if job.Error != "" {
 		t.Fatalf("hibernate: %s", job.Error)
 	}
-	rested := &env.hibernated
-	if runtime.GOOS == "darwin" {
-		rested = &env.slept // Macs sleep instead
+	rested := &env.slept // only sleep is offered for now
+	if config.CanHibernate() {
+		rested = &env.hibernated
 	}
 	if rested.Load() != 1 {
 		t.Fatalf("rested %d times", rested.Load())
@@ -574,6 +574,21 @@ func TestSleepInsteadOfHibernate(t *testing.T) {
 	s.RestMode = "nap"
 	if err := m.UpdateSettings(s); err == nil {
 		t.Fatal("an unknown rest mode was accepted")
+	}
+
+	// Hibernation isn't offered for now: a setting that asks for it sleeps,
+	// and it can't be turned on.
+	if !config.CanHibernate() {
+		s.RestMode = config.RestHibernate
+		if err := m.UpdateSettings(s); err != nil {
+			t.Fatal(err)
+		}
+		if st := m.Status(); st.RestMode != config.RestSleep || st.CanHibernate {
+			t.Fatalf("rest mode %q, can hibernate %v", st.RestMode, st.CanHibernate)
+		}
+		if err := m.EnableHibernation(); err == nil {
+			t.Fatal("hibernation was turned on")
+		}
 	}
 }
 

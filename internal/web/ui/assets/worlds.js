@@ -311,7 +311,10 @@ function registerActions(app) {
     app.poll();
   };
   A['world-mods'] = (d) => modsModal(app, d.name);
-  A['world-mod-help'] = (d) => openModsHelp(worldMods(d.name));
+  A['world-mod-help'] = (d) => {
+    const st = app.status; // the code is for the mods the running world started with
+    openModsHelp(worldMods(d.name), st && st.runningWorld === d.name && !st.needsRestart ? st.modsCode : '');
+  };
   A['world-download'] = (d) => {
     const st = app.status;
     let note = 'There’s a note inside on how to play it on another PC.';

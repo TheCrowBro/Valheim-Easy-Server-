@@ -7,7 +7,7 @@ Run a Valheim dedicated server on a spare Windows PC or Mac, such as an old Mac 
 ## What it does
 
 - **Start and stop with one button.** Stopping always saves the world first, the same way the official guide does it (Ctrl+C), just without the console window.
-- **A tutorial for friends.** The **Tutorial** button, right next to Start server, explains the basics in five short steps with pictures of the real buttons: starting the server, joining from Valheim, stopping, switching worlds and hibernating.
+- **A tutorial for friends.** The **Tutorial** button, right next to Start server, explains the basics in five short steps with pictures of the real buttons: starting the server, joining from Valheim, stopping, switching worlds and putting the computer to sleep.
 - **How to join, always visible.** The panel shows the crossplay join code, the address and the password, with copy buttons. Crossplay codes work without setting up your router.
 - **Several worlds.** Switch worlds with one click, create new ones (with Valheim's difficulty presets and world modifiers, Fire hazard included), rename old ones, and delete worlds. Deleted worlds keep a backup.
 - **Add a world by dropping it in.** Drop a world onto the app (a Valheim 1.0 world folder, an older `.fwl` + `.db` pair, or a zip of either) and it goes into the server's worlds folder by itself. The app only asks when the server already has a world with that name: replace it (keeping a backup) or keep both. Replacing the world that's running restarts the server with the new copy. Any world can be downloaded as a zip, and "Import from this PC" copies worlds from the Valheim game installed on the server computer.
@@ -15,7 +15,7 @@ Run a Valheim dedicated server on a spare Windows PC or Mac, such as an old Mac 
 - **Join code in Discord.** Each time the server is online, it can post the join code in your Discord channel, and say when the server stops. At the end of each day it says who died the most.
 - **Start it from Discord.** Friends type `/valheim` in your Discord: if the computer is asleep, a small helper on your JetKVM wakes it up, and the server starts. The app sets the helper up for you.
 - **Backups.** Valheim's own automatic backups and the app's backups are listed together, and each one can be restored or downloaded. The app makes a backup before anything is replaced, restored over or deleted.
-- **Hibernate or sleep, and wake with Wake-on-LAN.** Saves the world, stops the server and hibernates the computer (or puts it to sleep). Wake it from an IP KVM's Wake-on-LAN, or with the power button, and the server starts again. It can also rest on its own when nobody has played for a while.
+- **Sleep, and wake with Wake-on-LAN.** Saves the world, stops the server and puts the computer to sleep. Wake it from an IP KVM's Wake-on-LAN, with /valheim in Discord, or with the power button, and the server starts again. It can also go to sleep on its own when nobody has played for a while.
 - **Stats.** CPU, memory, GPU and network use for the Valheim server and the whole computer, over 15 minutes to 24 hours. A breakdown by number of players estimates what each extra player costs.
 - **Players.** See who's online and everyone who has played, with total play time. Make someone an admin or ban them with one click, without hunting for Steam IDs.
 - **Records.** Who died the most, who lasted the longest without dying, the quickest death, the night owl and more, for today, this week or all time.
@@ -44,11 +44,10 @@ You only do this once: after that, the app [updates itself](#app-updates).
 6. Click **Start server**. When it says **Online**, friends can join.
 7. Work through **Setup on this computer** on the Home page:
    - **Allow it through Windows Firewall.** Windows asks for permission; click Yes. If Windows showed its own firewall pop-up earlier and it was dismissed, this also fixes that.
-   - **Turn on hibernation**, which the Hibernate button needs.
-   - **Turn on Wake-on-LAN**, so the IP KVM can wake the computer (see [below](#hibernate-sleep-and-waking-up)).
+   - **Turn on Wake-on-LAN**, so the IP KVM can wake the computer (see [below](#sleep-and-waking-up)).
    - **Start this app with Windows**, so everything comes back after a reboot.
 
-The app lives next to the clock as a shield icon. Click the icon to open the panel; right-click it for Start, Stop, Hibernate and Close.
+The app lives next to the clock as a shield icon. Click the icon to open the panel; right-click it for Start, Stop, Sleep and Close.
 
 ## How friends join the game
 
@@ -70,7 +69,7 @@ The same app runs on a Mac with macOS 12 Monterey or newer, Intel or Apple silic
 What's different on a Mac:
 
 - **The app has no window or Dock icon of its own.** It works in the background; open **Valheim Easy Server** again (from Applications) to get the control panel back. To close it, use **Settings → Maintenance**.
-- **Macs sleep rather than hibernate**, so the button says **Sleep**, and the Mac stays awake by itself while the server runs or friends play.
+- **Sleep** works as on Windows, and the Mac stays awake by itself while the server runs or friends play.
 - **Wake-on-LAN** is macOS's **Wake for network access**. **Turn on Wake for network access** in Settings sets it (macOS asks for your password). The [Discord /valheim](#starting-the-server-from-discord) wake-up works the same way as on Windows.
 - **The firewall** is off on a Mac unless you turned it on. If it's on, the app asks to let friends through it.
 - **Everything is in** `~/Library/Application Support/ValheimEasyServer` (the server, worlds, backups and logs), rather than next to the app.
@@ -96,8 +95,9 @@ Each time the server is online, the channel gets a message like this:
 > World: Midgard<br>
 > Join code: **482913**<br>
 > Mods: [Advanced Portals](https://thunderstore.io/c/valheim/p/RandyKnapp/AdvancedPortals/) 1.2.1<br>
+> 📦 Mods code: `01a19ac7-8a3b-2b3c-26bf-001c27524e43`<br>
 > 📢 **Before you join:** update Valheim to 1.0.21, update Advanced Portals to 1.2.1.<br>
-> <sub>In Valheim, go to Join Game and join by code. Install the mod first with the Gale or r2modman mod manager.</sub>
+> <sub>In Valheim, go to Join Game and join by code. Install the mod first: in the r2modman or Gale mod manager, import the mods code as a new profile.</sub>
 
 - **Before you join** appears when something changed since your friends last played: a newer Valheim, an updated mod, a mod added to or dropped from the world, or a new password. It says what to do, and stays until someone has joined since.
 - **Include the password** adds the password, hidden as a spoiler until it's clicked. Turning it on while the server is online posts the message again, with the password. Only turn it on if the channel is just for your friends.
@@ -128,7 +128,6 @@ Set it up in **Settings → Start the server from Discord**:
 Then:
 
 - If the app asks, click **Allow through Windows Firewall**, so it hears the wake signal once the computer is awake.
-- Choose **Sleep** under **Resting and waking up**: most computers, Macs included, can't be woken over the network from hibernation.
 - Test it once: click **Sleep**, wait a minute, and type /valheim in Discord.
 
 Good to know:
@@ -145,7 +144,7 @@ The app is made to be used on the server computer itself, so anyone who can see 
 - The control panel is the **Valheim Easy Server** window. If it was closed, click the shield icon next to the clock or double-click `ValheimEasyServer.exe` again.
 - New to the panel? Click **Tutorial** on the Home page, next to **Start server**.
 - Files you drop on **Add a world** must be on the server computer. Bring them over on a USB stick, through the KVM's virtual drive if it has one, or by downloading them there from a chat or cloud drive.
-- After **Hibernate** (or **Sleep**), wake the computer with the KVM's Wake-on-LAN, or type /valheim in Discord if [that's set up](#starting-the-server-from-discord). The address the KVM needs is in **Settings → Resting and waking up**.
+- After **Sleep**, wake the computer with the KVM's Wake-on-LAN, or type /valheim in Discord if [that's set up](#starting-the-server-from-discord). The address the KVM needs is in **Settings → Resting and waking up**.
 - **Download** saves files on the server computer, because that's the computer the KVM shows. It asks where to save: choose a cloud-drive folder (such as OneDrive) or a USB stick, so you can get the file on your own PC.
 
 ## Worlds
@@ -185,8 +184,10 @@ How it works:
 - **FarLands** only changes what each player sees, so the server never downloads it and doesn't need a restart when it's turned on or off. Ticking it for a world tells players about it: the player pop-up marks it **Just for your game**, and the Discord post lists it as optional. Players can join with or without it.
 - **Players install the mods too.** Valheim can't send mods to players when they join, so each player installs them once:
   1. Install a free mod manager: [Gale](https://thunderstore.io/c/valheim/p/Kesomannen/GaleModManager/) or [r2modman](https://thunderstore.io/c/valheim/p/ebkr/r2modman/).
-  2. Choose Valheim, make a new profile for this server, search for each mod and install it. Anything else it needs, such as BepInEx, comes with it.
+  2. Choose Valheim and import a new profile from the **mods code** (in r2modman: **Import / Update → Import new profile → From code**; in Gale: import a profile from code). It installs every mod the world uses, at the server's versions, with BepInEx and anything else they need. Or make a profile and search for each mod.
   3. Start Valheim from the mod manager (**Launch game** in Gale, **Start modded** in r2modman), then join as usual.
+
+  The mods code is made when the server starts a world with mods: the app puts a mod manager profile with exactly that world's mods on Thunderstore, the way r2modman's "Export profile as code" does. It's shown on the **How friends join** card (with a **Copy** button) and in the Discord post. The same mods at the same versions keep the same code; when a mod is updated or the world's mods change, there's a new one. Thunderstore forgets codes after a while, so the app checks its saved code still works before posting it.
 
   The mods marked "Needed to join" check this when someone joins and turn away players who don't have them. If joining fails because the versions don't match, the player updates the mods in their mod manager: the server keeps them up to date. When the server updates Valheim or a mod, or the world's mods change, the **How friends join** card and the Discord post remind friends what to do before joining, for example "update Seasonality to 3.8.6". Players who also play Riverheim-free worlds use a separate profile for those.
 
@@ -194,9 +195,9 @@ How it works:
 - Reports differ on whether crossplay join codes work with a modded server. If friends on PC can't join with the code, turn **Crossplay** off in Settings and join by address (friends outside your home then need UDP ports 2456–2457 forwarded on your router).
 - Each mod's own settings are in the server folder's `BepInEx\config` folder, for example `randyknapp.mods.advancedportals.cfg` (portal costs and which items each portal allows). Settings marked as synced are sent to players who have the mod. Seasonality keeps its season textures in `BepInEx\config\Seasonality`; the app never overwrites a file someone has changed.
 
-## Hibernate, sleep and waking up
+## Sleep and waking up
 
-**Hibernate** (top right on every page, or the tray menu) saves the world, stops the server and hibernates the computer, which then uses no power. If the server was running before, it starts again by itself about 20 seconds after the computer wakes up. The app always asks first.
+**Sleep** (top right on every page, or the tray menu) saves the world, stops the server and puts the computer to sleep, which uses very little power and keeps the network port listening for Wake-on-LAN. If the server was running before, it starts again by itself about 20 seconds after the computer wakes up. The app always asks first.
 
 After waking up, the computer stays awake for at least 15 minutes, so friends have time to join, even if nobody touches it. (Left to itself, Windows goes back to sleep about two minutes after a Wake-on-LAN wake.) The app also keeps Windows awake while the server runs and while it's busy with something such as starting or updating the server.
 
@@ -206,13 +207,11 @@ After waking up, the computer stays awake for at least 15 minutes, so friends ha
 2. Open **Settings → Resting and waking up**. It shows the network address to wake (the MAC address, like `3C:07:54:12:34:56`) with a copy button.
 3. Click **Turn on Wake-on-LAN** and accept the Windows prompt. This lets the network adapter wake the computer when it receives a Wake-on-LAN packet, and only then, so ordinary network traffic doesn't wake it. Nobody playing is disconnected.
 4. Enter the MAC address in your IP KVM's Wake-on-LAN settings.
-5. Test it once: click **Hibernate**, wait a minute, then send Wake-on-LAN from the KVM.
+5. Test it once: click **Sleep**, wait a minute, then send Wake-on-LAN from the KVM.
 
-Some computers can't be woken over the network from hibernation, because their firmware turns the network port off. It's not known whether a 2013 Mac Pro running Windows can be, so test it. If it doesn't wake, choose **Sleep** in **Settings → Resting and waking up**. Sleep keeps a little power on, wakes in seconds, and Wake-on-LAN can wake most computers from it. The button then says **Sleep**. The power button always works too.
+The app only uses sleep for now. Hibernation is turned off in this version, because most computers can't be woken over the network from it. Windows can still switch a sleeping computer to hibernation by itself after a while: in **Control Panel → Power Options → Change plan settings → Change advanced power settings → Sleep → Hibernate after**, choose **Never**, or Wake-on-LAN stops working once that happens. The power button always works too.
 
-**Settings → Hibernate when nobody is playing** (or **Sleep when nobody is playing**) rests the computer automatically after a set time without players, but never while someone is using its keyboard or mouse (including through an IP KVM).
-
-If the button says hibernation is off, click **Turn on hibernation** and accept the Windows prompt. Most Boot Camp Macs can hibernate in Windows.
+**Settings → Sleep when nobody is playing** puts the computer to sleep automatically after a set time without players, but never while someone is using its keyboard or mouse (including through an IP KVM).
 
 ## Stats
 
@@ -260,11 +259,11 @@ Every change to this project that passes its tests on GitHub becomes a new [rele
 | The panel window doesn't open | Click the shield icon next to the clock, or double-click `ValheimEasyServer.exe` again. |
 | A dropped world isn't found | Drop the world's own folder (the one with `_main` files inside), its `.fwl` and `.db` files, or a zip of either. A zip inside a zip doesn't work. |
 | Windows Security blocks or removes the app | Antivirus tools sometimes raise a false alarm for new programs that aren't signed. Allow it under *Windows Security → Virus & threat protection → Protection history*. |
-| Shutting down or restarting Windows | Stop the server first (or use Hibernate), so the world is saved. Windows doesn't give the server time to save when it shuts down. |
-| Wake-on-LAN doesn't wake the computer | Check that **Settings → Resting and waking up** says the network adapter may wake the computer, that the KVM uses the MAC address shown there, and that the computer is on a cable, not Wi-Fi. If it still won't wake from hibernation, choose **Sleep**, and restart the computer once. |
+| Shutting down or restarting Windows | Stop the server first (or use Sleep), so the world is saved. Windows doesn't give the server time to save when it shuts down. |
+| Wake-on-LAN doesn't wake the computer | Check that **Settings → Resting and waking up** says the network adapter may wake the computer, that the KVM uses the MAC address shown there, and that the computer is on a cable, not Wi-Fi. If it still won't wake, make sure Windows doesn't hibernate it after a while (see [Sleep and waking up](#sleep-and-waking-up)), and restart the computer once. |
 | No join code appears | The **How friends join** card says why. If crossplay can't start, Windows couldn't load Valheim's crossplay part (`Party.dll`, "DllNotFoundException: Party" in the log). Install Microsoft's Visual C++ Redistributable (x64), from [aka.ms/vc14/vc_redist.x64.exe](https://aka.ms/vc14/vc_redist.x64.exe), and restart the server. If that doesn't help, turn **Crossplay** off in Settings: friends then join by address, with UDP 2456–2457 forwarded to the server computer, and the Discord post gives the address instead of a code. |
 | The join code doesn't appear in Discord | The **How friends join** card says why. In **Settings → Discord**, click **Send a test**. If Discord says the link doesn't work, the webhook was deleted: make a new one and paste its link. |
-| /valheim doesn't wake the computer | In **Settings → Start the server from Discord**, click **Check again**: it says whether the waker on the JetKVM is running and in Discord. Then check that the JetKVM's own Wake-on-LAN button wakes the computer (see the row above), and that **Sleep** is chosen rather than **Hibernate**. |
+| /valheim doesn't wake the computer | In **Settings → Start the server from Discord**, click **Check again**: it says whether the waker on the JetKVM is running and in Discord. Then check that the JetKVM's own Wake-on-LAN button wakes the computer (see the row above). |
 | The computer wakes up, but the server doesn't start | Click **Allow through Windows Firewall** in Settings, so the app hears the wake signal. |
 | /valheim doesn't show up in Discord | Add the bot to the Discord server with the link in **Settings → Start the server from Discord**. With the join code posted in Discord, the bot only works in that channel's Discord server. |
 | "The JetKVM didn't let the app in" | On the JetKVM's page, under **Settings → Advanced**, check that **Developer Mode** is on, and paste the app's key into **SSH Public Key** again. |
@@ -299,10 +298,11 @@ The app's own log is in `logs\app.log` inside its folder, and the server's logs 
 - understands both Valheim world formats: 1.0 world folders (`_main.N.fwl2`, `.db2`, `.chunk` files) and the older `.fwl` + `.db` pairs;
 - serves the control panel from inside the app to this computer only (127.0.0.1) and opens it in a Microsoft Edge app window. It turns away requests that other websites open in a browser could make: it checks the address the browser used, the browser's own "which site is asking" header, and an anti-forgery header on every change;
 - posts in Discord, when that's turned on, by sending each message to the channel's webhook link;
+- makes the mods code by uploading a mod manager profile (a zip with r2modman's `export.r2x` list of the world's mods and versions, nothing else) to Thunderstore's `legacyprofile/create` API, as r2modman's "Export profile as code" does; the codes it made are in `modscodes.json`;
 - starts the server from Discord with a small program it carries for the JetKVM's ARM processor (`valheim-waker`, built from `cmd/valheim-waker`). It copies it to the JetKVM over SSH with its own key, into `/userdata/valheim-waker`, with a start script in `/userdata/init.d`. The waker stays connected to Discord as your bot. For /valheim, it sends Wake-on-LAN packets to the computer's network adapter for a few minutes, each request with its own random tag, and asks the server whether it's up (a Steam query on the game port + 1). The app listens for those packets on UDP port 9 and starts the server once per tag;
 - updates itself from this project's GitHub releases (see [Security](#security)). It checks the download's SHA-256 checksum, renames the running program to `ValheimEasyServer.exe.old` (Windows allows renaming a running program), puts the new one in its place and starts it on the same port. If the new one's panel doesn't answer within a minute, the old one goes back;
 - reads CPU, GPU, memory and network usage from Windows' performance counters, the same source Task Manager uses;
-- hibernates with `shutdown /h` or sleeps through Windows' own sleep call, and sets up Wake-on-LAN with `powercfg /deviceenablewake` and the network adapter's power settings (magic packet on, pattern wake off);
+- sleeps through Windows' own sleep call (hibernation, with `shutdown /h`, is turned off for now), and sets up Wake-on-LAN with `powercfg /deviceenablewake` and the network adapter's power settings (magic packet on, pattern wake off);
 - on a Mac, runs Valheim's macOS server (`valheim_server/Valheim`, one program for Intel and Apple silicon) with Steam's client library from SteamCMD, and stops it with the same signal as Ctrl+C. It sleeps with `pmset sleepnow`, keeps the Mac awake with `caffeinate`, turns on Wake for network access with `pmset -a womp 1`, starts at login with a launch agent, and reads usage with `top`, `vm_stat` and `netstat`. Mods are loaded with its own build of UnityDoorstop, which the server allows (it's built to take mods).
 
 Its folder holds `settings.json`, `jetkvm.json` and `jetkvm-key.pem` (once the JetKVM is set up), `server\` (the Valheim server), `saves\worlds_local\` (worlds), `saves\adminlist.txt` and the other player lists, `backups\`, `logs\` and `steamcmd\`.

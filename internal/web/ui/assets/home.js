@@ -153,7 +153,7 @@ function joinCard(app) {
   }
   body.push(discordLine(st));
   const mods = st.mods || [];
-  if (mods.length) body.unshift(modsNotice(mods));
+  if (mods.length) body.unshift(modsNotice(mods, st.needsRestart ? '' : st.modsCode));
   if (st.state === 'online' && (st.reminder || []).length) body.unshift(reminderNotice(st));
   return h('section', { class: 'card', 'aria-label': 'How to join' },
     h('div', { class: 'card-head' }, h('h2', null, 'How friends join'),
@@ -199,8 +199,9 @@ function discordLine(st) {
 }
 
 // modsNotice says the world needs mods; its button opens the pop-up with
-// which ones and where to download them.
-function modsNotice(mods) {
+// which ones and where to download them. code imports them all at once in
+// a mod manager.
+function modsNotice(mods, code) {
   const named = (list) => (list.length > 3 ? `${list.length} mods`
     : `the ${list.map((m) => m.name).join(list.length > 2 ? ', ' : ' and ').replace(/, ([^,]*)$/, ' and $1')} mod${list.length > 1 ? 's' : ''}`);
   const server = mods.filter((m) => m.players !== 'players');
@@ -213,6 +214,8 @@ function modsNotice(mods) {
     : [h('strong', null, `Players can add ${named(extras)} to their own game. `), `${optional}: the server doesn’t need ${many ? 'them' : 'it'}.`];
   return h('div', { class: 'callout info mods-help' }, icon('info'), h('div', { class: 'body small' },
     h('p', null, text),
+    code ? h('p', { class: 'mods-code' }, 'Mods code for r2modman or Gale: ', h('span', { class: 'mono' }, code), ' ',
+      h('button', { class: 'btn btn-ghost btn-sm', 'data-action': 'copy', 'data-text': code, 'data-label': 'Mods code copied' }, icon('copy'), 'Copy')) : null,
     h('div', { class: 'actions' },
       h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'mods-help' }, icon('help'),
         !server.length ? (many ? 'About these mods' : 'About this mod') : many ? 'Which mods do I need?' : 'Which mod do I need?'))));
@@ -277,7 +280,7 @@ function checklist(app) {
     [c.installed, 'Install the Valheim server', 'Free, downloaded from Steam.', !c.installed && h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'install' }, 'Install')],
     mac ? [c.firewall, 'Let friends through the macOS firewall', c.firewall ? 'The firewall is off, or lets the server through.' : 'The firewall is on. macOS asks for your password.', !c.firewall && h('button', { class: 'btn btn-sm', 'data-action': 'fix-firewall' }, 'Allow')]
       : [c.firewall, 'Allow it through Windows Firewall', 'So friends can connect. Windows asks for permission.', !c.firewall && h('button', { class: 'btn btn-sm', 'data-action': 'fix-firewall' }, 'Allow')],
-    st.restMode === 'sleep'
+    st.restMode === 'sleep' || !st.canHibernate
       ? [st.sleep.available, 'Sleep works on this computer', st.sleep.available ? 'The Sleep button works.' : st.sleep.detail, !st.sleep.available && h('button', { class: 'btn btn-sm', 'data-action': 'go', 'data-page': 'settings' }, 'Settings')]
       : [c.hibernate, 'Hibernation turned on', c.hibernate ? 'The Hibernate button works.' : 'Needed for the Hibernate button.', !c.hibernate && h('button', { class: 'btn btn-sm', 'data-action': 'enable-hibernate' }, 'Turn on')],
     [c.wakeOnLan, mac ? 'Wake for network access turned on' : 'Wake-on-LAN turned on', c.wired ? 'So the computer can be woken over the network, for example from an IP KVM.' : 'Needs a network cable: Wake-on-LAN doesn’t work over Wi-Fi.',

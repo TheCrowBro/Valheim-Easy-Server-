@@ -27,8 +27,8 @@ function address(url, label) {
 const names = (list) => list.length > 1 ? list.slice(0, -1).map((m) => m.name).join(', ') + ' and ' + list[list.length - 1].name : list[0].name;
 
 // openModsHelp explains the mods in list (as the status and the worlds list
-// give them) to players.
-export function openModsHelp(list) {
+// give them) to players. code, when there is one, imports them all at once.
+export function openModsHelp(list, code) {
   if (!list || !list.length) return;
   const many = list.length > 1;
   const it = many ? 'them' : 'it';
@@ -63,9 +63,15 @@ export function openModsHelp(list) {
       h('ol', { class: 'steps' },
         h('li', null, 'Get a free mod manager, ', h('b', null, 'Gale'), ' or ', h('b', null, 'r2modman'), ':',
           h('div', { class: 'managers' }, address(GALE, 'Gale'), address(R2MODMAN, 'r2modman'))),
-        h('li', null, 'Choose Valheim and make a new profile for this server. Search for ', h('b', null, many ? 'each mod' : `“${list[0].name}”`),
-          ' and install it. Anything else it needs, such as BepInEx, comes with it.'),
+        code
+          ? h('li', null, 'Choose Valheim and import a new profile from this mods code. It installs ', many ? 'every mod' : 'the mod', ' this world uses, at the server’s versions, with everything ', it, ' needs. In r2modman: ',
+            h('b', null, 'Import / Update'), ' → ', h('b', null, 'Import new profile'), ' → ', h('b', null, 'From code'), '. In Gale: import a profile from code.',
+            h('div', { class: 'address' }, h('span', { class: 'muted' }, 'Mods code:'), h('span', { class: 'mono' }, code),
+              h('button', { class: 'btn btn-ghost btn-icon btn-sm', type: 'button', 'aria-label': 'Copy the mods code', onclick: () => copyText(code, 'Mods code copied') }, icon('copy'))))
+          : h('li', null, 'Choose Valheim and make a new profile for this server. Search for ', h('b', null, many ? 'each mod' : `“${list[0].name}”`),
+            ' and install it. Anything else it needs, such as BepInEx, comes with it.'),
         h('li', null, 'Start Valheim from the mod manager (', h('b', null, 'Launch game'), ' in Gale, ', h('b', null, 'Start modded'), ' in r2modman) and join as usual.')),
+      code ? h('p', { class: 'small text-2' }, 'Or make a profile yourself and search for ', many ? 'each mod' : `“${list[0].name}”`, ' in the mod manager.') : null,
       newWorlds.length ? h('p', { class: 'small text-2' }, `Play other worlds with a different profile: with ${names(newWorlds)} on, worlds made without it won’t load.`) : null,
       extras ? null : h('p', { class: 'small muted' }, 'If joining fails because the versions don’t match, update the mods in the mod manager.'),
     ],

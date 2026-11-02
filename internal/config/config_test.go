@@ -174,6 +174,25 @@ func TestLoadMovesModsToTheSelectedWorld(t *testing.T) {
 	}
 }
 
+// Settings saved while hibernation was offered sleep instead, for now.
+func TestLoadHibernateSleeps(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte(`{"serverName":"Viking Night","password":"fjord-1234","world":"Midgard","restMode":"hibernate"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, _, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := RestSleep
+	if CanHibernate() {
+		want = RestHibernate
+	}
+	if s.RestMode != want || Defaults().RestMode != RestSleep && !CanHibernate() {
+		t.Fatalf("rest mode %q (defaults %q), want %q", s.RestMode, Defaults().RestMode, want)
+	}
+}
+
 func TestLoadDropsModsNoLongerOffered(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	old := `{"serverName":"Viking Night","password":"fjord-1234","world":"Midgard","port":2456,

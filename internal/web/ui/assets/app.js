@@ -253,7 +253,7 @@ A['show-log'] = () => go('log');
 A['show-settings'] = () => go('settings');
 A['show-worlds'] = () => go('worlds');
 A.tutorial = () => openTutorial(app);
-A['mods-help'] = () => openModsHelp(app.status && app.status.mods);
+A['mods-help'] = () => openModsHelp(app.status && app.status.mods, app.status && !app.status.needsRestart ? app.status.modsCode : '');
 A.reveal = (d, el) => {
   const target = document.getElementById(d.target);
   if (!target) return;

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -27,6 +28,7 @@ const (
 	Heightmap = "Digitalroot-Heightmap_Unlimited_JvL"
 	Locations = "warpalicious-More_World_Locations_AIO"
 	JSON      = "ValheimModding-JsonDotNET"
+	FarLands  = "Ivvty-FarLands"
 )
 
 // Fake answers the package and download requests mods.Installer makes.
@@ -36,15 +38,37 @@ type Fake struct {
 	mu       sync.Mutex
 	versions map[string]string
 	extra    map[string]map[string]string // package -> extra file name -> content
+	profiles map[string]string            // share code -> profile, as mod managers upload them
+	made     int
 }
 
 // New returns a Fake offering the current versions of the packages.
 func New() *Fake {
 	return &Fake{
 		versions: map[string]string{Loader: "5.4.2351", Jotunn: "2.30.2", Portal: "1.2.0", Yaml: "16.3.1", Seasons: "3.8.4",
-			Rivers: "1.2.1", Plants: "1.21.4", Gamma: "1.0.10", Sync: "1.0.11", Heightmap: "2.0.2", Locations: "5.2.2", JSON: "13.0.4"},
-		extra: map[string]map[string]string{},
+			Rivers: "1.2.1", Plants: "1.21.4", Gamma: "1.0.10", Sync: "1.0.11", Heightmap: "2.0.2", Locations: "5.2.2", JSON: "13.0.4",
+			FarLands: "1.0.6"},
+		extra:    map[string]map[string]string{},
+		profiles: map[string]string{},
 	}
+}
+
+// Profiles returns the profiles uploaded for share codes, by code.
+func (f *Fake) Profiles() map[string]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := map[string]string{}
+	for k, v := range f.profiles {
+		out[k] = v
+	}
+	return out
+}
+
+// Expire forgets a share code, as Thunderstore does after a while.
+func (f *Fake) Expire(code string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.profiles, code)
 }
 
 // SetVersion makes a newer (or older) version of a package the latest one.
@@ -77,6 +101,7 @@ var deps = map[string][]string{
 	Heightmap: {Loader + "-5.4.2350", Jotunn + "-2.30.0"},
 	Locations: {Loader + "-5.4.2351", JSON + "-13.0.4", Yaml + "-16.3.1", Jotunn + "-2.30.2"},
 	JSON:      nil,
+	FarLands:  {Loader + "-5.4.2333"},
 }
 
 func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +122,25 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"download_url":   fmt.Sprintf("http://%s/package/download/%s/%s/%s/", r.Host, parts[3], parts[4], v),
 			"dependencies":   deps[name],
 		}})
+	case len(parts) == 4 && parts[0] == "api" && parts[2] == "legacyprofile" && parts[3] == "create" && r.Method == http.MethodPost:
+		b, _ := io.ReadAll(io.LimitReader(r.Body, 10<<20))
+		f.made++
+		key := fmt.Sprintf("%08x-0000-4000-8000-%012x", f.made, f.made)
+		f.profiles[key] = string(b)
+		json.NewEncoder(w).Encode(map[string]string{"key": key})
+	case len(parts) == 5 && parts[0] == "api" && parts[2] == "legacyprofile" && parts[3] == "get":
+		if _, ok := f.profiles[parts[4]]; !ok {
+			http.NotFound(w, r)
+			return
+		}
+		http.Redirect(w, r, "/legacyprofile/file/"+parts[4], http.StatusFound)
+	case len(parts) == 3 && parts[0] == "legacyprofile" && parts[1] == "file":
+		p, ok := f.profiles[parts[2]]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		io.WriteString(w, p)
 	case len(parts) == 5 && parts[0] == "package" && parts[1] == "download":
 		name := parts[2] + "-" + parts[3]
 		b := f.zip(name, parts[4])
@@ -151,6 +195,8 @@ func (f *Fake) zip(name, version string) []byte {
 		files["plugins/Bundles/cd_entrance2"] = "catacombs"
 		files["CHANGELOG.md"] = "# Changes"
 		files["icon.png"] = "png"
+	case FarLands:
+		files["FarLands.dll"] = "farlands " + version
 	case JSON:
 		files["plugins/Newtonsoft.Json.dll"] = "json " + version
 		files["plugins/NewtonsoftJsonDetector.dll"] = "detector " + version

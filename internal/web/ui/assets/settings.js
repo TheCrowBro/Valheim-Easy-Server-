@@ -142,7 +142,7 @@ function wakePrereqs(app, on) {
       h('p', null, st.platform === 'darwin' ? '“Wake for network access” is off, so this Mac can’t be woken over the network yet.' : 'Windows doesn’t let the network adapter wake this computer yet.'),
       h('div', { class: 'actions' }, h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'enable-wol' }, icon('power'), st.platform === 'darwin' ? 'Turn on Wake for network access' : 'Turn on Wake-on-LAN')))));
   }
-  if (draft.restMode !== 'sleep' && st.platform !== 'darwin') {
+  if (draft.restMode !== 'sleep' && st.canHibernate) {
     out.push(h('div', { class: 'callout info' }, icon('info'), h('div', { class: 'body' },
       h('p', null, 'Choose ', h('b', null, 'Sleep'), ' under ', h('b', null, 'Resting and waking up'), ': most computers, Macs included, can’t be woken over the network from hibernation.'))));
   }
@@ -302,10 +302,14 @@ function restSection(app) {
   const others = wired.filter((a) => a !== main);
   return h('section', { class: 'card' },
     h('div', { class: 'card-head' }, h('h2', null, 'Resting and waking up')),
-    h('p', { class: 'text-2', style: { marginBottom: '12px' } }, 'When the Hibernate (or Sleep) button is used, or nobody has played for a while, the computer can:'),
-    h('div', { class: 'choices' },
-      st && st.platform === 'darwin' ? null : option('hibernate', 'Hibernate', 'Uses no power. Some computers can’t be woken by Wake-on-LAN from hibernation; if yours doesn’t wake, choose Sleep.'),
-      option('sleep', 'Sleep', canSleep ? 'Uses a little power and wakes in seconds. Wake-on-LAN can wake most computers from sleep.' : st.sleep.detail, !canSleep)),
+    st && st.canHibernate ? [
+      h('p', { class: 'text-2', style: { marginBottom: '12px' } }, 'When the Hibernate (or Sleep) button is used, or nobody has played for a while, the computer can:'),
+      h('div', { class: 'choices' },
+        option('hibernate', 'Hibernate', 'Uses no power. Some computers can’t be woken by Wake-on-LAN from hibernation; if yours doesn’t wake, choose Sleep.'),
+        option('sleep', 'Sleep', canSleep ? 'Uses a little power and wakes in seconds. Wake-on-LAN can wake most computers from sleep.' : st.sleep.detail, !canSleep)),
+    ] : canSleep
+      ? h('p', { class: 'text-2', style: { marginBottom: '12px' } }, 'When the Sleep button is used, or nobody has played for a while, the computer goes to sleep. It uses a little power, wakes in seconds, and Wake-on-LAN can wake it.')
+      : h('div', { class: 'callout warn', style: { marginBottom: '12px' } }, icon('alert'), h('div', { class: 'body' }, h('p', null, st.sleep.detail))),
     h('h3', { class: 'subhead' }, 'Wake-on-LAN'),
     main ? [
       h('p', { class: 'text-2' }, 'To wake this computer from your IP KVM (or any Wake-on-LAN app), use this address:'),
@@ -316,7 +320,7 @@ function restSection(app) {
       main.wakeArmed
         ? h('div', { class: 'callout good', style: { marginTop: '12px' } }, icon('check'), h('div', { class: 'body' },
           h('p', null, st.platform === 'darwin' ? '“Wake for network access” is on: a Wake-on-LAN signal wakes this Mac.' : 'Windows lets this network adapter wake the computer.'),
-          h('p', { class: 'small text-2' }, 'Test it once: use the Hibernate (or Sleep) button, wait a minute, then send Wake-on-LAN from the IP KVM.')))
+          h('p', { class: 'small text-2' }, `Test it once: use the ${draft.restMode === 'sleep' ? 'Sleep' : 'Hibernate'} button, wait a minute, then send Wake-on-LAN from the IP KVM.`)))
         : h('div', { class: 'callout warn', style: { marginTop: '12px' } }, icon('alert'), h('div', { class: 'body' },
           h('p', null, st.platform === 'darwin' ? '“Wake for network access” is off, so this Mac can’t be woken over the network yet.' : 'Windows doesn’t let this network adapter wake the computer yet.'),
           h('div', { class: 'actions' }, h('button', { class: 'btn btn-sm btn-primary', 'data-action': 'enable-wol' }, icon('power'), st.platform === 'darwin' ? 'Turn on Wake for network access' : 'Turn on Wake-on-LAN')),
@@ -403,7 +407,7 @@ function maintenanceSection(app) {
         running ? h('span', { class: 'small muted' }, 'Stop the server to update or repair it.') : null),
       h('div', { class: 'row' },
         h('button', { class: 'btn', 'data-action': 'fix-firewall' }, icon('shieldCheck'), st && st.platform === 'darwin' ? 'Allow through the macOS firewall' : 'Allow through Windows Firewall'),
-        st && !st.hibernate.available && st.platform !== 'darwin' ? h('button', { class: 'btn', 'data-action': 'enable-hibernate' }, icon('moon'), 'Turn on hibernation') : null),
+        st && st.canHibernate && !st.hibernate.available ? h('button', { class: 'btn', 'data-action': 'enable-hibernate' }, icon('moon'), 'Turn on hibernation') : null),
       h('div', { class: 'row', style: { paddingTop: '12px', borderTop: '1px solid var(--line)' } },
         h('button', { class: 'btn', 'data-action': 'settings-quit', 'data-stop': '0' }, icon('x'), 'Close the app (server keeps running)'),
         running ? h('button', { class: 'btn btn-danger', 'data-action': 'settings-quit', 'data-stop': '1' }, icon('power'), 'Stop the server and close the app') : null),
