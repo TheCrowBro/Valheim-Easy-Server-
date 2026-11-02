@@ -347,6 +347,13 @@ func (m *Manager) RenameWorld(name, newName string) error {
 	if next.World == name {
 		next.World, changed = newName, true
 	}
+	// Options already saved under the new name belong to a deleted world
+	// (deleting keeps them so a restore brings them back). The renamed world
+	// mustn't get that world's difficulty and mods, so drop them first.
+	if _, ok := next.WorldOptions[newName]; ok {
+		delete(next.WorldOptions, newName)
+		changed = true
+	}
 	if o, ok := next.WorldOptions[name]; ok {
 		delete(next.WorldOptions, name)
 		next.WorldOptions[newName] = o
