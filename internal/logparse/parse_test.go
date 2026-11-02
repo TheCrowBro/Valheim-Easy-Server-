@@ -388,16 +388,10 @@ func TestTrackerIgnoresMadeUpLines(t *testing.T) {
 	if acts := apply(`10/22/2026 20:17:01: Connections 0 ZDOS:1  sent:0 recv:0`); tr.Count() != 0 || len(acts) != 1 {
 		t.Fatalf("players %d, activities %+v", tr.Count(), acts)
 	}
-	// The server keeps its join code for the whole run, so a line with its
-	// name and another code was made up.
-	apply(`10/22/2026 20:18:00: Session "Viking Friends" with join code 123456 and IP 6.6.6.6:2456 is active with 0 player(s)`)
-	if tr.JoinCode != "604510" || tr.PublicAddr != "" {
-		t.Fatalf("code %q addr %q", tr.JoinCode, tr.PublicAddr)
-	}
-	// Its address is kept the same way.
-	apply(`10/22/2026 20:18:01: Session "Viking Friends" with join code 604510 and IP 203.0.113.4:2456 is active with 0 player(s)`)
-	apply(`10/22/2026 20:18:02: Session "Viking Friends" with join code 604510 and IP 6.6.6.6:2456 is active with 0 player(s)`)
-	if tr.JoinCode != "604510" || tr.PublicAddr != "203.0.113.4:2456" {
+	// A real new code for the same session is taken: Valheim gets one when
+	// it registers its session again.
+	apply(`10/22/2026 20:18:00: Session "Viking Friends" with join code 123456 and IP 203.0.113.4:2456 is active with 0 player(s)`)
+	if tr.JoinCode != "123456" || tr.PublicAddr != "203.0.113.4:2456" {
 		t.Fatalf("code %q addr %q", tr.JoinCode, tr.PublicAddr)
 	}
 
@@ -422,7 +416,7 @@ func TestTrackerIgnoresMadeUpLines(t *testing.T) {
 // A player's version string is written into the log before the password is
 // checked, line breaks and all. The lines it adds, even after a made-up
 // "(Filename:" line like the one Unity writes after each message, can't
-// change the join code or empty the list of who's online.
+// empty the list of who's online.
 func TestTrackerIgnoresLinesInPlayerText(t *testing.T) {
 	var tr Tracker
 	feedAt(t, &tr, clock, `
@@ -437,15 +431,12 @@ func TestTrackerIgnoresLinesInPlayerText(t *testing.T) {
 `)
 	peer := "11/02/2026 20:05:00: Peer 76561198000000666 has incompatible version, mine:1.0.12 (network version 35)   remote "
 	version := "x\n" +
-		`11/02/2026 20:05:00: Session "Viking Friends" with join code 999999 and IP 6.6.6.6:2456 is active with 0 player(s)` + "\n" +
+		`11/02/2026 20:05:00: Session "Viking Friends" with join code 604510 and IP 203.0.113.4:2456 is active with 0 player(s)` + "\n" +
 		"(Filename: ./Runtime/Export/Debug/Debug.bindings.h Line: 35)\n\n" +
 		"11/02/2026 20:05:00: Connections 0 ZDOS:1  sent:0 recv:0\n" +
 		"11/02/2026 20:05:00: Connections 0 ZDOS:1  sent:0 recv:0\n" +
 		"11/02/2026 20:35:00: Connections 0 ZDOS:1  sent:0 recv:0"
 	acts := feedAt(t, &tr, clock.Add(5*time.Minute), peer+version+" (network version 35)")
-	if tr.JoinCode != "604510" || tr.PublicAddr != "203.0.113.4:2456" {
-		t.Errorf("made-up lines changed the join code to %q, address %q", tr.JoinCode, tr.PublicAddr)
-	}
 	if tr.Count() != 2 || kinds(acts) != "bad_version:" {
 		t.Errorf("made-up counts emptied the list: %d players, activities %s", tr.Count(), kinds(acts))
 	}

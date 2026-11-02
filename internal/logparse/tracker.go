@@ -127,17 +127,13 @@ func (t *Tracker) Apply(ev Event, now time.Time) []Activity {
 		if ev.Session != t.session {
 			return nil
 		}
-		// A player can also write a line with the server's own name. So the
-		// first code and address are kept for the whole run, and a line
-		// that says otherwise was made up. When crossplay couldn't start,
-		// no code will come at all. The line's player count isn't used
-		// either: the server's "Connections" lines give that.
+		// A new code for the server's own session is taken: Valheim gets one
+		// when it registers its session again, and the app posts it. When
+		// crossplay couldn't start, no code will come at all. The line's
+		// player count isn't used: a player can write a line with the
+		// server's name, and the server's "Connections" lines give it.
 		if t.CrossplayFailed {
 			ev.Code, ev.Addr = "", ""
-		}
-		if (t.JoinCode != "" && ev.Code != "" && ev.Code != t.JoinCode) ||
-			(t.PublicAddr != "" && ev.Addr != "" && ev.Addr != t.PublicAddr) {
-			return nil
 		}
 		if ev.Code != "" {
 			t.JoinCode = ev.Code
