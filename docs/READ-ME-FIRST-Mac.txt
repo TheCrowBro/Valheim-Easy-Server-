@@ -42,6 +42,11 @@ In Valheim, go to Join Game and join by the code the control panel shows
 world takes a few minutes while Valheim makes it; the control panel says
 when friends can join.
 
+If the world has mods, each friend installs them once in their own game:
+in the free r2modman or Gale mod manager, they import a new profile from
+the "mods code" shown under "How friends join" (and in the Discord post).
+It has every mod the world uses, at the server's versions.
+
 
 COMING FROM THE WINDOWS VERSION
 -------------------------------
