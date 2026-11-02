@@ -482,6 +482,11 @@ func TestStopWhileTheWorldLoads(t *testing.T) {
 		if err := m.StopServer(); err != nil {
 			t.Fatalf("stop while %s waits for the world: %v", what, err)
 		}
+		// The stop job finishes a moment after the server has stopped, and
+		// the next start has to wait for it.
+		if job := waitJob(t, m, currentJobID(m)); job.Error != "" {
+			t.Fatalf("stop while %s waits for the world: %s", what, job.Error)
+		}
 		waitFor(t, "stop", 20*time.Second, func() bool { return m.Status().State == StateStopped })
 	}
 
@@ -582,6 +587,12 @@ func TestJoinInfoIsTheRunningServers(t *testing.T) {
 	}
 	waitFor(t, "server online", 20*time.Second, func() bool { return m.Status().State == StateOnline })
 	waitJob(t, m, currentJobID(m))
+	// runtime.json now holds the password, so it's private like settings.json.
+	if fi, err := os.Stat(filepath.Join(env.data, "runtime.json")); err != nil {
+		t.Fatal(err)
+	} else if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
+		t.Fatalf("runtime.json mode = %v, want 0600", fi.Mode().Perm())
+	}
 	old := m.Settings()
 	s.Password, s.Port, s.Crossplay = "newsecret77", old.Port+2, true
 	if err := m.UpdateSettings(s); err != nil {
@@ -598,6 +609,33 @@ func TestJoinInfoIsTheRunningServers(t *testing.T) {
 	}
 	if st := m.Status(); st.Join.Password != "newsecret77" || st.Join.Port != old.Port+2 || !st.Join.Crossplay {
 		t.Fatalf("join info after restarting: %+v", st.Join)
+	}
+}
+
+// runtime.json holds the running server's password, so it's readable only
+// by the user running the app, even where an older version left a
+// world-readable copy.
+func TestRuntimeFileIsPrivate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows doesn't use these permission bits")
+	}
+	path := filepath.Join(t.TempDir(), "runtime.json")
+	if err := os.WriteFile(path, []byte(`{"pid":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	saveRuntime(path, runInfo{PID: 42, Password: "secret123"})
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o600 {
+		t.Fatalf("runtime.json mode = %v, want 0600", fi.Mode().Perm())
+	}
+	if info, err := loadRuntime(path); err != nil || info.PID != 42 || info.Password != "secret123" {
+		t.Fatalf("read back %+v, %v", info, err)
 	}
 }
 

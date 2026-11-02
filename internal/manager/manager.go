@@ -584,9 +584,12 @@ func (m *Manager) notePlayerLocked(a logparse.Activity, since time.Time) {
 	}
 }
 
+// saveRuntime writes runtime.json readable only by the user running the
+// app, like settings.json, because it holds the server password the
+// running server started with. Only this app reads it back.
 func saveRuntime(path string, info runInfo) {
 	if b, err := json.MarshalIndent(info, "", "  "); err == nil {
-		config.WriteFileAtomic(path, b, 0o644)
+		config.WriteFileAtomic(path, b, 0o600)
 	}
 }
 
