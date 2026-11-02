@@ -101,6 +101,12 @@ func (m *Manager) archiveRunLocked(run *serverRun) bool {
 func (m *Manager) backfillRecords() {
 	m.mu.Lock()
 	dir := m.paths.Logs
+	// The account each name last played from, to tell apart friends who
+	// connected at the same time.
+	accounts := make(map[string]string, len(m.known))
+	for name, p := range m.known {
+		accounts[name] = p.PlatformID
+	}
 	m.mu.Unlock()
 	logs, _ := filepath.Glob(filepath.Join(dir, "server-*.log"))
 	changed := false
@@ -116,7 +122,7 @@ func (m *Manager) backfillRecords() {
 		if known || current {
 			continue
 		}
-		events, err := eventsFromLog(path)
+		events, err := eventsFromLog(path, accounts)
 		if err != nil {
 			m.log.Printf("records: reading %s: %v", name, err)
 			continue
@@ -132,14 +138,16 @@ func (m *Manager) backfillRecords() {
 	}
 }
 
-// eventsFromLog reads who joined, left and died from a server log.
-func eventsFromLog(path string) ([]records.Event, error) {
+// eventsFromLog reads who joined, left and died from a server log. accounts
+// gives the account each name last played from.
+func eventsFromLog(path string, accounts map[string]string) ([]records.Event, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 	var tracker logparse.Tracker
+	tracker.KnownPlatformID = func(name string) string { return accounts[name] }
 	events := []records.Event{}
 	var last time.Time
 	add := func(acts []logparse.Activity) {

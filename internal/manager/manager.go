@@ -526,6 +526,15 @@ func (m *Manager) KnownPlayers() []KnownPlayer {
 	return out
 }
 
+// knownPlatformIDLocked gives the account a character's name last played
+// from, or "" for someone new.
+func (m *Manager) knownPlatformIDLocked(name string) string {
+	if p := m.known[name]; p != nil {
+		return p.PlatformID
+	}
+	return ""
+}
+
 // notePlayerLocked updates the known-player list from a feed activity.
 func (m *Manager) notePlayerLocked(a logparse.Activity, since time.Time) {
 	if a.Name == "" || (a.Kind != "join" && a.Kind != "leave") {

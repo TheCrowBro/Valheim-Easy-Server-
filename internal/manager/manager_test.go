@@ -441,6 +441,101 @@ func TestOnlineWhenOpeningIsNeverSaid(t *testing.T) {
 	waitFor(t, "stop", 20*time.Second, func() bool { return m.Status().State == StateStopped })
 }
 
+// Two friends who played before connect at the same time, and the one who
+// connected second finishes loading first. Each still gets their own
+// account, and the right one is shown leaving.
+func TestFriendsConnectingTogether(t *testing.T) {
+	env := setup(t)
+	m := env.m
+	install(t, m)
+	if err := m.StartServer(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "server online", 20*time.Second, func() bool { return m.Status().State == StateOnline })
+	const astrid, bjorn = "Steam_76561198000000001", "Steam_76561198000000002"
+	m.mu.Lock()
+	m.known["Astrid"] = &KnownPlayer{Name: "Astrid", PlatformID: astrid}
+	m.known["Bjorn"] = &KnownPlayer{Name: "Bjorn", PlatformID: bjorn}
+	run := m.run
+	m.mu.Unlock()
+	for _, line := range []string{
+		"Got connection SteamID 76561198000000001",
+		"Got handshake from client 76561198000000001",
+		"Got connection SteamID 76561198000000002",
+		"Got handshake from client 76561198000000002",
+		"Got character ZDOID from Bjorn : -123:1",
+		"Got character ZDOID from Astrid : -456:1",
+	} {
+		m.handleLine(run, line)
+	}
+	ids := map[string]string{}
+	for _, p := range m.Status().Players {
+		ids[p.Name] = p.PlatformID
+	}
+	if len(ids) != 2 || ids["Astrid"] != astrid || ids["Bjorn"] != bjorn {
+		t.Fatalf("players = %v", ids)
+	}
+
+	m.handleLine(run, "Closing socket 76561198000000001") // Astrid leaves
+	if st := m.Status(); len(st.Players) != 1 || st.Players[0].Name != "Bjorn" {
+		t.Fatalf("after Astrid left: %+v", st.Players)
+	}
+	if !hasActivity(m, "leave", "Astrid") || hasActivity(m, "leave", "Bjorn") {
+		t.Fatal("the wrong player was shown leaving")
+	}
+	if hasActivity(m, "warning", "Astrid") || hasActivity(m, "warning", "Bjorn") {
+		t.Fatal("warned about a different account")
+	}
+}
+
+// When the player list was emptied while friends are still connected, as
+// lines a player makes up can do, the server's own count keeps the
+// computer awake, even with the shortest idle time.
+func TestServerCountKeepsAwake(t *testing.T) {
+	env := setup(t)
+	m := env.m
+	s := m.Settings()
+	s.IdleHibernate, s.IdleMinutes = true, 10
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	install(t, m)
+	if err := m.StartServer(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "server online", 20*time.Second, func() bool { return m.Status().State == StateOnline })
+	deadline := func() time.Duration {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return time.Until(m.idleDeadlineLocked())
+	}
+	m.mu.Lock()
+	run := m.run
+	m.idleSince, m.keepAwakeUntil = time.Now().Add(-8*time.Minute), time.Time{}
+	m.mu.Unlock()
+
+	// Nobody connected, or a session line without the server's address:
+	// still idle.
+	m.handleLine(run, "Connections 0 ZDOS:1000  sent:0 recv:0")
+	m.handleLine(run, `New session server "`+s.ServerName+`" that has join code , now 2 player(s)`)
+	if d := deadline(); d > 3*time.Minute {
+		t.Fatalf("sleeps in %s", d.Round(time.Second))
+	}
+
+	m.handleLine(run, "Connections 2 ZDOS:1000  sent:0 recv:0")
+	if d := deadline(); d < 14*time.Minute {
+		t.Fatalf("sleeps in %s with 2 connected", d.Round(time.Second))
+	}
+
+	m.mu.Lock()
+	m.idleSince, m.keepAwakeUntil = time.Now().Add(-8*time.Minute), time.Time{}
+	m.mu.Unlock()
+	m.handleLine(run, `Session "`+s.ServerName+`" with join code 123456 and IP 203.0.113.7:2456 is active with 1 player(s)`)
+	if d := deadline(); d < 14*time.Minute {
+		t.Fatalf("sleeps in %s with 1 in the session", d.Round(time.Second))
+	}
+}
+
 func TestTakesOverRunningServer(t *testing.T) {
 	t.Setenv("FAKE_VALHEIM_SCRIPT", "join:Gunnar@2")
 	env := setup(t)
