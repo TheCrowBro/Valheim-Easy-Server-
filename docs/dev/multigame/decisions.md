@@ -68,3 +68,11 @@ Games whose server can't run on this computer are listed in "Add a game" but gre
   - R3 "games": the new panel and the games, after the owner's short Mac Pro checklist (Valheim, Minecraft, Terraria, Necesse).
 - Work in progress goes to the non-releasing branch "multigame" (owner-approved). Only pushes to the default branch ccr-949cf1ef-eeo1jr release; releases happen only by merging into it at the R1/R2/R3 gates.
 - Satisfactory (~15.5 GB) and Windrose (~35 GB) get real-server checks on demand rather than on every build.
+
+## Answers to the round-two spec's questions (2026-11-26)
+- Windrose's "still playing?" check when the bot can't read its channel (or there's no bot): same rule; it still posts the question, a "Keep it on" button in the panel counts as a reply, and with no reply it turns off 2 hours later.
+- Any other game without a usable join/leave signal (Core Keeper most likely) uses the same rule as Windrose.
+- Project Zomboid: Build 42 (the current default branch on Steam).
+- R2 reaches the owner as a normal auto-update (that is how the update and takeover get tested for real); R3 waits for the owner's OK.
+- The R3 Mac checklist test copy runs on the owner's REAL data folder (it takes over as the final update would; backups are kept).
+- Windows tray menu: Open the control panel, Stop all games, Quit. No per-game entries.
