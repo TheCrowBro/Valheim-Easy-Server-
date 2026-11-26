@@ -156,3 +156,43 @@ Nothing blocking, and every change is in F's own files.
 1. Once stream RC (mg/protocols) merges, TestDemoProbeDuringStop and TestDemoRCONAndA2S stop skipping and run with no change.
 2. A rule for whoever writes the RCON personalities (Minecraft, Zomboid): an RCON "stop" handler should return its reply and queue the stop with s.post, as demo.go does. If it calls stop or Exit inside the handler, the reply never goes out and the exit waits 250 ms. The RCON doc in fw_net.go now says this.
 3. Stream RC's TestServer and TestResponder are correct as written; their docs already warn that handle/info must not call Close. No change is needed there.
+
+## P-fix (mg/platform-fix)
+
+1. **A file outside my list.** The comma bug lives in internal/platform/winparse_games.go (a 4-line change plus a comment), with its goldens in winparse_games_test.go. Spec 9.3 gives both to stream P, but your brief didn't list them. I edited them because the fix is in the script text and nothing else touches those files in R2. If you'd rather they went another way, drop that part of the commit. Without it, the "egsci UDP" rule will keep failing.
+2. **Spec text.** Spec 2.12 (spec.md line 822) still shows `localport=<ports>` unquoted; it should read `"localport=<ports>"`.
+3. **Missing programs.** If CI's log says netsh made no rule for "a program that isn't there", then R3's manager (stream A's firewall.go) must leave games that aren't installed yet out of FixFirewallAll's list. Otherwise their rules never appear, and GameFirewallReady keeps offering the fix.
+4. **A risk CI can't see.** The temp-file startup command (pscommand.go, not mine) looks like a common malware pattern: `-WindowStyle Hidden -EncodedCommand` that reads a file and runs it as a script block, as admin. Windows Defender is off on GitHub runners, so CI can't tell whether Defender's script scanning (AMSI) blocks it on the owner's PC. With games this route is the normal one for FixFirewallAll. Today, Valheim alone only uses it with very long folder paths. It should be checked on the owner's Windows PC before R3.
+5. **Next step if the launch is to blame.** If TestRunElevatedPowerShellReal fails while TestRunElevatedWaitReal passes, the fix belongs in power_windows.go's runElevated (plain ShellExecute, no COM, no "wait" flag), which I don't own. One option is to start it the way RunElevatedWait does, in its own goroutine, so it still returns before the prompt is answered.
+6. **Untouched.** Nothing pushed or tagged; no other branch touched.
+
+## F-fix (mg/fakeserver-fix)
+
+1. **Separate macOS manager failure.** The same macOS job also failed internal/manager TestSettingsSaveDuringStart: "timed out waiting for server online", "The server stopped while starting", and "TempDir RemoveAll cleanup: directory not empty". It is not this port race: cmd/fakevalheim never opens a port, and the manager tests' random Valheim port is never bound. It needs its own look by VM/M3; I did not touch the manager.
+2. **"Text file busy" in the manager (M3).** The same Linux race could hit the manager's tests once they run several fake games at once: one game being installed by copying the stand-in while another is started. If M3 sees "text file busy" on Linux CI, the same short retry on syscall.ETXTBSY around starting the program fixes it.
+3. **Note for G-stream agents** (stream-notes, which I don't own):
+   - Conformance and WaitEvent now retry a start up to 3 times on new ports when another program took a port gametest chose, and say so in the test log.
+   - A personality or adapter whose "port in use" message should be recognised needs the port number in that line, or the port named earlier in the log, plus one of the usual wordings.
+   - A test that wants to see a real "port in use" must give the port itself through Options.Change; those ports are never changed or retried.
+4. **Port ranges for test helpers.** gametest picks from 20000-29989 and cmd/fakeserver's tests from 30000-31999. A future test helper that picks ports should stay outside both ranges, or share the same claim list.
+
+After review:
+
+1. For the owner of internal/manager tests (the reviewer suggests the VM or M3 stream): the wake-port tests pick a UDP port the same way that broke on macOS.
+   - Where: internal/manager/waker_test.go:50-57 (freeUDPPort), which wakerOptions uses at waker_test.go:64 and which waker_test.go:78, waker_test.go:230 and r2_test.go:477 call; and internal/manager/wakesignal_test.go:36-42.
+   - Why it can fail: each opens udp4 127.0.0.1:0, reads the port the system gave it, closes it, and the manager later listens on ":port" (internal/manager/wakesignal.go:35). Ports from port 0 come from the system's ephemeral range, which outgoing UDP such as DNS lookups by any program also uses. If the bind fails, the manager only logs "can't listen for wake signals", so the test then times out waiting for a wake instead of failing with a clear message.
+   - Suggested fix: pick the wake port below 32768, the lowest system range. Use a range the other test programs don't use, since gametest has 20000-29999 and cmd/fakeserver has 30000-31999; 32000-32767 is free, for example. Check each pick by opening it. Or keep the probe socket open and let the manager take it over.
+2. Lower risk, also not mine: internal/jetkvm/jetkvm_test.go:210, internal/rcon/rcon_test.go:593 and internal/platform/platform_windows_test.go:197 close a port from the system and then expect nothing to be listening there. If another program took it in between, they would see a different error. That is rare, and none of them blocks waiting, so they don't need changing now.
+3. Items still open from my earlier report: the separate macOS TestSettingsSaveDuringStart failure, and the "text file busy" risk wherever other tests copy and then run a program.
+
+## VM-fix (mg/manager-fix)
+
+1. The same macOS job (/tmp/claude-0/-home-user/41f121b4-97ec-5588-a00f-1184231def86/scratchpad/j140125553130.log, lines 329-342) also failed TestConformanceDemo/demoapi in internal/game/gametest (stream F's code, not mine). The demo server hit "can't open port 49326: ... address already in use", which looks like a race between picking a free port and the server binding it. That job needs this fix and that one to go green.
+
+2. For information, not a fix: in R2, handleLine always takes m.mu (the Monitor runs under it) and then handleEvents takes it again. Build 33 skipped noise lines before taking the lock and took it once per real line. So a start now goes through the lock roughly 1.5 to 2 times as often. When nothing else holds the lock this costs almost nothing. It only showed here because a back-to-back save loop held the lock on a slow disk. I did not change production code for it.
+
+3. A side effect seen only under the injected 1 s save delay: the power loop, held up for 22 s, logged "woke up after 22s", which it takes as the computer waking from sleep. It did not disturb the start. I'm noting it only in case someone ever holds m.mu for a long time in real use.
+
+After review:
+
+Nothing to decide. This commit changes only internal/manager/r2_test.go, which this stream owns. setup's shared cleanup in manager_test.go has the same weakness: after ForceStop it waits only for the state to leave "online", not for the server process to exit. That only matters for tests that end while a server is still starting. I left it alone because it was outside this finding.
