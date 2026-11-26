@@ -26,7 +26,7 @@ sources are:
 
 ## Download, disk, memory
 
-- **Sizes.** Settled [steam]: depot 380871 (shared) 6,849,662,987 bytes, depot 380874 (Windows) 206,697,858 bytes, so about **7.1 GB installed**. Steam sends them compressed: 1,888,501,536 + 55,662,416 bytes, about **1.9 GB downloaded**. `Info.DownloadMB` is 1950 and `DiskMB` 10000 (the install, worlds, the app's backups and the server's own startup backups); the spec's "~7.1 GB download" is the installed size. `SteamApp.SizeGB` is 7.1 (the disk-space message).
+- **Sizes.** Settled [steam]: depot 380871 (shared) 6,849,662,987 bytes, depot 380874 (Windows) 206,697,858 bytes, so about **7.1 GB installed**. Steam sends them compressed: 1,888,501,536 + 55,662,416 bytes, about **1.9 GB downloaded**. `Info.DownloadMB` is 7100, the depots' size, as spec 5.6 settles it and as the other games give theirs (spec 2.1 does the same for Valheim), so Add a game compares like with like; the compressed 1.9 GB is what actually crosses the network. `DiskMB` is 10000 (the install, worlds, the app's backups and the server's own startup backups). `SteamApp.SizeGB` is 7.1 (the disk-space message).
 - **A macOS depot exists** (380872, 202 MB) but Steam's launch settings have no macOS entry and the wiki documents only Windows and Linux [steam, zwarden]. decisions.md: "Needs Windows" on a Mac.
 - **Memory.** The shipped `StartServer64.bat` gives Java `-Xms16g -Xmx16g` [manifest]; the Windows `ProjectZomboid64.json` says `-Xmx3072m` [manifest]; the Linux one `-Xmx8g` [pepenotti]. There is no official requirement [zwarden]. The app leaves out the .bat's -Xms/-Xmx and gives `-Xmx` from its "Java memory" setting, default 6144 MB (the wiki's own example is 6 GB [zwarden]); `Info.MemoryMB` is 8192, the heap plus Java's own needs.
 

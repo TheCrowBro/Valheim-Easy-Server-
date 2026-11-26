@@ -324,6 +324,11 @@ func (s *server) updateOnStart(ctx context.Context, step func(string, float64)) 
 	case errors.Is(err, install.ErrBusy):
 		step("Couldn't check for server updates ("+err.Error()+"). Starting the version that's installed.", -1)
 		s.log.Printf("update on start skipped: %v", err)
+	case errors.Is(err, errNoLaunch):
+		// The update itself went through, but the launch files can't be
+		// read. Plan reads them again just below and stops with the same
+		// plain message, so a step saying the start goes on would be wrong.
+		s.log.Printf("update on start: %v", err)
 	default:
 		step("Couldn't check for server updates ("+err.Error()+"). Starting the version that's installed.", -1)
 		s.log.Printf("update on start failed: %v", err)

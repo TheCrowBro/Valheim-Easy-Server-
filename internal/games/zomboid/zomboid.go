@@ -82,10 +82,12 @@ func (Game) Info() game.Info {
 		// Linux is not a system the app is offered on.
 		OS:        map[string]game.Level{"windows": game.Runs},
 		NeedsText: map[string]string{"darwin": "Needs Windows", "linux": "Needs Windows"},
-		// Steam sends about 1.9 GB (compressed) and the server takes about
-		// 7.1 GB once installed (FACTS.md). The disk figure leaves room for
-		// worlds, the app's backups and the server's own startup backups.
-		DownloadMB: 1950, DiskMB: 10000,
+		// The download is given as the depots' size, about 7.1 GB (spec
+		// 5.6), the way every game gives it, so Add a game compares like
+		// with like; Steam sends it compressed, about 1.9 GB (FACTS.md).
+		// The disk figure leaves room for worlds, the app's backups and
+		// the server's own startup backups.
+		DownloadMB: 7100, DiskMB: 10000,
 		// The server's Java gets 6 GB by default (memoryMB), and Java needs
 		// a good deal beside that for itself.
 		MemoryMB: 8192, MaxPlayers: 16,
@@ -179,7 +181,7 @@ func (s *server) Installer() game.Installer {
 		}), server: s.env.Dirs.Server}
 	}
 	return &checkedInstaller{inner: install.SteamCMD(steamApp, s.env.Dirs, func(line string) { s.log.Print(line) }),
-		server: s.env.Dirs.Server, goos: s.launchOS()}
+		server: s.env.Dirs.Server, goos: s.launchOS(), log: s.log}
 }
 
 // Build is what's installed: Steam's build, as long as the server's Java

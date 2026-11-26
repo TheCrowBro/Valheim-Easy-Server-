@@ -188,8 +188,26 @@ func TestStandInMatch(t *testing.T) {
 	if !strings.Contains(out, "version=42.") || !strings.Contains(out, "Enter new administrator password") || !strings.Contains(out, "NoSuchElementException") {
 		t.Errorf("the stand-in didn't take Project Zomboid's command line for Project Zomboid:\n%s", out)
 	}
-	if _, err := os.Stat(filepath.Join(os.Getenv("HOME"), "Zomboid", "Server", "World.ini")); err == nil {
-		t.Errorf("the stand-in wrote into the user's own Zomboid folder")
+	// The plan's command line names the saves folder (-cachedir), so the
+	// world's settings file is there.
+	if _, err := os.Stat(filepath.Join(s.env.Dirs.Saves, "Server", "World.ini")); err != nil {
+		t.Errorf("the stand-in didn't keep its files in -cachedir: %v", err)
+	}
+	// Without -cachedir the real server uses the Zomboid folder in the
+	// user's home, where their own game keeps its saves. The stand-in must
+	// use one in its working folder instead and never touch the real one;
+	// other games' tests (Necesse's) run it without -cachedir too.
+	home, homeErr := os.UserHomeDir()
+	homeIni := filepath.Join(home, "Zomboid", "Server", "World.ini")
+	before, beforeErr := os.Stat(homeIni)
+	run(slices.DeleteFunc(slices.Clone(args), func(a string) bool { return strings.HasPrefix(a, "-cachedir=") })...)
+	if _, err := os.Stat(filepath.Join(dir, "Zomboid", "Server", "World.ini")); err != nil {
+		t.Errorf("without -cachedir the stand-in didn't use the Zomboid folder in its working folder: %v", err)
+	}
+	if homeErr == nil && home != "" {
+		if after, err := os.Stat(homeIni); err == nil && (beforeErr != nil || !after.ModTime().Equal(before.ModTime())) {
+			t.Errorf("without -cachedir the stand-in wrote into the user's own %s", homeIni)
+		}
 	}
 	for game, line := range map[string][]string{
 		"Minecraft":        {"-Xms512M", "-Xmx2048M", "-jar", "server/server.jar", "--nogui", "--universe", dir, "--world", "W", "--port", "25565"},

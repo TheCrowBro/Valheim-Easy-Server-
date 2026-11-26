@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -298,14 +299,20 @@ type checkedInstaller struct {
 	inner  game.Installer
 	server string
 	goos   string
+	log    *log.Logger
 }
 
+// Install says only errNoLaunch when the launch files can't be read, the
+// spec's exact sentence (5.6), as Plan does: what went wrong with each
+// file is raw system text, so it goes to the game's log for whoever looks
+// into it, not into the message the owner sees.
 func (i *checkedInstaller) Install(ctx context.Context, repair bool, progress func(game.Progress)) error {
 	if err := i.inner.Install(ctx, repair, progress); err != nil {
 		return err
 	}
 	if _, err := readLaunch(i.server, i.goos); err != nil {
-		return err
+		i.log.Printf("after the install, reading the launch files: %v", err)
+		return errNoLaunch
 	}
 	return nil
 }

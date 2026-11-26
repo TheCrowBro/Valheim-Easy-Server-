@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"flag"
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -168,6 +169,31 @@ func TestReadLaunch(t *testing.T) {
 	}
 	if errNoLaunch.Error() != "Couldn't read how to start the Project Zomboid server. Try Repair." {
 		t.Errorf("the message is %q (spec 5.6)", errNoLaunch)
+	}
+}
+
+// doneInstaller is a SteamCMD that has nothing to do.
+type doneInstaller struct{}
+
+func (doneInstaller) Install(context.Context, bool, func(game.Progress)) error { return nil }
+
+// An install whose launch files can't be read says exactly the spec's
+// sentence (5.6), as a start does; what went wrong with each file goes to
+// the log, not to the owner.
+func TestCheckedInstaller(t *testing.T) {
+	dir := t.TempDir()
+	var logged strings.Builder
+	i := &checkedInstaller{inner: doneInstaller{}, server: dir, goos: "windows", log: log.New(&logged, "", 0)}
+	err := i.Install(context.Background(), false, func(game.Progress) {})
+	if !errors.Is(err, errNoLaunch) || err.Error() != errNoLaunch.Error() {
+		t.Errorf("with no launch files the install says %q, want exactly %q", err, errNoLaunch)
+	}
+	if !strings.Contains(logged.String(), batName) || !strings.Contains(logged.String(), jsonName) {
+		t.Errorf("the log doesn't say what went wrong with each file: %q", logged.String())
+	}
+	os.WriteFile(filepath.Join(dir, batName), readTestdata(t, "launch/StartServer64.bat"), 0o644)
+	if err := i.Install(context.Background(), false, func(game.Progress) {}); err != nil {
+		t.Errorf("with the real .bat: %v", err)
 	}
 }
 
