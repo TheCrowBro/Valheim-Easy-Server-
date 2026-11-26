@@ -663,18 +663,16 @@ func (s *store) importOne(c worlds.Candidate, loc located, name, saved string, r
 		putBack()
 		return err
 	}
-	var safety string
+	var safety worlds.Backup
 	if len(rels) > 0 {
-		b, err := s.backupLocked(saved, "before-replace")
+		safety, err = s.backupLocked(saved, "before-replace")
 		if err != nil {
 			putBack()
 			return fmt.Errorf("couldn't back up %q before replacing it, so it was left alone: %w", saved, err)
 		}
-		safety = b.ID
 	}
-	a, err := s.setAside(rels)
+	a, err := s.setAside(rels, saved, safety)
 	if err != nil {
-		s.dropBackup(saved, safety)
 		putBack()
 		return err
 	}
@@ -692,9 +690,9 @@ func (s *store) importOne(c worlds.Candidate, loc located, name, saved string, r
 	placeBack(placed)
 	putBack()
 	if uerr := a.undo(); uerr != nil {
-		return fmt.Errorf("couldn't import %q (%v), and putting the server's old copy back failed too (%v). Restore it from the world's backups.", name, err, uerr)
+		return fmt.Errorf("couldn't import %q (%v), and putting the server's old copy back failed too (%v). Restore it from its %q backup.", name, err, uerr, safety.Label)
 	}
-	s.dropBackup(saved, safety)
+	s.dropBackup(saved, safety.ID)
 	if replace {
 		return fmt.Errorf("couldn't import %q, so the server's copy was left as it was: %w", name, err)
 	}

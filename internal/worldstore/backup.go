@@ -436,17 +436,27 @@ type aside struct {
 }
 
 // setAside moves a world's files (paths relative to Dir) into a new hidden
-// folder in Dir. Moving is all or nothing, unlike deleting: on Windows a
-// file another program has open (a download, a backup tool, the server)
-// makes its move fail, and then everything already moved goes back, so the
-// world is left exactly as it was.
-func (s *store) setAside(rels []string) (*aside, error) {
+// folder in Dir. Every caller has just made safety, a backup of the world
+// called name, in case the change goes wrong.
+//
+// Moving is all or nothing, unlike deleting: on Windows a file another
+// program has open (a download, a backup tool, the server) makes its move
+// fail, and then everything already moved goes back, so the world is left
+// exactly as it was. safety is then only a copy of a world still in place,
+// so it is deleted to keep the backup list tidy.
+//
+// If a file can't be put back either, the world is left half in the hidden
+// folder, and the next change deletes that folder (clearAsides). safety is
+// then the only whole copy of the world, so it is kept, and the error says
+// to restore from it rather than claiming nothing changed.
+func (s *store) setAside(rels []string, name string, safety worlds.Backup) (*aside, error) {
 	a := &aside{}
 	if len(rels) == 0 {
 		return a, nil
 	}
 	dir, err := os.MkdirTemp(s.dir, removingPrefix)
 	if err != nil {
+		s.dropBackup(name, safety.ID)
 		return nil, err
 	}
 	a.dir = dir
@@ -457,7 +467,10 @@ func (s *store) setAside(rels []string) (*aside, error) {
 			err = renameFile(from, to)
 		}
 		if err != nil {
-			a.undo()
+			if uerr := a.undo(); uerr != nil {
+				return nil, fmt.Errorf("couldn't move %s out of the way (%v), and putting back the files already moved failed too (%v), so the world is only partly there. Restore it from its %q backup.", rel, err, uerr, safety.Label)
+			}
+			s.dropBackup(name, safety.ID)
 			return nil, fmt.Errorf("couldn't move %s out of the way (is the server or another program using it?), so nothing was changed: %w", rel, err)
 		}
 		a.moves = append(a.moves, [2]string{from, to})
@@ -489,8 +502,10 @@ func (a *aside) drop() {
 }
 
 // clearAsides deletes hidden folders an earlier change left in Dir: a drop
-// that failed, or the app closing in the middle of a change. Every change
-// keeps a backup before it moves a world, so nothing is lost with them.
+// that failed, a world that couldn't be put back whole, or the app closing
+// in the middle of a change. Every change makes a backup before it moves a
+// world, and keeps it unless the world was put back whole, so nothing is
+// lost with them.
 func (s *store) clearAsides() {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
@@ -580,26 +595,24 @@ func (s *store) Restore(name, backupID string) error {
 	if err != nil {
 		return err
 	}
-	var safety string
+	var safety worlds.Backup
 	if len(rels) > 0 {
-		b, err := s.backupLocked(target, "before-restore")
+		safety, err = s.backupLocked(target, "before-restore")
 		if err != nil {
 			return fmt.Errorf("couldn't back up the current world first, so nothing was changed: %w", err)
 		}
-		safety = b.ID
 	}
-	a, err := s.setAside(rels)
+	a, err := s.setAside(rels, target, safety)
 	if err != nil {
-		s.dropBackup(target, safety)
 		return err
 	}
 	moves, err := mergeMove(staged, s.dir)
 	if err != nil {
 		placeBack(moves)
 		if uerr := a.undo(); uerr != nil {
-			return fmt.Errorf("couldn't restore the backup (%v), and putting the current world back failed too (%v). Restore it from its \"Automatic copy before a restore\" backup.", err, uerr)
+			return fmt.Errorf("couldn't restore the backup (%v), and putting the current world back failed too (%v). Restore it from its %q backup.", err, uerr, safety.Label)
 		}
-		s.dropBackup(target, safety)
+		s.dropBackup(target, safety.ID)
 		return fmt.Errorf("couldn't restore the backup, so the world was left as it was: %w", err)
 	}
 	a.drop()
@@ -703,9 +716,8 @@ func (s *store) Delete(name string) error {
 	if err != nil {
 		return fmt.Errorf("couldn't make a safety backup, so nothing was deleted: %w", err)
 	}
-	a, err := s.setAside(rels)
+	a, err := s.setAside(rels, saved, b)
 	if err != nil {
-		s.dropBackup(saved, b.ID)
 		return err
 	}
 	a.drop()
@@ -766,18 +778,22 @@ func (s *store) Rename(name, newName string) error {
 	// Two steps, through the hidden folder, so a change of letter case
 	// alone works on Windows and macOS too, and a file that can't move
 	// leaves everything as it was.
-	a, err := s.setAside(rels)
+	a, err := s.setAside(rels, saved, b)
 	if err != nil {
-		s.dropBackup(saved, b.ID)
 		return err
 	}
 	var moves [][2]string
 	for i, mv := range a.moves {
 		to := filepath.Join(s.dir, targets[i])
 		if err := renameFile(mv[1], to); err != nil {
-			placeBack(moves)
+			// Not placeBack: these files are the world itself, not copies,
+			// so one that can't go back stays under the new name rather
+			// than being deleted. undo then fails on it and says so.
+			for j := len(moves) - 1; j >= 0; j-- {
+				renameFile(moves[j][1], moves[j][0])
+			}
 			if uerr := a.undo(); uerr != nil {
-				return fmt.Errorf("couldn't rename the world (%v), and putting it back failed too (%v). Restore it from its \"Automatic copy before renaming\" backup.", err, uerr)
+				return fmt.Errorf("couldn't rename the world (%v), and putting it back failed too (%v). Restore it from its %q backup.", err, uerr, b.Label)
 			}
 			s.dropBackup(saved, b.ID)
 			return fmt.Errorf("couldn't rename the world, so it was left as it was: %w", err)

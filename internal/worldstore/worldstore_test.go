@@ -536,6 +536,108 @@ func TestLockedFileLeavesWorldAlone(t *testing.T) {
 	}
 }
 
+// If a file can't be moved out of the way and one already moved can't be
+// put back either, the world is only partly there and the next change
+// clears the rest. The change must then keep its safety backup and say to
+// restore from it, instead of claiming nothing changed and deleting the
+// only whole copy.
+func TestUndoFailureKeepsSafetyBackup(t *testing.T) {
+	t.Cleanup(func() { renameFile = os.Rename })
+	l := layouts[1] // a "files" world has two files, so one can move and the next fail
+	stuck := func(from, to string) error {
+		// Alpha.wld.bak is held; Alpha.wld moves aside but can't come back.
+		if filepath.Base(from) == "Alpha.wld.bak" || (strings.Contains(from, removingPrefix) && filepath.Base(from) == "Alpha.wld") {
+			return &os.LinkError{Op: "rename", Old: from, New: to, Err: errors.New("the file is being used by another process")}
+		}
+		return os.Rename(from, to)
+	}
+	changes := []struct {
+		what, reason string
+		run          func(w game.Worlds, manual string, cands []worlds.Candidate) error
+	}{
+		{"restore", "before-restore", func(w game.Worlds, manual string, _ []worlds.Candidate) error {
+			return w.Restore("Alpha", manual)
+		}},
+		{"delete", "deleted", func(w game.Worlds, _ string, _ []worlds.Candidate) error {
+			return w.Delete("Alpha")
+		}},
+		{"rename", "before-rename", func(w game.Worlds, _ string, _ []worlds.Candidate) error {
+			return w.Rename("Alpha", "Beta")
+		}},
+		{"replace", "before-replace", func(w game.Worlds, _ string, cands []worlds.Candidate) error {
+			_, err := w.Import(cands, []worlds.Choice{{ID: cands[0].ID, Action: "replace"}}, never, true)
+			return err
+		}},
+	}
+	for _, c := range changes {
+		t.Run(c.what, func(t *testing.T) {
+			renameFile = os.Rename
+			e := newEnv(t)
+			w := New(l.format(e), e.backups, e.staging)
+			l.make(t, e.live, "Alpha", "one")
+			manual, err := w.Backup("Alpha", "manual")
+			if err != nil {
+				t.Fatal(err)
+			}
+			l.make(t, e.live, "Alpha", "two")
+			l.make(t, e.live, "Gamma", "other")
+			now := world(t, l, e.live, "Alpha")
+			upload := filepath.Join(e.staging, "upload-1")
+			l.make(t, upload, "Alpha", "friend")
+			cands := w.Scan(upload)
+
+			renameFile = stuck
+			err = c.run(w, manual.ID, cands)
+			safety := findBackup(t, w, "Alpha", c.reason)
+			if err == nil || strings.Contains(err.Error(), "nothing was changed") || !strings.Contains(err.Error(), "only partly there") || !strings.Contains(err.Error(), safety.Label) {
+				t.Fatalf("err = %v", err)
+			}
+
+			// The next change clears the hidden folder that holds the
+			// rest of Alpha; its safety backup still brings it back whole.
+			renameFile = os.Rename
+			if err := w.Delete("Gamma"); err != nil {
+				t.Fatal(err)
+			}
+			if err := w.Restore("Alpha", safety.ID); err != nil {
+				t.Fatal(err)
+			}
+			if !sameMap(world(t, l, e.live, "Alpha"), now) {
+				t.Fatalf("world = %v", world(t, l, e.live, "Alpha"))
+			}
+			noHidden(t, e.live)
+		})
+	}
+}
+
+// A rename whose second file can't take the new name, and whose first file
+// can't go back to the hidden folder, leaves that first file under the new
+// name rather than deleting it, and keeps the safety backup.
+func TestRenameUndoFailureKeepsFiles(t *testing.T) {
+	t.Cleanup(func() { renameFile = os.Rename })
+	l := layouts[1]
+	e := newEnv(t)
+	w := New(l.format(e), e.backups, e.staging)
+	l.make(t, e.live, "Alpha", "one")
+	want := world(t, l, e.live, "Alpha")
+	renameFile = func(from, to string) error {
+		if filepath.Base(to) == "Beta.wld.bak" || filepath.Base(from) == "Beta.wld" {
+			return errors.New("disk full")
+		}
+		return os.Rename(from, to)
+	}
+	err := w.Rename("Alpha", "Beta")
+	renameFile = os.Rename
+	safety := findBackup(t, w, "Alpha", "before-rename")
+	if err == nil || !strings.Contains(err.Error(), safety.Label) {
+		t.Fatalf("err = %v", err)
+	}
+	got, rerr := os.ReadFile(filepath.Join(e.live, "Beta.wld"))
+	if rerr != nil || string(got) != want["W.wld"] {
+		t.Fatalf("Beta.wld = %q, %v (want Alpha's first file kept)", got, rerr)
+	}
+}
+
 // A move that fails halfway while putting the new copy in place puts the
 // old world back.
 func TestFailedPlacePutsWorldBack(t *testing.T) {

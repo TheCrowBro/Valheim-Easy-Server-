@@ -12,6 +12,11 @@
 // names. While a world is being replaced, restored, renamed or deleted, its
 // files wait in a hidden ".egs-…" folder inside Dir: moves inside one folder
 // stay on one drive, so they are instant and can be undone.
+//
+// Make one store per instance and keep it: unlike Valheim's Library, which
+// only holds paths, a store remembers what Scan and Local found (Import
+// looks the candidates up there) and lets only one change run at a time.
+// See New.
 package worldstore
 
 import (
@@ -89,6 +94,14 @@ type Live struct {
 
 // New makes the world library for one instance: live worlds as f says,
 // app backups in backups (Dirs.Backups) and uploads in staging (Dirs.Staging).
+//
+// Call it once per instance (for example in Game.New) and return that same
+// value from every Server.Worlds() call. A store is not just paths: it
+// remembers the candidates Scan and Local found, which Import looks up by
+// ID, and its lock is what makes changes happen one at a time and keeps a
+// download from reading a world a restore is moving. A new store for each
+// Worlds() call would make every upload fail as expired and let two changes
+// to the same world run at once.
 func New(f Format, backups, staging string) game.Worlds {
 	return &store{
 		f:        f,
