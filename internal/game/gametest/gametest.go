@@ -82,6 +82,31 @@ type Session struct {
 type stepResult struct {
 	Kind string
 	Err  error // what sending it gave (game.ErrNoConsole after a takeover)
+
+	// SendTook is how long sending the step took. On Windows a Ctrl+C
+	// takes about a second, because platform's Interrupt waits a second
+	// after sending it before it returns.
+	SendTook time.Duration
+	// Ended says the server's process ended during this step, and
+	// EndedAfter how long after the step was sent: the moment gametest's
+	// wait for the process returned, which nothing in the stop chain holds
+	// up (not even Interrupt's second). It is below zero when the process
+	// had already ended before the step was sent.
+	Ended      bool
+	EndedAfter time.Duration
+	ExitCode   int
+}
+
+// note is the test log's line for a step that ended the server, so a slow
+// stop shows where its time went: when the process really ended, and how
+// long sending the step took (on Windows, about a second for a Ctrl+C even
+// when the server ended in tens of milliseconds).
+func (r stepResult) note() string {
+	took := r.SendTook.Round(time.Millisecond)
+	if r.EndedAfter < 0 {
+		return fmt.Sprintf("the server had ended %v before the %q step was sent (exit code %d); sending it took %v", (-r.EndedAfter).Round(time.Millisecond), r.Kind, r.ExitCode, took)
+	}
+	return fmt.Sprintf("the server ended %v after the %q step was sent (exit code %d); sending it took %v", r.EndedAfter.Round(time.Millisecond), r.Kind, r.ExitCode, took)
 }
 
 // Start installs the game (the stand-in unless o.Real), plans a start and
@@ -489,17 +514,25 @@ func (s *Session) Stop() (saved time.Time) {
 	for _, st := range steps {
 		sent := time.Now()
 		err := s.send(a, st)
+		r := stepResult{Kind: st.Kind, Err: err, SendTook: time.Since(sent)}
 		s.mu.Lock()
-		s.stopLog = append(s.stopLog, stepResult{Kind: st.Kind, Err: err})
+		s.stopLog = append(s.stopLog, r)
+		i := len(s.stopLog) - 1
 		s.mu.Unlock()
 		if err != nil {
 			s.tlog.Printf("stop step %q: %v; the next step runs at once", st.Kind, err)
 			continue
 		}
 		if stopped = a.waitExit(st.Wait, st.Resend, func() { s.send(a, st) }); stopped {
-			// In the test's log (shown with -v or on a failure), so a
-			// slow stop shows where its time went.
-			s.tlog.Printf("the server ended %v after the %q step was sent (exit code %d)", a.endedAt.Sub(sent).Round(time.Millisecond), st.Kind, a.waitCode)
+			// endedAt and waitCode are written before ended is closed,
+			// and waitExit has seen it closed.
+			r.Ended, r.EndedAfter, r.ExitCode = true, a.endedAt.Sub(sent), a.waitCode
+			s.mu.Lock()
+			s.stopLog[i] = r
+			s.mu.Unlock()
+			// In the test's log, which go test shows with -v or when the
+			// test fails.
+			s.tlog.Printf("%s", r.note())
 			break
 		}
 	}

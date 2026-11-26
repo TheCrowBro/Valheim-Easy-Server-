@@ -109,7 +109,17 @@ func TestCtrlCStopWithWindowsHandles(t *testing.T) {
 		t.Errorf("Stop took %v to see a server that ended 50 ms after its Ctrl+C", took)
 	}
 	if len(s.stopLog) != 1 || s.stopLog[0].Kind != "interrupt" || s.stopLog[0].Err != nil {
-		t.Errorf("stop steps = %+v, want one Ctrl+C that went through", s.stopLog)
+		t.Fatalf("stop steps = %+v, want one Ctrl+C that went through", s.stopLog)
+	}
+	// What the test log's note says on Windows: the time the process
+	// really ended (here 50 ms after the Ctrl+C), not Interrupt's second,
+	// which shows up as the time sending the step took.
+	r := s.stopLog[0]
+	if r.SendTook < time.Second {
+		t.Errorf("sending the Ctrl+C took %v, want the stand-in Interrupt's second", r.SendTook)
+	}
+	if !r.Ended || r.EndedAfter < 50*time.Millisecond || r.EndedAfter >= r.SendTook {
+		t.Errorf("the step says the server ended %v after the Ctrl+C (ended: %v), want the real 50 ms or so, before sending it was over (%v)", r.EndedAfter, r.Ended, r.SendTook)
 	}
 	p.mu.Lock()
 	if p.interrupts != 1 {
@@ -162,5 +172,32 @@ func TestStopFailureExplainsItself(t *testing.T) {
 	a.kill()
 	if err := a.interrupt(); !errors.Is(err, errEnded) {
 		t.Errorf("Ctrl+C after the end gave %v, want errEnded", err)
+	}
+}
+
+// TestStopNote pins the test log's line for a step that ended the server,
+// which says when the process really ended and, apart from that, how long
+// sending the step took.
+func TestStopNote(t *testing.T) {
+	for _, c := range []struct {
+		r    stepResult
+		want string
+	}{
+		{
+			stepResult{Kind: "interrupt", SendTook: 1001200 * time.Microsecond, Ended: true, EndedAfter: 31400 * time.Microsecond},
+			`the server ended 31ms after the "interrupt" step was sent (exit code 0); sending it took 1.001s`,
+		},
+		{
+			stepResult{Kind: "console", SendTook: 200 * time.Microsecond, Ended: true, EndedAfter: 401 * time.Millisecond, ExitCode: 3},
+			`the server ended 401ms after the "console" step was sent (exit code 3); sending it took 0s`,
+		},
+		{
+			stepResult{Kind: "rcon", SendTook: 12 * time.Millisecond, Ended: true, EndedAfter: -5 * time.Millisecond},
+			`the server had ended 5ms before the "rcon" step was sent (exit code 0); sending it took 12ms`,
+		},
+	} {
+		if got := c.r.note(); got != c.want {
+			t.Errorf("note for %+v =\n  %s\nwant\n  %s", c.r, got, c.want)
+		}
 	}
 }
