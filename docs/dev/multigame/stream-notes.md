@@ -76,3 +76,83 @@ My reading of the brief's "legacy id unchanged": a packet with no id reads as th
 After review:
 
 Nothing is blocking, and no files outside this stream's ownership were needed. One thing you might choose to do: TestOneGameRegistered in internal/manager is now the only test that counts the games in the shipped registry (internal/games/all). Every R3 game stream (G-*) adds a file to internal/games/all, so the first one merged after the R2 cut must change or remove this test, as intended. You may want to tell the M3 or G streams that this is expected.
+
+## I (mg/install)
+
+1. **Valheim's update-on-start needs one change by stream VM.** Valheim's Plan (today's manager server.go:240 path) must call LegacyStore.Installer().Install with steamcmd.SkipIfBusy(ctx). Other adapters use install.SkipIfBusy(ctx) when req.Update is set. Without the marker, a start's update waits behind another game's download instead of skipping. In R2 only Valheim uses SteamCMD, so nothing changes until R3, but VM should wire it now. The manager's warning text needs no change.
+
+2. **Added to the frozen install contract:** SkipIfBusy, ErrBusy, BusyError (an alias of steamcmd's), FindJava and FindDotNet. They are pinned in internal/install/signatures_test.go; nothing existing changed.
+
+3. **Added to internal/steamcmd:** the AppID, Branch, Name and SizeGB fields, InstalledBuildFor, SkipIfBusy, ErrBusy, BusyError, and the test-only package internal/steamcmd/steamcmdtest.
+
+4. **Fakes don't take the shared lock.** steamcmd.Fake (used by --dev-fake-server and the manager tests) was left alone on purpose so VM's tests behave as before, and stream F's install.Fake can't take the lock without a new export. If R3 manager tests should make fake games compete for SteamCMD, say so and I'll add a small hook.
+
+5. **Spec 5.2 wording differs from what Temurin does.** Spec 5.2 says to download from /v3/binary/latest and fetch the checksum separately from /v3/assets/latest. Temurin instead uses the package link and checksum from the single /v3/assets/latest answer, so the checksum always belongs to the file downloaded. The Minecraft stream should know; 5.2 could be updated.
+
+6. **Runtime layout for adapters:** each runtime goes into dir/temurin-<release>/ or dir/dotnet-<version>/, with a note in .egs-java.json or .egs-dotnet.json. Use FindJava and FindDotNet for Program(). Installing a version that's already there downloads nothing, so a Repair that wants a fresh runtime must remove the runtime folder first.
+
+7. **EnsurePrereq depends on stream P's RunElevatedWait.** It needs the installer's exit code back, and 1223 (as the code or as an error) when the owner declines the prompt. Until P lands, the stub's ErrUnsupported gives "<Name> isn't installed, and the app can't install it on this computer."
+
+8. **Download's progress text is "Downloading <file name>…".** Callers that want the game's name rewrite p.Step, as Temurin, DotNet and EnsurePrereq already do.
+
+## P (mg/platform)
+
+1. **build.yml (not mine):** the Windows job must set `EGS_CI_ADMIN: "1"` on its platform test step (`go test -v -count=1 ./internal/platform/`). Without it, TestFixFirewallAllReal and TestRunElevatedWaitReal skip, and spec 7.2 and P's acceptance need the first one to run. Never set it on the Mac job or on anyone's own computer: the firewall test removes every "Valheim Easy Server - *" and "Easy Game Server - *" rule first, just as the app's own fix does.
+
+2. **File names outside my list:** firewall_games.go has no system suffix, but it can't hold code for each system on its own. So I also created firewall_games_windows.go, firewall_games_darwin.go and firewall_games_linux.go, plus their tests firewall_games_test.go and firewall_games_windows_test.go. Please confirm these count as P's files; they're used only by this feature.
+
+3. **Different from the spec's wording:**
+   - The `<sha8>` in a game's rule name covers the program path and the rule's ports, not just the program. Checking a rule by its name then works in any Windows language, and notices a port change after "pick ports".
+   - Rule names: `Easy Game Server - <instance> TCP|UDP (<sha8>)`, or `Easy Game Server - <instance> (<sha8>)` with AnyPort (the spec gave no name for that case).
+   - The games' script removes all old rules before adding any new ones, instead of remove-then-add per game. The result is the same, and it's safe when two games share a program.
+
+4. **For M3 (stdin pipe):** after Start, both ends of the console pipe are in blocking mode on Unix, because os/exec calls Fd() on the files it hands over. On Windows pipes block anyway. Write deadlines therefore don't work, and typing a line to a game that has stopped reading will hang. Type lines from a goroutine that is allowed to stay stuck. This is written up in the StartOptions doc in additions.go.
+
+5. **Visible text (for stream T):** macOS FixFirewallAll uses a new prompt, "Easy Game Server wants to let friends through the macOS firewall to reach your game servers." It appears only when there are game rules, so only from R3; with no games, the prompt is today's FixFirewall text. RunElevatedWait's macOS prompt doesn't name the app. Please add the firewall prompt (firewall_games_darwin.go) to T's list of visible names.
+
+6. **For callers:**
+   - The macOS and Linux PortInUse can only name processes belonging to this user. On macOS another user's port shows as in use with PID 0.
+   - DefaultGateway returns IPv4 only.
+   - For a GameRule with no ports and AnyPort false, GameFirewallReady says true and FixFirewallAll adds nothing for it.
+
+After review:
+
+1. Spec 9.3 accepts stream P only when TestFixFirewallAllReal passes on the Windows runner, so the reviewer's should-fix still needs build.yml's owner (the lead, or CR). In the windows job, change only the "Windows features" step. Do not set it for the whole job, and never on the Mac job, because the test removes every "Valheim Easy Server - *" and "Easy Game Server - *" firewall rule:
+
+      - name: Windows features (Ctrl+C to the server, CPU/GPU/RAM counters, power)
+        run: go test -v -count=1 ./internal/platform/
+        env:
+          # The runner gives admin rights without a prompt, so the real
+          # firewall and elevation tests can run. Only on this step: they
+          # replace the app's firewall rules, and "All tests" would run them twice.
+          EGS_CI_ADMIN: "1"
+
+2. Then push mg/platform and re-run CI. Before accepting P, check two things. First, the Windows platform step's log shows "--- PASS: TestFixFirewallAllReal" and "--- PASS: TestRunElevatedWaitReal", not SKIP. Second, the run's summary page has no "did not run" warning. Until the variable is set, every Windows run shows that warning, which is on purpose.
+
+## F (mg/fakeserver)
+
+1. **Spec and brief differ on how the stand-in picks its game.** The spec's fakeserver.json example has "game", but `install.Fake`'s frozen signature can't know the id. So, as your brief says, the game comes from the command line through each game's `Match`, and "game" in fakeserver.json is an optional override. Each G stream's `cmd/fakeserver/<id>.go` must have a Match that no other game's command line also matches (Minecraft, Necesse and Zomboid all run java; their jar or main class tells them apart). The stand-in exits with code 2 and names the games when two match.
+2. **The RCON stop step needs a convention the manager must share.** A `"rcon"` StopStep only carries the command, so gametest reads the port from `Record.Ports["rcon"]`, the password from `Record.Secrets["rcon"]`, and connects to 127.0.0.1. M3's stop chain must do the same; please confirm it in the spec. The demo's API kind keeps its password in `Secrets["rest"]` and makes its own calls.
+3. **Additions to gametest's API** (frozen signatures unchanged, signatures_test.go untouched and green):
+   - `Session.Server()`, `Env()`, `Record()`, `Plan()`, `StartAgain()` and `Console(line) error`.
+   - A new subpackage, `internal/game/gametest/demo`, which M3 can use for "a console demo game saves on Quit; after a takeover, stops through Ctrl+C".
+4. **Where install.Fake's tests live.** I own only internal/install/fake.go, so its tests are in internal/game/gametest/installfake_test.go, which also pins its signature. If you'd like them in an internal/install/fake_test.go, that file needs assigning (stream I owns the rest of that package).
+5. **The demo reads .egs-build.json itself**, in the same format as stream I's WriteBuild/ReadBuild, so it doesn't depend on stream I. Real adapters should use `install.ReadBuild` / `SteamBuild`, which work with what install.Fake writes.
+6. **A test exists for each RC-dependent piece.** TestDemoRCONAndA2S (cmd/fakeserver) and the demorcon kind in TestConformanceDemo skip while RC is a stub and run with no change once RC merges. Both passed against mg/protocols.
+7. **Conformance is stricter than spec 7.1's list in a few places G streams should know about:**
+   - Fingerprint must equal the plan's, and must change exactly when a Restart-marked field changes.
+   - A console plan needs a SaveLine whose save produces a "saved" event.
+   - Every stop step must get through, except a console step after a takeover.
+   - The server-name field is found as a server-scope text field with "name" in its key or label; Validate's error may be keyed by the bare key or `server.<key>`.
+   - Real mode skips the scripted-player checks.
+8. **Two behaviours to know.**
+   - Stand-ins listen on 127.0.0.1 unless fakeserver.json sets "host", so dev mode never raises a firewall prompt.
+   - BuildFakeserver builds once per test binary inside go test's own temporary folder, and reads the stand-in's sources so go test re-runs cached results when they change.
+
+After review:
+
+Nothing blocking, and every change is in F's own files.
+
+1. Once stream RC (mg/protocols) merges, TestDemoProbeDuringStop and TestDemoRCONAndA2S stop skipping and run with no change.
+2. A rule for whoever writes the RCON personalities (Minecraft, Zomboid): an RCON "stop" handler should return its reply and queue the stop with s.post, as demo.go does. If it calls stop or Exit inside the handler, the reply never goes out and the exit waits 250 ms. The RCON doc in fw_net.go now says this.
+3. Stream RC's TestServer and TestResponder are correct as written; their docs already warn that handle/info must not call Close. No change is needed there.

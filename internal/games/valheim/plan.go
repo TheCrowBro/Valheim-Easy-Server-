@@ -41,7 +41,9 @@ func (s *Server) Plan(ctx context.Context, req game.PlanRequest) (game.Plan, err
 	st, p := s.settingsFor(req.Saved, req.World), s.store.Paths()
 	if req.Update {
 		step("Checking for Valheim server updates…", -1)
-		err := s.store.Installer().Install(ctx, false, func(pr steamcmd.Progress) {
+		// A start never waits behind another game's download: while one
+		// runs, the update is skipped and the installed version starts.
+		err := s.store.Installer().Install(steamcmd.SkipIfBusy(ctx), false, func(pr steamcmd.Progress) {
 			msg := pr.Step
 			if msg == "Server files are up to date." {
 				msg = "The server is up to date."
