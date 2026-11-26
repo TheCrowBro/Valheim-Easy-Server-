@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"os"
 	"os/signal"
@@ -67,6 +68,14 @@ type Session struct {
 	req     game.PlanRequest  // the last start's
 	plan    game.Plan
 	stopLog []stepResult // what the last Stop did, step by step
+
+	// Ports, under mu: picked holds the roles whose ports gametest chose
+	// (not the ones Options.Change set) and claimed what pickPorts claimed
+	// for this session; retries counts the starts tried again on new ports.
+	picked    map[string]int
+	claimed   map[string]int
+	retries   int
+	afterPick func(ports map[string]int) // tests: sees each new choice of ports before the server starts on it
 }
 
 // stepResult is one stop step as Stop ran it.
@@ -116,7 +125,7 @@ func newSession(t testing.TB, g game.Game, o Options) *Session {
 		t.Fatalf("gametest: choosing ports for %s: %v", info.ID, err)
 	}
 	tl := &testLog{t: t}
-	s := &Session{t: t, g: g, info: info, o: o, world: o.World, tlog: tl, known: map[string]string{}}
+	s := &Session{t: t, g: g, info: info, o: o, world: o.World, tlog: tl, known: map[string]string{}, claimed: ports, picked: map[string]int{}}
 	s.store = &memStore{}
 	s.env = game.Env{
 		Instance: info.ID,
@@ -132,7 +141,7 @@ func newSession(t testing.TB, g game.Game, o Options) *Session {
 	s.srv = g.New(s.env)
 	// What Add a game would save: each field's default, the chosen world
 	// selected with its world-scope defaults, and the ports picked.
-	saved := game.Saved{Server: game.Values{}, Worlds: map[string]game.Values{o.World: {}}, World: o.World, Ports: ports, State: game.Values{}}
+	saved := game.Saved{Server: game.Values{}, Worlds: map[string]game.Values{o.World: {}}, World: o.World, Ports: maps.Clone(ports), State: game.Values{}}
 	for _, f := range s.srv.Schema() {
 		if f.Default == "" {
 			continue
@@ -146,6 +155,11 @@ func newSession(t testing.TB, g game.Game, o Options) *Session {
 	}
 	if o.Change != nil {
 		o.Change(&saved)
+	}
+	for role, p := range ports {
+		if saved.Ports[role] == p {
+			s.picked[role] = p
+		}
 	}
 	s.store.Save(func(sv *game.Saved) error { *sv = saved; return nil })
 	t.Cleanup(s.cleanup)
@@ -172,6 +186,12 @@ func (s *Session) install() {
 // start plans a start of the selected world and launches it: a new world
 // when the adapter's Worlds says it doesn't exist yet.
 func (s *Session) start() {
+	s.t.Helper()
+	s.startTry(1)
+}
+
+// startTry is start's try'th try (retryOnNewPorts makes the later ones).
+func (s *Session) startTry(try int) {
 	s.t.Helper()
 	s.mu.Lock()
 	if s.run != nil && !s.run.isExited() {
@@ -267,7 +287,48 @@ func (s *Session) start() {
 	s.req, s.plan = req, plan
 	mon := srv.Watch(rec, s.knownLocked)
 	s.mu.Unlock()
-	s.attach(proc, rec, stdinWrite, mon)
+	s.attach(proc, rec, stdinWrite, mon, try)
+}
+
+// retryOnNewPorts starts the server again on new ports when its run ended
+// before it ever came online because another program took a port
+// gametest had chosen for it (stolenPort says when that is so), at most
+// maxPortRetries times for one start, and says so in the test's log. It
+// says whether it started it again.
+//
+// Choosing a free port and the server opening it can't be one step, so on
+// a busy computer (CI runs many test programs at once) another program
+// can take the port in between. Trying the whole start again on new
+// ports, as the owner would after picking other ports, keeps that from
+// failing a test, while a port the test chose itself, a port that stays
+// taken, or a server that fails in any other way still fails it.
+func (s *Session) retryOnNewPorts(a *attachment) bool {
+	s.t.Helper()
+	if a.try == 0 || a.try > maxPortRetries { // a takeover's run, or out of tries
+		return false
+	}
+	why, ok := s.stolenPort(a)
+	if !ok {
+		return false
+	}
+	s.tlog.Printf("%s; starting it again on new ports (retry %d of %d)", why, a.try, maxPortRetries)
+	a.detach() // closes the failed run's console pipe
+	s.mu.Lock()
+	req, srv := s.req, s.srv
+	s.retries++
+	s.mu.Unlock()
+	// The failed run may have begun making the new world before it tried
+	// the port; remove that, so the retry makes it again as asked.
+	if wl := srv.Worlds(); req.New && wl.Exists(s.world) {
+		if err := wl.Delete(s.world); err != nil {
+			s.tlog.Printf("removing the world the failed start began: %v", err)
+		}
+	}
+	if err := s.newPorts(); err != nil {
+		s.t.Fatalf("gametest: choosing new ports for %s: %v", s.info.ID, err)
+	}
+	s.startTry(a.try + 1)
+	return true
 }
 
 // logPath is a fresh log file for one run, named as the manager names them.
@@ -310,6 +371,11 @@ func readRecord(path string) (game.Record, error) {
 // when name isn't "") and fails the test if none comes within the time.
 // Each event is returned once: waiting twice for "join" "Alex" finds the
 // second join. Events count from the latest start or takeover.
+//
+// When the server exits before it ever came online because another
+// program took a port gametest chose for it, the start is tried again on
+// new ports (retryOnNewPorts, which says so in the test's log), and the
+// wait goes on with the new run, which gets the whole time again.
 func (s *Session) WaitEvent(kind, name string, within time.Duration) game.Event {
 	s.t.Helper()
 	deadline := time.Now().Add(within)
@@ -330,6 +396,10 @@ func (s *Session) WaitEvent(kind, name string, within time.Duration) game.Event 
 		changed, exited, code := a.changed, a.isExited(), a.exitCode
 		s.mu.Unlock()
 		if exited {
+			if s.retryOnNewPorts(a) {
+				deadline = time.Now().Add(within) // the new run gets the whole wait
+				continue
+			}
 			s.t.Fatalf("gametest: the %s server exited (code %d) without a %q event%s\n%s", s.info.ID, code, kind, forName(name), a.tail())
 		}
 		left := time.Until(deadline)
@@ -390,7 +460,7 @@ func (s *Session) Takeover() {
 	s.srv = srv
 	mon := srv.Watch(rec, s.knownLocked)
 	s.mu.Unlock()
-	s.attach(proc, rec, nil, mon)
+	s.attach(proc, rec, nil, mon, 0)
 }
 
 // Stop runs the stop chain and returns when the world was last saved (the
@@ -574,6 +644,11 @@ func (s *Session) cleanup() {
 			s.t.Logf("gametest: the end of %s's last log:\n%s", s.info.ID, a.tail())
 		}
 	}
+	s.mu.Lock()
+	claimed := s.claimed
+	s.claimed = nil
+	s.mu.Unlock()
+	releasePorts(claimed)
 	s.tlog.close()
 }
 

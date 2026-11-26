@@ -77,8 +77,14 @@ func TestBrokenAdapter(t *testing.T) {
 	if mode == "" {
 		t.Skip("run by TestConformanceCatches")
 	}
-	Conformance(t, brokenGame{Game: demo.Game{ID: "broken", Console: mode == "console"}, mode: mode},
-		Options{Fake: os.Getenv("GAMETEST_FAKE")})
+	o := Options{Fake: os.Getenv("GAMETEST_FAKE")}
+	if mode == "portinuse" {
+		// Another program has the port the test gave the game: a real
+		// "port in use", which gametest must never retry away.
+		port := holdFreePort(t)
+		o.Change = func(sv *game.Saved) { sv.Ports["game"] = port }
+	}
+	Conformance(t, brokenGame{Game: demo.Game{ID: "broken", Console: mode == "console"}, mode: mode}, o)
 }
 
 func TestConformanceCatches(t *testing.T) {
@@ -92,6 +98,7 @@ func TestConformanceCatches(t *testing.T) {
 		"port":        "the query port",
 		"console":     "ended with the server still running",
 		"step":        `the stop chain's "call" step failed (connection refused)`,
+		"portinuse":   "can't open port",
 	} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
@@ -103,6 +110,9 @@ func TestConformanceCatches(t *testing.T) {
 			}
 			if !strings.Contains(string(out), want) {
 				t.Fatalf("Conformance failed the %q adapter, but without %q:\n%s", mode, want, out)
+			}
+			if strings.Contains(string(out), "new ports") {
+				t.Fatalf("gametest tried the %q adapter's start again on new ports:\n%s", mode, out)
 			}
 		})
 	}

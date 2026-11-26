@@ -22,6 +22,7 @@ type attachment struct {
 	rec   game.Record
 	proc  *platform.Proc
 	stdin *os.File // the console pipe's write end; nil without one (after a takeover)
+	try   int      // which try of a start this run is (1 unless retryOnNewPorts started it again); 0 after a takeover
 
 	cancel context.CancelFunc
 	loops  sync.WaitGroup
@@ -46,9 +47,9 @@ const (
 
 // attach starts watching proc: following its log from the start, the
 // Monitor's ticks, the probe and the exit.
-func (s *Session) attach(proc *platform.Proc, rec game.Record, stdin *os.File, mon game.Monitor) {
+func (s *Session) attach(proc *platform.Proc, rec game.Record, stdin *os.File, mon game.Monitor, try int) {
 	ctx, cancel := context.WithCancel(context.Background())
-	a := &attachment{s: s, mon: mon, rec: rec, proc: proc, stdin: stdin, cancel: cancel,
+	a := &attachment{s: s, mon: mon, rec: rec, proc: proc, stdin: stdin, try: try, cancel: cancel,
 		exited: make(chan struct{}), changed: make(chan struct{})}
 	s.mu.Lock()
 	s.run = a
