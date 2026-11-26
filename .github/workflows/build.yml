@@ -3,6 +3,8 @@ name: Build and test
 # Every build of the main branch that passes becomes a release, build-N, and
 # installed copies update themselves to a higher N. N is this workflow's run
 # number, which starts again at 1 if this file is renamed: don't rename it.
+# The programs built on any other branch are build 0, which never updates
+# itself; the tests that need numbered copies build their own.
 #
 # Actions are pinned to exact commits, since the release job can publish
 # what every installed copy runs.
@@ -33,10 +35,17 @@ jobs:
           GOOS=darwin go vet ./...
       - name: Check the control panel scripts
         run: |
-          for f in internal/web/ui/assets/*.js; do
+          # Every script under assets, in subfolders too (the game pages will
+          # live in assets/games/). Each is checked as a module, as the
+          # browser loads it.
+          count=0
+          while IFS= read -r -d '' f; do
             cp "$f" "$RUNNER_TEMP/check.mjs"
             node --check "$RUNNER_TEMP/check.mjs" || { echo "Syntax error in $f"; exit 1; }
-          done
+            count=$((count + 1))
+          done < <(find internal/web/ui/assets -type f -name '*.js' -print0 | sort -z)
+          echo "Checked $count scripts."
+          test "$count" -gt 0
       - name: Known vulnerabilities in Go and the libraries used
         run: |
           # Built with the project's Go, so it can read the code; then run
@@ -68,15 +77,23 @@ jobs:
         run: go test -count=1 ./...
       - name: Add the icon and version details
         run: go run github.com/tc-hib/go-winres@v0.3.3 make --in winres/winres.json --arch amd64
+      # VES_BUILD is the build number the app carries. Only what the release
+      # job may publish (the same condition as its "if") is numbered; every
+      # other branch's program is build 0, which never updates itself, so a
+      # test copy can't replace itself with the newest release mid-test.
       - name: Version
         shell: pwsh
         env:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
           RUN_NUMBER: ${{ github.run_number }}
+          NUMBERED: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         run: |
           $version = if ($env:REF_TYPE -eq "tag") { $env:REF_NAME } else { "build-$env:RUN_NUMBER" }
+          $build = if ($env:NUMBERED -eq "true") { $env:RUN_NUMBER } else { "0" }
           "VES_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "VES_BUILD=$build" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Version $version, build number $build"
       # The app carries the waker and puts it on the JetKVM. Both have the
       # same version, which is how the app knows the JetKVM's copy is current.
       - name: Build the waker for the JetKVM (ARMv7 Linux)
@@ -88,10 +105,8 @@ jobs:
           ls -l internal/jetkvm/dist/
       - name: Build ValheimEasyServer.exe
         shell: pwsh
-        env:
-          RUN_NUMBER: ${{ github.run_number }}
         run: |
-          go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=$env:VES_VERSION -X main.build=$env:RUN_NUMBER" -o dist/ValheimEasyServer.exe .
+          go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=$env:VES_VERSION -X main.build=$env:VES_BUILD" -o dist/ValheimEasyServer.exe .
       - name: Smoke test the app
         shell: pwsh
         run: |
@@ -102,6 +117,9 @@ jobs:
             $status = Invoke-RestMethod http://127.0.0.1:18456/api/status
             Write-Host "Server state: $($status.state)"
             if ($status.state -ne "not_installed") { throw "Unexpected state $($status.state)." }
+            # The program that is uploaded: build 0 on any branch but the default one.
+            Write-Host "Build number: $($status.app.build)"
+            if ($status.app.build -ne [int]$env:VES_BUILD) { throw "The app says it's build $($status.app.build), not $env:VES_BUILD." }
             $page = (Invoke-WebRequest http://127.0.0.1:18456/ -UseBasicParsing).Content
             if ($page -notmatch "Valheim Easy Server") { throw "The control panel page didn't load." }
             if ($p.HasExited) { throw "The app exited." }
@@ -120,9 +138,16 @@ jobs:
           $site = Join-Path $root "site"
           $data = Join-Path $root "data"
           $exe = Join-Path $root "app\ValheimEasyServer.exe"
-          New-Item -ItemType Directory -Force $site, $data, (Split-Path $exe) | Out-Null
+          $copy = Join-Path $root "builds\ValheimEasyServer.exe"
+          New-Item -ItemType Directory -Force $site, $data, (Split-Path $exe), (Split-Path $copy) | Out-Null
           go build -trimpath -ldflags "-H=windowsgui -X main.version=build-1 -X main.build=1" -o $exe .
           if ($LASTEXITCODE -ne 0) { throw "Couldn't build the older copy." }
+          # This build as number N, made like dist's program but in a test
+          # folder that is never uploaded: dist's is build 0 on branches,
+          # which doesn't update itself (on the default branch both are
+          # built the same way).
+          go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=$env:VES_VERSION -X main.build=$n" -o $copy .
+          if ($LASTEXITCODE -ne 0) { throw "Couldn't build this commit as build $n." }
 
           # A stand-in for GitHub's releases list and downloads.
           function Publish([int]$build, [string]$program) {
@@ -163,7 +188,7 @@ jobs:
               if ($web.HasExited -or (Get-Date) -gt $deadline) { throw "The stand-in GitHub didn't start." }
               Start-Sleep -Milliseconds 500
             }
-            Publish $n "dist\ValheimEasyServer.exe"
+            Publish $n $copy
             Start-Process -FilePath $exe -ArgumentList "--no-window", "--data", $data, "--port", "18457", "--dev-fake-github", "http://127.0.0.1:18500"
             WaitFor { param($s) $s.app.build -eq 1 } "build 1 to start" | Out-Null
             Update
@@ -182,6 +207,15 @@ jobs:
             Get-Process ValheimEasyServer -ErrorAction SilentlyContinue | Stop-Process -Force
             Stop-Process -Id $web.Id -Force -ErrorAction SilentlyContinue
           }
+      # From the newest real release to this commit and back, with a stand-in
+      # Valheim server running throughout (docs/dev/multigame/spec.md, 7.3).
+      - name: Upgrade and rollback test (the newest release updates to this commit with Valheim running, and back)
+        shell: pwsh
+        timeout-minutes: 30
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: ./.github/scripts/upgrade-test.ps1
       - name: Package
         shell: pwsh
         run: Copy-Item "docs/READ-ME-FIRST.txt" dist/
@@ -203,14 +237,20 @@ jobs:
         run: go test -v -count=1 ./internal/platform/
       - name: All tests (a stand-in Valheim server is started, saved and stopped)
         run: go test -count=1 ./...
+      # VES_BUILD as in the Windows job: build 0 unless the release job may
+      # publish this build.
       - name: Version
         env:
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
           RUN_NUMBER: ${{ github.run_number }}
+          NUMBERED: ${{ startsWith(github.ref, 'refs/tags/v') || github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         run: |
           if [ "$REF_TYPE" = "tag" ]; then v="$REF_NAME"; else v="build-$RUN_NUMBER"; fi
+          if [ "$NUMBERED" = "true" ]; then b="$RUN_NUMBER"; else b=0; fi
           echo "VES_VERSION=$v" >> "$GITHUB_ENV"
+          echo "VES_BUILD=$b" >> "$GITHUB_ENV"
+          echo "Version $v, build number $b"
       - name: Build the mod loader for macOS 11 and later (UnityDoorstop)
         run: .github/scripts/build-doorstop.sh
       - name: Build the waker for the JetKVM (ARMv7 Linux)
@@ -219,11 +259,9 @@ jobs:
           gzip -9 -c waker.tmp > internal/jetkvm/dist/valheim-waker-armv7.gz
           rm waker.tmp
       - name: Build the app (one program for Intel and Apple silicon)
-        env:
-          RUN_NUMBER: ${{ github.run_number }}
         run: |
           for arch in amd64 arm64; do
-            GOARCH=$arch CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$VES_VERSION -X main.build=$RUN_NUMBER" -o "ves-$arch" .
+            GOARCH=$arch CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$VES_VERSION -X main.build=$VES_BUILD" -o "ves-$arch" .
           done
           lipo -create -output ValheimEasyServer-mac ves-amd64 ves-arm64
           lipo -info ValheimEasyServer-mac
@@ -238,15 +276,13 @@ jobs:
             fi
           done
       - name: Make the Mac app
-        env:
-          RUN_NUMBER: ${{ github.run_number }}
         run: |
           set -euo pipefail
           folder="dist-mac/Valheim Easy Server"
           app="$folder/Valheim Easy Server.app"
           mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
           cp ValheimEasyServer-mac "$app/Contents/MacOS/ValheimEasyServer"
-          sed "s/BUILD_NUMBER/$RUN_NUMBER/g" macapp/Info.plist > "$app/Contents/Info.plist"
+          sed "s/BUILD_NUMBER/$VES_BUILD/g" macapp/Info.plist > "$app/Contents/Info.plist"
           plutil -lint "$app/Contents/Info.plist"
           iconset="$RUNNER_TEMP/AppIcon.iconset"
           mkdir -p "$iconset"
@@ -275,8 +311,20 @@ jobs:
           test -n "$ok"
           echo "$status" | grep -q '"state":"not_installed"'
           echo "$status" | grep -q '"platform":"darwin"'
+          # The program that is uploaded: build 0 on any branch but the default one.
+          echo "Build number: $(echo "$status" | jq .app.build)"
+          echo "$status" | jq -e --argjson b "$VES_BUILD" '.app.build == $b' > /dev/null || { echo "::error::The app's build number isn't $VES_BUILD."; exit 1; }
           curl -fsS http://127.0.0.1:18456/ | grep -q "Valheim Easy Server"
           pkill -f -- "--data $data" || true
+      # From the newest real release to this commit and back, with a stand-in
+      # Valheim server running throughout (docs/dev/multigame/spec.md, 7.3),
+      # and the Mac twin of the Windows test of a build that doesn't start.
+      - name: Upgrade and rollback test (the newest release updates to this commit with Valheim running, and back)
+        timeout-minutes: 30
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: .github/scripts/upgrade-test.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ValheimEasyServer-mac
@@ -295,7 +343,32 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read # to see real-server.yml's runs
     steps:
+      # A release is a --no-ff merge of the branch the lead tested, and the
+      # real servers (real-server.yml, run by hand on that branch) must have
+      # passed on exactly the commit merged in: the merge's second parent
+      # (docs/dev/multigame/spec.md, 7.4 and 8.2). Runs started by a push
+      # don't count, as they may check only some games. This job has no
+      # checkout, so it asks GitHub.
+      - name: Check the real servers passed on what is released
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          parent=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA" --jq '.parents[1].sha // ""')
+          if [ -z "$parent" ]; then
+            echo "::error::$SHA isn't a merge, so nothing shows the real servers were checked on it. Release by merging the tested branch with git merge --no-ff (docs/dev/multigame/spec.md, 8.2)."
+            exit 1
+          fi
+          runs=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow real-server.yml --commit "$parent" --limit 100 --json conclusion,event,url)
+          echo "real-server.yml's runs on $parent: $runs"
+          passed=$(echo "$runs" | jq -r '[.[] | select(.conclusion == "success" and .event == "workflow_dispatch")][0].url // ""')
+          if [ -z "$passed" ]; then
+            echo "::error::real-server.yml has no passed run, started by hand, on $parent (the commit merged in). Run it on that branch; once it passes, re-run this workflow's failed jobs."
+            exit 1
+          fi
+          echo "The real servers passed on $parent: $passed"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ValheimEasyServer-windows
