@@ -30,6 +30,7 @@ import (
 const (
 	maxWorldName = 40
 	worldFile    = "0.world.gzip"
+	configFile   = "ServerConfig.json"
 )
 
 // worldStore is the store with Core Keeper's own rules for names added.
@@ -45,6 +46,33 @@ func newWorldStore(d game.Dirs) worldStore {
 
 // dataPath is the server's data folder for a world.
 func (w worldStore) dataPath(name string) string { return filepath.Join(w.dir, name) }
+
+// Exists says whether the server has made the world yet, not only whether
+// its folder is there. The folder is there before the world is made: Plan
+// makes it for a new world, and the server makes it too and puts its mod
+// loader's files in it before anything else (FACTS.md). If that first
+// start fails (the graphics driver, Steam, a crash, or a force stop while
+// it hangs), the folder stays. Counting it as a world would make the next
+// start a start of an existing world, without the mode and seed the owner
+// chose, and the server would quietly make a Normal world with a random
+// seed (and a world made Creative, or not, can't be switched later). So a
+// world exists once its folder holds a world file (made, or uploaded: the
+// ones tidyWorld puts in place count too) or the ServerConfig.json the
+// server writes early in every start, which keeps the mode and seed for
+// the starts after it.
+//
+// List still shows such a folder (as not made yet while it is empty), so
+// the owner sees the world they asked for and can delete or rename it.
+// Every other change (backups, restores, imports) goes through the shared
+// store, which counts the folder, as before.
+func (w worldStore) Exists(name string) bool {
+	return w.Worlds.Exists(name) && made(w.dataPath(name))
+}
+
+// made says whether the server has made a world in the data folder dir.
+func made(dir string) bool {
+	return fileExists(filepath.Join(dir, configFile)) || len(worldFiles(dir)) > 0
+}
 
 // NameProblem adds Core Keeper's rule to the shared ones: the world's name
 // is a folder on the server's command line, where the server reads a
@@ -77,18 +105,7 @@ func tidyWorld(dir string) (string, error) {
 	if _, err := os.Stat(target); err == nil || !errors.Is(err, os.ErrNotExist) {
 		return "", nil
 	}
-	var found []string
-	for _, sub := range []string{"", "worlds"} {
-		entries, err := os.ReadDir(filepath.Join(dir, sub))
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			if e.Type().IsRegular() && reWorldFile.MatchString(e.Name()) {
-				found = append(found, filepath.Join(sub, e.Name()))
-			}
-		}
-	}
+	found := worldFiles(dir)
 	switch len(found) {
 	case 0:
 		return "", nil
@@ -110,6 +127,24 @@ func tidyWorld(dir string) (string, error) {
 		os.Rename(old, target+".pugbackup")
 	}
 	return found[0], nil
+}
+
+// worldFiles lists the world files of any slot in the data folder dir, at
+// its top or in worlds/, relative to dir.
+func worldFiles(dir string) []string {
+	var found []string
+	for _, sub := range []string{"", "worlds"} {
+		entries, err := os.ReadDir(filepath.Join(dir, sub))
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.Type().IsRegular() && reWorldFile.MatchString(e.Name()) {
+				found = append(found, filepath.Join(sub, e.Name()))
+			}
+		}
+	}
+	return found
 }
 
 func fileExists(p string) bool {

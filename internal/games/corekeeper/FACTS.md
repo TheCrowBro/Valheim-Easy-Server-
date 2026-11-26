@@ -238,6 +238,22 @@ file, and "Departures from the spec" lists each case.
   `%USERPROFILE%\AppData\LocalLow\Pugstorm\Core Keeper\DedicatedServer`
   (Windows) or `~/.config/unity3d/Pugstorm/Core Keeper/DedicatedServer`
   (Linux) (ARGUMENTS.txt; gameserverkings.com; corekeeper.atma.gg Save_data).
+- **What a first start writes, and when**: the real server makes a missing
+  `-datapath` folder itself (91 log lines in, after Steam and the system
+  check), writes `modloader/config.json` and `mods/README.txt` into it, and
+  then `ServerConfig.json` (18 lines later), with the command line's mode
+  and seed in it, before the world exists. Killed at that moment
+  (`testdata/real/first-start-killed.log`,
+  `ServerConfig-killed-first-start.json`: `"worldMode": 2`, `"worldSeed":
+  "Nice World"`), the folder had no world file; started again in that
+  folder without `-worldmode` and `-worldseed`, it made the world from that
+  file ("Hashed string seed Nice World", `"worldMode": 2` kept;
+  `after-killed-first-start.log`). So a world counts as made
+  (`worldStore.Exists`) once its folder holds a world file or
+  ServerConfig.json, and a folder with only the mod loader's files, or
+  nothing, is still a new world whose next start gives the owner's mode and
+  seed again. A folder the server never got to (a start that failed
+  sooner, or a force stop while it hangs) is the same.
 - **The app gives each world its own data folder**, `saves/<world>/`, and
   always runs slot 0 there. A world is then a folder, which the shared world
   store handles whole (backups and restores carry the world's settings and

@@ -176,6 +176,10 @@ func TestGameID(t *testing.T) {
 	if i := slices.Index(p.Args, "-gameid"); i < 0 || p.Args[i+1] != id {
 		t.Errorf("the plan doesn't give the Game ID: %q", p.Args)
 	}
+	// The server made the world (its first start writes ServerConfig.json).
+	if err := os.WriteFile(filepath.Join(s.worlds.dataPath("Main"), configFile), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	p2, err := s.Plan(t.Context(), game.PlanRequest{World: "Main", Saved: s.store.Get(), LogPath: "log"})
 	if err != nil {
 		t.Fatal(err)
@@ -212,6 +216,91 @@ func TestGameID(t *testing.T) {
 		if err != nil || !validGameID(n) {
 			t.Fatalf("newGameID = %q, %v", n, err)
 		}
+	}
+}
+
+// A new world whose first start fails before the server writes anything
+// leaves an empty folder. That isn't a world yet: the next start (planned
+// as new when Exists says no, as gametest and the manager do) must make it
+// again with the mode and seed the owner chose, not let the server quietly
+// make a Normal world with a random seed.
+func TestFailedFirstStartStaysNew(t *testing.T) {
+	s := installed(t)
+	sv := defaultSaved()
+	s.store.Save(func(x *game.Saved) error { *x = sv.Clone(); return nil })
+	wl := s.Worlds()
+	choice := game.Values{"mode": "creative", "seed": "Nice World"}
+	plan := func() (game.Plan, bool, error) {
+		isNew := !wl.Exists("Main")
+		p, err := s.Plan(t.Context(), game.PlanRequest{World: "Main", New: isNew, NewWorld: choice, Saved: s.store.Get(), LogPath: "log"})
+		return p, isNew, err
+	}
+	newArgs := func(p game.Plan) bool {
+		i := slices.Index(p.Args, "-worldmode")
+		j := slices.Index(p.Args, "-worldseed")
+		return i >= 0 && p.Args[i+1] == "Creative" && j >= 0 && p.Args[j+1] == "Nice World"
+	}
+
+	p, isNew, err := plan()
+	if err != nil || !isNew || !newArgs(p) {
+		t.Fatalf("the first start: new %v, %q, %v", isNew, p.Args, err)
+	}
+	dir := s.worlds.dataPath("Main")
+	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
+		t.Fatalf("Plan didn't make the world's folder: %v", err)
+	}
+	// The start fails before the server writes anything. The folder is
+	// still listed, as a world never saved, but it isn't a world yet.
+	if list, _, err := wl.List(); err != nil || len(list) != 1 || !list[0].NeverSaved {
+		t.Errorf("List with the empty folder: %+v, %v", list, err)
+	}
+	if wl.Exists("Main") {
+		t.Fatal("Exists says yes for a world's empty folder")
+	}
+	p, isNew, err = plan()
+	if err != nil || !isNew || !newArgs(p) {
+		t.Fatalf("the start after a failed first start: new %v, %q, %v", isNew, p.Args, err)
+	}
+	// Asked to start it as an existing world, Plan says what happened
+	// rather than let the server make a world with the defaults.
+	if _, err := s.Plan(t.Context(), game.PlanRequest{World: "Main", Saved: s.store.Get(), LogPath: "log"}); err == nil || !strings.Contains(err.Error(), "hasn't been made yet") {
+		t.Errorf("an existing world's start of an empty folder: %v", err)
+	}
+
+	// Each of these means the server has made the world (or it was
+	// uploaded), so later starts leave the mode and seed out.
+	for _, rel := range []string{configFile, filepath.Join("worlds", worldFile), "3.world.gzip", filepath.Join("worlds", "7.world.gzip")} {
+		t.Run(filepath.ToSlash(rel), func(t *testing.T) {
+			os.RemoveAll(dir)
+			p := filepath.Join(dir, rel)
+			os.MkdirAll(filepath.Dir(p), 0o755)
+			if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if !wl.Exists("Main") {
+				t.Fatalf("Exists says no with %s in the folder", rel)
+			}
+			got, isNew, err := plan()
+			if err != nil || isNew || slices.Contains(got.Args, "-worldmode") || slices.Contains(got.Args, "-worldseed") {
+				t.Errorf("a start with %s there: new %v, %q, %v", rel, isNew, got.Args, err)
+			}
+		})
+	}
+	// The real server writes modloader/config.json and mods/README.txt
+	// before ServerConfig.json (FACTS.md): a start that stops between them
+	// hasn't made the world either. Nor do the lists alone.
+	os.RemoveAll(dir)
+	for _, rel := range []string{"modloader/config.json", "mods/README.txt", "Admins.json"} {
+		p := filepath.Join(dir, rel)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte("{}"), 0o644)
+	}
+	if wl.Exists("Main") {
+		t.Errorf("Exists says yes with only the mod loader's files and Admins.json in the folder")
+	}
+	os.RemoveAll(dir)
+	if wl.Exists("Main") {
+		t.Errorf("Exists says yes with no folder")
 	}
 }
 

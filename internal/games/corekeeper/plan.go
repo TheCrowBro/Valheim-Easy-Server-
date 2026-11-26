@@ -121,8 +121,14 @@ func (s *server) Plan(ctx context.Context, req game.PlanRequest) (game.Plan, err
 		// The server makes the world when its folder has none.
 		wait = readyWaitNew
 	case !s.worlds.Exists(req.World):
-		// Without the folder the server would quietly make a new, empty
-		// world; saying so here is clearer.
+		// Without a world in the folder the server would quietly make a
+		// new one, Normal with a random seed; saying so here is clearer.
+		// A folder with nothing of the server's in it is a new world whose
+		// first start stopped early (worldStore.Exists): it must be started
+		// as new, with the mode and seed it was made for.
+		if st, err := os.Stat(dir); err == nil && st.IsDir() {
+			return game.Plan{}, fmt.Errorf("The world %q hasn't been made yet: the start that was to make it stopped before the server got that far. Make it again as a new world on the Worlds page.", req.World)
+		}
 		return game.Plan{}, fmt.Errorf("The world %q isn't in Core Keeper's saves folder any more. Restore one of its backups on the Worlds page, or make a new world.", req.World)
 	default:
 		moved, err := tidyWorld(dir)
@@ -133,6 +139,11 @@ func (s *server) Plan(ctx context.Context, req game.PlanRequest) (game.Plan, err
 			s.log.Printf("world %q: moved %s to worlds/0.world.gzip, where the server looks for it", req.World, moved)
 		}
 	}
+	// A new world's folder is made here, so the first start doesn't depend
+	// on the server making it (seen on Linux only), and the world shows on
+	// the Worlds page straight away. If that start then fails before the
+	// server writes anything, the empty folder doesn't count as a world
+	// (worldStore.Exists), so the next start is still a new world's.
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return game.Plan{}, err
 	}
