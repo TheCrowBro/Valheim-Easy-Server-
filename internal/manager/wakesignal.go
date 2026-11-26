@@ -63,10 +63,26 @@ func (m *Manager) hearWakeSignals(conn net.PacketConn) {
 			continue
 		}
 		if mac, tag, ok := wol.Target(buf[:n]); ok && wol.Mine(mac) {
+			// A newer waker names the game it's for (spec 6.4). This version
+			// runs only the legacy game, so a packet for another game (from
+			// a newer app's waker, before this one puts its own back) starts
+			// nothing; a packet without a game is for the legacy game, as
+			// always.
+			if id := wakePacketGame(buf[:n]); id != "" && id != m.legacyID {
+				m.log.Printf("a wake signal asked for %q, which this version of the app doesn't run", id)
+				continue
+			}
 			m.wakeSignal(string(tag))
 		}
 	}
 }
+
+// wakePacketGame is the game a wake packet asks for: the instance id a
+// newer waker puts after the tag, or "" for a packet without one (an older
+// waker, or the KVM's own Wake-on-LAN button). It is the one place the
+// app reads it; a packet for another game (or one this version can't read)
+// is left for the copy of the app that runs that game. Tests replace it.
+var wakePacketGame = wol.GameOf
 
 // wakeSignal starts the server, unless it's running or busy, and keeps the
 // computer awake for a while: someone wants to play. The waker repeats its
@@ -77,15 +93,16 @@ func (m *Manager) hearWakeSignals(conn net.PacketConn) {
 // without a tag (from the KVM's own Wake-on-LAN button) starts it at most
 // once a minute.
 func (m *Manager) wakeSignal(tag string) {
+	inst := m.legacy()
 	m.mu.Lock()
-	m.idleSince = time.Now() // someone wants to play
+	m.machineIdleSince = time.Now() // someone wants to play
 	fresh := tag != m.wakeTag
 	if tag == "" {
 		fresh = time.Since(m.wakeStart) > time.Minute
 	}
-	busy := m.job != nil && m.job.Finished == nil
-	start := fresh && m.run == nil && !busy && m.installedLocked()
-	steady := m.run != nil && !m.run.stopping && !busy // the server is already up
+	busy := m.busyJobLocked(inst) != nil
+	start := fresh && inst.run == nil && !busy && m.installedLocked(inst)
+	steady := inst.run != nil && !inst.run.stopping && !busy // the server is already up
 	if tag != "" && (start || steady) {
 		m.wakeTag = tag // the request is met: its repeats do nothing
 	}

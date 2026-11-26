@@ -12,7 +12,7 @@ import (
 
 	"valheim-easy-server/internal/config"
 	"valheim-easy-server/internal/discord"
-	"valheim-easy-server/internal/mods"
+	"valheim-easy-server/internal/game"
 )
 
 // Posting the join code in a Discord channel. Messages wait in a queue and
@@ -47,63 +47,71 @@ const (
 	stopCrashRestart
 )
 
-// announceLocked returns the message with the join code once the running
-// server has one, and again if the code changes; ok is false when there's
-// nothing new to post. The caller queues it and saves run.info.
+// announceLocked returns the online message once the running server is
+// ready (for a game with a join code, once it has one, and again if the
+// code changes); ok is false when there's nothing new to post. The caller
+// queues it and saves the run record.
 func (m *Manager) announceLocked(run *serverRun) (p discordPost, ok bool) {
-	s := m.joinSettingsLocked(run) // what friends join with, not changes waiting for a restart
-	if !s.Discord || m.run != run || !run.ready || run.stopping || run.replaying || run.info.codePending {
-		return p, false // the mods code comes within seconds
+	inst := run.inst
+	s := m.settings
+	if !s.Discord || inst.run != run || !run.ready || run.stopping || run.replaying || run.afterPending {
+		return p, false // the game's work after the start (the mods code) comes within seconds
 	}
-	code := run.tracker.JoinCode
+	saved := inst.saved()
+	st := run.state()
+	// What friends join with: what the running server started with.
+	j := inst.srv.Join(game.JoinInput{Rec: &run.rec, State: &st, Saved: saved})
+	code := j.Code
 	key := code
 	if key == "" {
-		if s.Crossplay {
+		if j.How == "code" {
 			return p, false // the code comes a few seconds after the server is ready
 		}
 		key = "online"
 	}
-	if run.info.Announced == key {
+	if run.rec.Announced == key {
 		return p, false
 	}
-	run.info.Announced = key
-	run.info.Posted, run.info.PostError = time.Time{}, ""
+	run.rec.Announced = key
+	run.rec.Posted, run.rec.PostError = time.Time{}, ""
 	run.discordAt, run.discordErr = time.Time{}, ""
 
-	msg := onlineMessage{Server: s.ServerName, World: run.info.World, Code: code, ModsCode: m.modsCodeLocked(run), Reminder: m.reminderLocked(run)}
+	server := run.rec.Server
+	if server == "" { // started by an older version of the app
+		server = saved.Server["serverName"]
+	}
+	in := game.OnlineInput{Server: server, World: run.rec.World, Join: j, Reminder: m.reminderLocked(inst, run)}
 	if s.DiscordPassword {
-		msg.Password = s.Password
+		in.Password = j.Password
 	}
-	for _, md := range m.playerModsLocked(run.info.World, run) {
-		if md.Players == mods.PlayersOnly {
-			msg.Optional = append(msg.Optional, ModInfo{Mod: md.Mod})
-		} else {
-			msg.Mods = append(msg.Mods, md)
-		}
-	}
+	rec := run.rec
+	in.Rec = &rec
 	what := "the join code"
 	if code == "" {
 		what = "that the server is online"
 	}
-	port := s.Port
+	texter, _ := inst.srv.(game.OnlineTexter)
 	return discordPost{
 		link: s.DiscordWebhook,
 		text: func() string {
-			if msg.Code == "" {
-				msg.Address = m.publicAddress(port)
+			if in.Join.Code == "" {
+				in.Join.Address = m.publicAddress(in.Join.Port)
 			}
-			return msg.text()
+			if texter != nil {
+				return texter.Online(in)
+			}
+			return onlineText(in)
 		},
 		done: func(err error) {
 			m.mu.Lock()
-			current := run.info.Announced == key
+			current := run.rec.Announced == key
 			if current {
 				if err == nil {
 					run.discordAt = time.Now()
 				} else {
 					run.discordErr = err.Error()
 				}
-				run.info.Posted, run.info.PostError = run.discordAt, run.discordErr
+				run.rec.Posted, run.rec.PostError = run.discordAt, run.discordErr
 			}
 			m.mu.Unlock()
 			if current {
@@ -118,14 +126,41 @@ func (m *Manager) announceLocked(run *serverRun) (p discordPost, ok bool) {
 	}, true
 }
 
+// onlineText is the online post of a game without its own wording.
+func onlineText(in game.OnlineInput) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "🟢 **%s** is online\n", discord.Escape(in.Server))
+	fmt.Fprintf(&b, "World: %s\n", discord.Escape(in.World))
+	switch {
+	case in.Join.Code != "":
+		label := in.Join.CodeLabel
+		if label == "" {
+			label = "Join code"
+		}
+		fmt.Fprintf(&b, "%s: **%s**\n", label, in.Join.Code)
+	case in.Join.Address != "":
+		fmt.Fprintf(&b, "Address: **%s**\n", in.Join.Address)
+	}
+	if in.Password != "" {
+		fmt.Fprintf(&b, "Password: ||%s||\n", discord.Escape(in.Password))
+	}
+	if len(in.Reminder) > 0 {
+		fmt.Fprintf(&b, "📢 **Before you join:** %s.\n", strings.Join(in.Reminder, ", "))
+	}
+	if in.Join.Hint != "" {
+		b.WriteString("-# " + in.Join.Hint)
+	}
+	return strings.TrimSuffix(b.String(), "\n")
+}
+
 // stoppedPostLocked returns the message saying the server stopped, if the
 // channel was told it was online.
 func (m *Manager) stoppedPostLocked(run *serverRun, why stopReason) (p discordPost, ok bool) {
 	s := m.settings
-	if !s.Discord || !s.DiscordStopped || run.info.Announced == "" {
+	if !s.Discord || !s.DiscordStopped || run.rec.Announced == "" {
 		return p, false
 	}
-	text := stoppedText(s.ServerName, why, run.info.Announced != "online")
+	text := stoppedText(run.inst.saved().Server["serverName"], why, run.rec.Announced != "online")
 	return discordPost{
 		link: s.DiscordWebhook,
 		text: func() string { return text },
@@ -135,74 +170,6 @@ func (m *Manager) stoppedPostLocked(run *serverRun, why stopReason) (p discordPo
 			}
 		},
 	}, true
-}
-
-// onlineMessage is what the channel sees when the server is ready.
-type onlineMessage struct {
-	Server, World string
-	Code          string // crossplay join code
-	Address       string // internet address, when there's no join code
-	Password      string // empty to leave it out
-	Mods          []ModInfo
-	Optional      []ModInfo // just for players' own games
-	ModsCode      string    // imports all the mods in r2modman or Gale
-	Reminder      []string  // what players need to do first, such as "update Valheim to 1.0.21"
-}
-
-func (o onlineMessage) text() string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "🟢 **%s** is online\n", discord.Escape(o.Server))
-	fmt.Fprintf(&b, "World: %s\n", discord.Escape(o.World))
-	switch {
-	case o.Code != "":
-		fmt.Fprintf(&b, "Join code: **%s**\n", o.Code)
-	case o.Address != "":
-		fmt.Fprintf(&b, "Address: **%s**\n", o.Address)
-	}
-	if o.Password != "" {
-		fmt.Fprintf(&b, "Password: ||%s||\n", discord.Escape(o.Password))
-	}
-	hint := "In Valheim, go to Join Game and join by code."
-	if o.Code == "" {
-		hint = "In Valheim, go to Join Game and add the server by its address."
-	}
-	if len(o.Mods) > 0 {
-		list := make([]string, 0, len(o.Mods))
-		for _, md := range o.Mods {
-			item := fmt.Sprintf("[%s](%s)", md.Name, md.URL)
-			if md.Version != "" {
-				item += " " + md.Version
-			}
-			list = append(list, item)
-		}
-		fmt.Fprintf(&b, "Mods: %s\n", strings.Join(list, ", "))
-		them := "the mod"
-		if len(o.Mods) > 1 {
-			them = "the mods"
-		}
-		if o.ModsCode != "" {
-			hint += fmt.Sprintf(" Install %s first: in the r2modman or Gale mod manager, import the mods code as a new profile.", them)
-		} else {
-			hint += fmt.Sprintf(" Install %s first with the Gale or r2modman mod manager.", them)
-		}
-	} else if o.ModsCode != "" {
-		hint += " For the optional mods, import the mods code as a new profile in r2modman or Gale."
-	}
-	if len(o.Optional) > 0 {
-		list := make([]string, 0, len(o.Optional))
-		for _, md := range o.Optional {
-			list = append(list, fmt.Sprintf("[%s](%s)", md.Name, md.URL))
-		}
-		fmt.Fprintf(&b, "Optional, just for your own game: %s\n", strings.Join(list, ", "))
-	}
-	if o.ModsCode != "" {
-		fmt.Fprintf(&b, "📦 Mods code: `%s`\n", o.ModsCode)
-	}
-	if len(o.Reminder) > 0 {
-		fmt.Fprintf(&b, "📢 **Before you join:** %s.\n", strings.Join(o.Reminder, ", "))
-	}
-	b.WriteString("-# " + hint)
-	return b.String()
 }
 
 func stoppedText(server string, why stopReason, code bool) string {
@@ -319,19 +286,20 @@ func (m *Manager) webhookURL(link string) string {
 	return u.String()
 }
 
-// saveRunInfo writes what's known about the running server to
-// runtime.json, so a restarted app knows what was already posted.
+// saveRunInfo writes what's known about the running server to its run
+// record (runtime.json for the legacy game), so a restarted app knows what
+// was already posted.
 func (m *Manager) saveRunInfo(run *serverRun) {
-	// Saves that overlap are written in the order they read run.info, so
+	// Saves that overlap are written in the order they read run.rec, so
 	// the file ends up with the newest.
 	m.runFileMu.Lock()
 	defer m.runFileMu.Unlock()
 	m.mu.Lock()
-	info, current := run.info, m.run == run
-	path := m.dataFile("runtime.json")
+	rec, current := run.rec, run.inst.run == run
+	path := m.runFile(run.inst)
 	m.mu.Unlock()
 	if current {
-		saveRuntime(path, info)
+		saveRuntime(path, rec)
 	}
 }
 

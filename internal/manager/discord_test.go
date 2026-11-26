@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"valheim-easy-server/internal/games/valheim"
 	"valheim-easy-server/internal/mods"
 )
 
@@ -257,7 +258,7 @@ func TestDiscordPostAfterTakeover(t *testing.T) {
 		waitFor(t, "takeover", 10*time.Second, func() bool {
 			m.mu.Lock()
 			defer m.mu.Unlock()
-			return m.run != nil && m.run.ready && !m.run.replaying
+			return m.legacy().run != nil && m.legacy().run.ready && !m.legacy().run.replaying
 		})
 		return m
 	}
@@ -337,9 +338,9 @@ func TestCrossplayCantStart(t *testing.T) {
 // A join code that doesn't come, for no reason the log gives, is late after
 // a while.
 func TestJoinCodeLate(t *testing.T) {
-	old := codeWait
-	codeWait = time.Second
-	t.Cleanup(func() { codeWait = old })
+	old := valheim.CodeWait
+	valheim.CodeWait = time.Second
+	t.Cleanup(func() { valheim.CodeWait = old })
 	t.Setenv("FAKE_VALHEIM_PARTY", "silent")
 	env := setup(t)
 	m := env.m
@@ -379,7 +380,7 @@ func TestDiscordAfterTakeoverAndRest(t *testing.T) {
 	waitFor(t, "takeover", 10*time.Second, func() bool {
 		m2.mu.Lock()
 		defer m2.mu.Unlock()
-		return m2.run != nil && m2.run.ready && !m2.run.replaying
+		return m2.legacy().run != nil && m2.legacy().run.ready && !m2.legacy().run.replaying
 	})
 	time.Sleep(time.Second)
 	if n := fake.count("is online"); n != 1 {

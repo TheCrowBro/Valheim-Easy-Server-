@@ -73,6 +73,11 @@ jobs:
           go-version-file: go.mod
       - name: Windows features (Ctrl+C to the server, CPU/GPU/RAM counters, power)
         run: go test -v -count=1 ./internal/platform/
+        env:
+          # The runner is an administrator, so the real firewall and
+          # elevation tests can run. Only on this step: they replace the
+          # app's firewall rules, and "All tests" would run them twice.
+          EGS_CI_ADMIN: "1"
       - name: All tests (a stand-in Valheim server is started, saved and stopped)
         run: go test -count=1 ./...
       - name: Add the icon and version details

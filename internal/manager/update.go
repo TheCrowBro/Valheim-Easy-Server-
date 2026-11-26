@@ -77,15 +77,13 @@ func (m *Manager) appInfoLocked() AppInfo {
 // busyLocked reports whether a job is running or someone is uploading a
 // world (an upload left alone for hours doesn't count).
 func (m *Manager) busyLocked() bool {
-	if m.job != nil && m.job.Finished == nil {
-		return true
-	}
-	for _, u := range m.uploads {
-		if time.Since(u.Created) < 2*time.Hour {
-			return true
+	busy := m.anyJobLocked()
+	m.eachInstance(func(inst *instance) {
+		for _, u := range inst.uploads {
+			busy = busy || time.Since(u.Created) < 2*time.Hour
 		}
-	}
-	return false
+	})
+	return busy
 }
 
 // noteUpdate reports how the update that restarted the app went. It
@@ -229,7 +227,7 @@ func (m *Manager) checkForUpdate(install, auto bool) error {
 	if rel.Title != "" {
 		text += ": " + rel.Title
 	}
-	m.addActivity("update", "", text+". The Valheim server keeps running while the app restarts.")
+	m.addActivity("update", "", text+". The "+m.legacy().short()+" server keeps running while the app restarts.")
 	m.saveData()
 	m.notify()
 	go func() {

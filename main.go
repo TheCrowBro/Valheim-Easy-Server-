@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"valheim-easy-server/internal/config"
+	_ "valheim-easy-server/internal/games/all" // every game this build hosts, found by the manager through internal/game
 	"valheim-easy-server/internal/manager"
 	"valheim-easy-server/internal/platform"
 	"valheim-easy-server/internal/selfupdate"
