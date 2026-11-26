@@ -395,6 +395,11 @@ func TestDemo(t *testing.T) {
 	if !strings.Contains(r.stderrText(), `no script step "dance"`) {
 		t.Errorf("an unknown step wasn't reported: stderr %q", r.stderrText())
 	}
+	// Its last words, which tell a test that finds it still running
+	// afterwards that it is stuck in the system's exit (fw_server.go).
+	if !strings.HasSuffix(r.stderrText(), "fakeserver: exiting now (code 0)\n") {
+		t.Errorf("stderr doesn't end with the exit line: %q", r.stderrText())
+	}
 }
 
 // TestDemoCtrlC: Ctrl+C (SIGINT) saves and stops. Windows sends Ctrl+C
@@ -484,6 +489,9 @@ func TestDemoCrashAndNoReady(t *testing.T) {
 	r.waitLine("Player joined: Alex", "Fatal error: the demo server crashed")
 	if code := r.exit(); code != 3 {
 		t.Errorf("exit code %d, want 3", code)
+	}
+	if !strings.HasSuffix(r.stderrText(), "fakeserver: exiting now (code 3)\n") {
+		t.Errorf("stderr doesn't end with the exit line: %q", r.stderrText())
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()

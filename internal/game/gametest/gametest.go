@@ -487,6 +487,7 @@ func (s *Session) Stop() (saved time.Time) {
 	}
 	stopped := false
 	for _, st := range steps {
+		sent := time.Now()
 		err := s.send(a, st)
 		s.mu.Lock()
 		s.stopLog = append(s.stopLog, stepResult{Kind: st.Kind, Err: err})
@@ -496,19 +497,35 @@ func (s *Session) Stop() (saved time.Time) {
 			continue
 		}
 		if stopped = a.waitExit(st.Wait, st.Resend, func() { s.send(a, st) }); stopped {
+			// In the test's log (shown with -v or on a failure), so a
+			// slow stop shows where its time went.
+			s.tlog.Printf("the server ended %v after the %q step was sent (exit code %d)", a.endedAt.Sub(sent).Round(time.Millisecond), st.Kind, a.waitCode)
 			break
 		}
 	}
-	if !stopped && !a.proc.Exited() {
-		a.proc.Kill()
-		<-a.exited
-		s.t.Fatalf("gametest: %s's stop chain (%s) ended with the server still running; it was killed\n%s", s.info.ID, kinds(steps), a.tail())
+	if !stopped && !a.hasEnded() {
+		// What each way of looking at the process says, taken before the
+		// kill, so the message tells a server stuck on its way out (its
+		// log ends "fakeserver: exiting now") from gametest losing track
+		// of one that had ended.
+		report := a.exitReport()
+		a.kill()
+		killed := "it was killed"
+		select {
+		case <-a.exited:
+		case <-time.After(killWait):
+			killed = fmt.Sprintf("it was killed, but gametest's wait for it still hadn't returned %v later", killWait)
+		}
+		s.t.Fatalf("gametest: %s's stop chain (%s) ended with the server still running; %s\n%s\n%s", s.info.ID, kinds(steps), killed, report, a.tail())
 	}
 	<-a.exited
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return a.mon.State().LastSave
 }
+
+// killWait is how long gametest waits for a server it killed to be gone.
+const killWait = 15 * time.Second
 
 func kinds(steps []game.StopStep) string {
 	var k []string
@@ -542,7 +559,7 @@ func (s *Session) send(a *attachment, st game.StopStep) error {
 		return st.Call(ctx)
 	case "interrupt":
 		quietCtrlC()
-		return a.proc.Interrupt()
+		return a.interrupt()
 	}
 	s.t.Errorf("gametest: %s's Stop has a step of unknown kind %q", s.info.ID, st.Kind)
 	return fmt.Errorf("unknown kind %q", st.Kind)
@@ -633,10 +650,10 @@ func (s *Session) cleanup() {
 	s.mu.Unlock()
 	if a != nil {
 		if !a.isExited() {
-			a.proc.Kill()
+			a.kill()
 			select {
 			case <-a.exited:
-			case <-time.After(15 * time.Second):
+			case <-time.After(killWait):
 			}
 		}
 		a.detach()
