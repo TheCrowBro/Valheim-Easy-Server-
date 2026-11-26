@@ -1,0 +1,49 @@
+{
+  "serverName": "Viking Night",
+  "password": "raven-fjord-4821",
+  "world": "Midgard",
+  "port": 2456,
+  "public": true,
+  "crossplay": true,
+  "saveIntervalMinutes": 15,
+  "backups": 4,
+  "backupShortMinutes": 120,
+  "backupLongMinutes": 720,
+  "updateOnStart": true,
+  "autoUpdate": true,
+  "autoRestart": true,
+  "startWithApp": true,
+  "startAfterWake": true,
+  "idleHibernate": true,
+  "idleMinutes": 60,
+  "restMode": "sleep",
+  "discord": true,
+  "discordWebhook": "https://discord.com/api/webhooks/123/abc",
+  "discordPassword": true,
+  "discordStopped": true,
+  "discordDaily": true,
+  "discordBotToken": "bot-token",
+  "jetkvm": "192.168.1.30",
+  "discordWake": true,
+  "worldOptions": {
+    "Midgard": {
+      "preset": "hard",
+      "modifiers": {
+        "combat": "hard"
+      },
+      "keys": [
+        "nomap"
+      ],
+      "off": [
+        "fire"
+      ],
+      "mods": [
+        "riverheim",
+        "planteverything"
+      ]
+    }
+  },
+  "serverDir": "/srv/valheim/server",
+  "saveDir": "/srv/valheim/saves",
+  "extraArgs": "-instanceid 2"
+}

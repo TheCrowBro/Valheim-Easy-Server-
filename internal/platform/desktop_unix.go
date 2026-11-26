@@ -46,9 +46,9 @@ func open(target string) error {
 // folder, named by id. It returns already=true if another copy holds the
 // lock.
 func SingleInstance(dataDir, id string) (release func(), already bool, err error) {
-	release, already, err = lockFile(filepath.Join(dataDir, ".instance.lock"))
+	release, already, err = lockFile(filepath.Join(dataDir, instanceLockFile))
 	if err != nil {
-		return lockFile(filepath.Join(os.TempDir(), "ValheimEasyServer-"+id+".lock"))
+		return lockFile(filepath.Join(os.TempDir(), instanceLockPrefix+id+".lock"))
 	}
 	return release, already, nil
 }

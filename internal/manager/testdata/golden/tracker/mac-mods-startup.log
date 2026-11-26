@@ -1,0 +1,18 @@
+[Info   :   BepInEx] Loading [Riverheim 1.2.3]
+[Info   :   Unity Log] 11/20/2026 07:28:27: Steam game server initialized
+[Info   :   Unity Log] 11/20/2026 07:28:27: Valheim version: 1.0.21 (network version 41)
+11/20/2026 07:28:29: Game server connected
+11/20/2026 07:28:37: Load world: Midgard (Midgard)
+11/20/2026 07:28:54: Loading: Generating locations
+11/20/2026 07:30:05: There are 38 that take a long time to generate (over 0.5 sec). Total slow location time is 49.3 seconds that could be saved on world gen!
+11/20/2026 07:30:06: Semaphore type: ManualResetEventSlim
+11/20/2026 07:30:06: Opened PlayFab server
+11/20/2026 07:30:06: New session server "Valheim Easy Server CI" that has join code , now 0 player(s)
+11/20/2026 07:30:07: Session "Valheim Easy Server CI" registered with join code 037599
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+11/20/2026 07:31:00: World saved ( 1234,5ms )
+11/20/2026 07:31:02: World saved ( 20ms )
+11/20/2026 07:46:00: World saved ( 30ms )

@@ -95,8 +95,9 @@ func fileExists(p string) bool {
 	return err == nil && !st.IsDir()
 }
 
+// runKey is where Windows keeps what starts when the user signs in; the
+// app's entry there is runValue (platform.go).
 const runKey = `Software\Microsoft\Windows\CurrentVersion\Run`
-const runValue = "ValheimEasyServer"
 
 // approvedKey is where Task Manager and Settings → Apps → Startup note
 // which startup entries are switched off.
@@ -202,7 +203,7 @@ func FixFirewall(serverExe, appExe string, wake bool) error {
 // On Windows the lock is a named one, named by id, so the folder itself
 // isn't used. It returns already=true if another copy holds the lock.
 func SingleInstance(dataDir, id string) (release func(), already bool, err error) {
-	name, err := windows.UTF16PtrFromString(`Local\ValheimEasyServer-` + id)
+	name, err := windows.UTF16PtrFromString(`Local\` + instanceLockPrefix + id)
 	if err != nil {
 		return nil, false, err
 	}

@@ -1,0 +1,6 @@
+11/20/2026 19:00:00: Valheim version: l-0.219.16 (network version 34)
+11/20/2026 19:00:01: Error bad password, the password can't be part of the server name or the world name
+11/20/2026 19:00:02: World load failed: Midgard
+11/20/2026 19:00:03: Wrong password from a client
+11/20/2026 19:00:04: Client has an Incompatible version: mine:0.219.16 remote:0.218.21
+11/20/2026 19:00:05: Failed to bind to port 2456: Address already in use

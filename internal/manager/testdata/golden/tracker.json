@@ -1,0 +1,764 @@
+[
+  {
+    "name": "a Steam session, friends known",
+    "log": "steam-session.log",
+    "known": {
+      "Astrid": "Steam_76561198000000001",
+      "Bjorn": "Steam_76561198000000002"
+    },
+    "noJoinCode": true,
+    "lines": [
+      "Valheim version: l-0.218.21 (network version 32)",
+      "Using savedir: /data/saves",
+      "Game server connected",
+      "Opened Steam server",
+      "Got connection SteamID 76561198000000001",
+      "Got handshake from client 76561198000000001",
+      "Got connection SteamID 76561198000000002",
+      "Got handshake from client 76561198000000002",
+      "Got character ZDOID from Astrid : -111:1",
+      "Got character ZDOID from Bjorn : -222:1",
+      "Connections 2 ZDOS:130509  sent:1 recv:1",
+      "Got character ZDOID from Bjorn : 0:0",
+      "Got character ZDOID from Bjorn : -222:9",
+      "World saved ( 152.000ms )",
+      "World save (5/5) done",
+      "Closing socket 76561198000000001",
+      "Closing socket 76561198000000002",
+      "OnApplicationQuit",
+      "Net scene destroyed",
+      "World saved ( 98,5ms )"
+    ],
+    "activities": [
+      {
+        "kind": "online",
+        "at": "2026-11-20 19:00:30",
+        "text": "The server is online and ready for players."
+      },
+      {
+        "kind": "join",
+        "at": "2026-11-20 19:01:09",
+        "name": "Astrid",
+        "platformId": "Steam_76561198000000001",
+        "text": "Astrid joined the game."
+      },
+      {
+        "kind": "join",
+        "at": "2026-11-20 19:01:12",
+        "name": "Bjorn",
+        "platformId": "Steam_76561198000000002",
+        "text": "Bjorn joined the game."
+      },
+      {
+        "kind": "death",
+        "at": "2026-11-20 19:20:00",
+        "name": "Bjorn",
+        "platformId": "Steam_76561198000000002",
+        "text": "Bjorn died."
+      },
+      {
+        "kind": "saved",
+        "at": "2026-11-20 19:30:00",
+        "text": "World saved (took 0.2 s)."
+      },
+      {
+        "kind": "leave",
+        "at": "2026-11-20 20:01:09",
+        "name": "Astrid",
+        "platformId": "Steam_76561198000000001",
+        "text": "Astrid left the game after 1 h."
+      },
+      {
+        "kind": "leave",
+        "at": "2026-11-20 20:15:00",
+        "name": "Bjorn",
+        "platformId": "Steam_76561198000000002",
+        "text": "Bjorn left the game after 1 h 13 min."
+      },
+      {
+        "kind": "saved",
+        "at": "2026-11-20 20:30:02",
+        "text": "World saved (took 0.1 s)."
+      }
+    ],
+    "players": [],
+    "state": {
+      "ready": true,
+      "joinCode": "",
+      "publicAddr": "",
+      "version": "0.218.21",
+      "steamAt": "2026-11-20 19:00:02",
+      "lastSave": "2026-11-20 20:30:02",
+      "stopping": true,
+      "stoppingAt": "2026-11-20 20:30:00",
+      "crossplayFailed": false
+    },
+    "records": [
+      {
+        "at": "2026-11-20 19:01:09",
+        "kind": "join",
+        "name": "Astrid"
+      },
+      {
+        "at": "2026-11-20 19:01:12",
+        "kind": "join",
+        "name": "Bjorn"
+      },
+      {
+        "at": "2026-11-20 19:20:00",
+        "kind": "death",
+        "name": "Bjorn"
+      },
+      {
+        "at": "2026-11-20 20:01:09",
+        "kind": "leave",
+        "name": "Astrid"
+      },
+      {
+        "at": "2026-11-20 20:15:00",
+        "kind": "leave",
+        "name": "Bjorn"
+      }
+    ]
+  },
+  {
+    "name": "a Steam session, friends new",
+    "log": "steam-session.log",
+    "noJoinCode": true,
+    "lines": [
+      "Valheim version: l-0.218.21 (network version 32)",
+      "Using savedir: /data/saves",
+      "Game server connected",
+      "Opened Steam server",
+      "Got connection SteamID 76561198000000001",
+      "Got handshake from client 76561198000000001",
+      "Got connection SteamID 76561198000000002",
+      "Got handshake from client 76561198000000002",
+      "Got character ZDOID from Astrid : -111:1",
+      "Got character ZDOID from Bjorn : -222:1",
+      "Connections 2 ZDOS:130509  sent:1 recv:1",
+      "Got character ZDOID from Bjorn : 0:0",
+      "Got character ZDOID from Bjorn : -222:9",
+      "World saved ( 152.000ms )",
+      "World save (5/5) done",
+      "Closing socket 76561198000000001",
+      "Closing socket 76561198000000002",
+      "OnApplicationQuit",
+      "Net scene destroyed",
+      "World saved ( 98,5ms )"
+    ],
+    "activities": [
+      {
+        "kind": "online",
+        "at": "2026-11-20 19:00:30",
+        "text": "The server is online and ready for players."
+      },
+      {
+        "kind": "join",
+        "at": "2026-11-20 19:01:09",
+        "name": "Astrid",
+        "text": "Astrid joined the game."
+      },
+      {
+        "kind": "join",
+        "at": "2026-11-20 19:01:12",
+        "name": "Bjorn",
+        "text": "Bjorn joined the game."
+      },
+      {
+        "kind": "death",
+        "at": "2026-11-20 19:20:00",
+        "name": "Bjorn",
+        "text": "Bjorn died."
+      },
+      {
+        "kind": "saved",
+        "at": "2026-11-20 19:30:00",
+        "text": "World saved (took 0.2 s)."
+      },
+      {
+        "kind": "leave",
+        "at": "2026-11-20 20:01:09",
+        "name": "Astrid",
+        "text": "Astrid left the game after 1 h."
+      },
+      {
+        "kind": "leave",
+        "at": "2026-11-20 20:15:00",
+        "name": "Bjorn",
+        "text": "Bjorn left the game after 1 h 13 min."
+      },
+      {
+        "kind": "saved",
+        "at": "2026-11-20 20:30:02",
+        "text": "World saved (took 0.1 s)."
+      }
+    ],
+    "players": [],
+    "state": {
+      "ready": true,
+      "joinCode": "",
+      "publicAddr": "",
+      "version": "0.218.21",
+      "steamAt": "2026-11-20 19:00:02",
+      "lastSave": "2026-11-20 20:30:02",
+      "stopping": true,
+      "stoppingAt": "2026-11-20 20:30:00",
+      "crossplayFailed": false
+    },
+    "records": [
+      {
+        "at": "2026-11-20 19:01:09",
+        "kind": "join",
+        "name": "Astrid"
+      },
+      {
+        "at": "2026-11-20 19:01:12",
+        "kind": "join",
+        "name": "Bjorn"
+      },
+      {
+        "at": "2026-11-20 19:20:00",
+        "kind": "death",
+        "name": "Bjorn"
+      },
+      {
+        "at": "2026-11-20 20:01:09",
+        "kind": "leave",
+        "name": "Astrid"
+      },
+      {
+        "at": "2026-11-20 20:15:00",
+        "kind": "leave",
+        "name": "Bjorn"
+      }
+    ]
+  },
+  {
+    "name": "a crossplay session",
+    "log": "crossplay-session.log",
+    "lines": [
+      "Valheim version: l-0.219.16 (network version 34)",
+      "Game server connected",
+      "Opened PlayFab server",
+      "New session server \"Viking Night\" that has join code , now 0 player(s)",
+      "Session \"Viking Night\" registered with join code 604510",
+      "Session \"Viking Night\" with join code 604510 and IP 203.0.113.4:2456 is active with 0 player(s)",
+      "PlayFab socket with remote ID playfab/AAAA received local Platform ID Xbox_2535416401464117",
+      "Got handshake from client playfab/AAAA",
+      "Got character ZDOID from Freydis : 999:1",
+      "PlayFab socket with remote ID playfab/BBBB received local Platform ID Steam_76561198000000003",
+      "Got handshake from client playfab/BBBB",
+      "Got character ZDOID from Sigrid : 1001:1",
+      "Session \"Viking Night\" with join code 604510 and IP 203.0.113.4:2456 is active with 2 player(s)",
+      "Closing socket playfab/AAAA",
+      "Session \"Viking Night\" registered with join code 777777",
+      "Closing socket playfab/BBBB",
+      "Shuting down"
+    ],
+    "activities": [
+      {
+        "kind": "online",
+        "at": "2026-11-20 19:00:30",
+        "text": "The server is online and ready for players."
+      },
+      {
+        "kind": "join",
+        "at": "2026-11-20 19:05:09",
+        "name": "Freydis",
+        "platformId": "Xbox_2535416401464117",
+        "text": "Freydis joined the game."
+      },
+      {
+        "kind": "join",
+        "at": "2026-11-20 19:06:09",
+        "name": "Sigrid",
+        "platformId": "Steam_76561198000000003",
+        "text": "Sigrid joined the game."
+      },
+      {
+        "kind": "leave",
+        "at": "2026-11-20 19:40:00",
+        "name": "Freydis",
+        "platformId": "Xbox_2535416401464117",
+        "text": "Freydis left the game after 34 min."
+      },
+      {
+        "kind": "leave",
+        "at": "2026-11-20 19:50:00",
+        "name": "Sigrid",
+        "platformId": "Steam_76561198000000003",
+        "text": "Sigrid left the game after 43 min."
+      }
+    ],
+    "players": [],
+    "state": {
+      "ready": true,
+      "joinCode": "777777",
+      "publicAddr": "203.0.113.4:2456",
+      "version": "0.219.16",
+      "steamAt": "2026-11-20 19:00:05",
+      "lastSave": "",
+      "stopping": true,
+      "stoppingAt": "2026-11-20 19:55:00",
+      "crossplayFailed": false
+    },
+    "records": [
+      {
+        "at": "2026-11-20 19:05:09",
+        "kind": "join",
+        "name": "Freydis"
+      },
+      {
+        "at": "2026-11-20 19:06:09",
+        "kind": "join",
+        "name": "Sigrid"
+      },
+      {
+        "at": "2026-11-20 19:40:00",
+        "kind": "leave",
+        "name": "Freydis"
+      },
+      {
+        "at": "2026-11-20 19:50:00",
+        "kind": "leave",
+        "name": "Sigrid"
+      }
+    ]
+  },
+  {
+    "name": "leaves the log missed",
+    "log": "missed-leaves.log",
+    "noJoinCode": true,
+    "lines": [
+      "Opened Steam server",
+      "Got connection SteamID 76561198000000001",
+      "Got character ZDOID from Astrid : 1:1",
+      "Got connection SteamID 76561198000000002",
+      "Got character ZDOID from Bjorn : 2:1",
+      "Connections 1 ZDOS:10  sent:0 recv:0",
+      "Connections 1 ZDOS:10  sent:0 recv:0",
+      "Connections 1 ZDOS:10  sent:0 recv:0",
+      "Connections 0 ZDOS:10  sent:0 recv:0",
+      "Connections 1 ZDOS:10  sent:0 recv:0",
+      "Connections 0 ZDOS:10  sent:0 recv:0",
+      "Connections 0 ZDOS:10  sent:0 recv:0"
+    ],
+    "activities": [
+      {
+        "kind": "online",
+        "at": "2026-11-20 19:00:00",
+        "text": "The server is online and ready for players."
+      },
+      {
+        "kind": "join",
+        "at": "2026-11-20 19:00:12",
+        "name": "Astrid",
+        "platformId": "Steam_76561198000000001",
+        "text": "Astrid joined the game."
+      },
+      {
+        "kind": "join",
+        "at": "2026-11-20 19:00:22",
+        "name": "Bjorn",
+        "platformId": "Steam_76561198000000002",
+        "text": "Bjorn joined the game."
+      },
+      {
+        "kind": "leave",
+        "at": "2026-11-20 19:30:00",
+        "name": "Astrid",
+        "platformId": "Steam_76561198000000001",
+        "text": "Astrid left the game after 29 min."
+      },
+      {
+        "kind": "leave",
+        "at": "2026-11-20 20:20:00",
+        "name": "Bjorn",
+        "platformId": "Steam_76561198000000002",
+        "text": "Bjorn left the game after 1 h 19 min."
+      }
+    ],
+    "players": [],
+    "state": {
+      "ready": true,
+      "joinCode": "",
+      "publicAddr": "",
+      "version": "",
+      "steamAt": "",
+      "lastSave": "",
+      "stopping": false,
+      "stoppingAt": "",
+      "crossplayFailed": false
+    },
+    "records": [
+      {
+        "at": "2026-11-20 19:00:12",
+        "kind": "join",
+        "name": "Astrid"
+      },
+      {
+        "at": "2026-11-20 19:00:22",
+        "kind": "join",
+        "name": "Bjorn"
+      },
+      {
+        "at": "2026-11-20 19:30:00",
+        "kind": "leave",
+        "name": "Astrid"
+      },
+      {
+        "at": "2026-11-20 20:20:00",
+        "kind": "leave",
+        "name": "Bjorn"
+      }
+    ]
+  },
+  {
+    "name": "turned away",
+    "log": "turned-away.log",
+    "noJoinCode": true,
+    "lines": [
+      "Valheim version: l-0.219.16 (network version 34)",
+      "Opened Steam server",
+      "Got connection SteamID 76561198000000005",
+      "Peer 76561198000000005 has wrong password",
+      "Got connection SteamID 76561198000000006",
+      "Peer 76561198000000006 has incompatible version, mine:0.219.16 (network version 34)   remote 0.218.21 (network version 32)",
+      "Got connection SteamID 76561198000000008",
+      "VERSION check their:0.217.46  mine:0.219.16",
+      "Closing socket 76561198000000008",
+      "Got connection SteamID 76561198000000007",
+      "Got character ZDOID from Sigrid : 7:1",
+      "Peer 76561198000000009 has incompatible version"
+    ],
+    "activities": [
+      {
+        "kind": "online",
+        "at": "2026-11-20 19:00:30",
+        "text": "The server is online and ready for players."
+      },
+      {
+        "kind": "wrong_password",
+        "at": "2026-11-20 19:01:01",
+        "text": "Someone tried to join with the wrong password."
+      },
+      {
+        "kind": "bad_version",
+        "at": "2026-11-20 19:02:01",
+        "text": "Someone tried to join with Valheim 0.218.21, but the server runs 0.219.16. Everyone needs the same version (update the game or the server)."
+      },
+      {
+        "kind": "bad_version",
+        "at": "2026-11-20 19:03:01",
+        "text": "Someone tried to join with Valheim 0.217.46, but the server runs 0.219.16. Everyone needs the same version (update the game or the server)."
+      },
+      {
+        "kind": "join",
+        "at": "2026-11-20 19:04:09",
+        "name": "Sigrid",
+        "platformId": "Steam_76561198000000007",
+        "text": "Sigrid joined the game."
+      },
+      {
+        "kind": "bad_version",
+        "at": "2026-11-20 19:05:00",
+        "text": "Someone tried to join with a different version of Valheim. Everyone needs the latest update."
+      }
+    ],
+    "players": [
+      {
+        "name": "Sigrid",
+        "platformId": "Steam_76561198000000007",
+        "since": "2026-11-20 19:04:09"
+      }
+    ],
+    "state": {
+      "ready": true,
+      "joinCode": "",
+      "publicAddr": "",
+      "version": "0.219.16",
+      "steamAt": "",
+      "lastSave": "",
+      "stopping": false,
+      "stoppingAt": "",
+      "crossplayFailed": false
+    },
+    "records": [
+      {
+        "at": "2026-11-20 19:04:09",
+        "kind": "join",
+        "name": "Sigrid"
+      },
+      {
+        "at": "2026-11-20 19:05:00",
+        "kind": "leave",
+        "name": "Sigrid"
+      }
+    ]
+  },
+  {
+    "name": "crossplay can't start",
+    "log": "crossplay-failed.log",
+    "lines": [
+      "Valheim version: l-0.219.16 (network version 34)",
+      "Game server connected",
+      "DllNotFoundException: Party assembly:<unknown assembly> type:<unknown type> member:(null)",
+      "at PlayFab.Party.PlayFabMultiplayerManager.InitializeImpl () [0x000c4] in <5a1d494e032e423ab0fcf9da33b2bcf6>:0",
+      "DLL Not Found: This error usually occurs when you do not have the correct dependencies installed, and will prevent crossplay from working. The dependencies are different depending on which platform you play on.",
+      "New session server \"Viking Night\" that has join code , now 0 player(s)",
+      "Session \"Viking Night\" with join code 999999 and IP 6.6.6.6:2456 is active with 0 player(s)"
+    ],
+    "activities": [
+      {
+        "kind": "online",
+        "at": "2026-11-20 19:00:30",
+        "text": "The server is online and ready for players."
+      }
+    ],
+    "players": [],
+    "state": {
+      "ready": true,
+      "joinCode": "",
+      "publicAddr": "",
+      "version": "0.219.16",
+      "steamAt": "2026-11-20 19:00:05",
+      "lastSave": "",
+      "stopping": false,
+      "stoppingAt": "",
+      "crossplayFailed": true
+    },
+    "records": []
+  },
+  {
+    "name": "crossplay's lines in a server without it",
+    "log": "crossplay-failed.log",
+    "noJoinCode": true,
+    "lines": [
+      "Valheim version: l-0.219.16 (network version 34)",
+      "Game server connected",
+      "DllNotFoundException: Party assembly:<unknown assembly> type:<unknown type> member:(null)",
+      "at PlayFab.Party.PlayFabMultiplayerManager.InitializeImpl () [0x000c4] in <5a1d494e032e423ab0fcf9da33b2bcf6>:0",
+      "DLL Not Found: This error usually occurs when you do not have the correct dependencies installed, and will prevent crossplay from working. The dependencies are different depending on which platform you play on.",
+      "New session server \"Viking Night\" that has join code , now 0 player(s)",
+      "Session \"Viking Night\" with join code 999999 and IP 6.6.6.6:2456 is active with 0 player(s)"
+    ],
+    "activities": [],
+    "players": [],
+    "state": {
+      "ready": false,
+      "joinCode": "",
+      "publicAddr": "",
+      "version": "0.219.16",
+      "steamAt": "2026-11-20 19:00:05",
+      "lastSave": "",
+      "stopping": false,
+      "stoppingAt": "",
+      "crossplayFailed": false
+    },
+    "records": []
+  },
+  {
+    "name": "lines players write",
+    "log": "player-text.log",
+    "lines": [
+      "Valheim version: l-0.219.16 (network version 34)",
+      "Session \"Viking Night\" registered with join code 604510",
+      "Got connection SteamID 76561198000000001",
+      "Got character ZDOID from Astrid : 1:1",
+      "VERSION check their:x registered with join code 777777  mine:0.219.16",
+      "Got connection SteamID 76561198000000002",
+      "Got character ZDOID from Session \"Viking Night\" with join code 424242 and IP 6.6.6.6:2456 is active with 0 player : 456:1",
+      "Session \"Fake\" with join code 999999 and IP 6.6.6.6:2456 is active with 0 player(s)",
+      "Valheim version: l-9.9.9 (network version 99)",
+      "Connections 0 ZDOS:1  sent:0 recv:0",
+      "Kicking OnApplicationQuit",
+      "Got character ZDOID from DllNotFoundException: Party : 456:1",
+      "Connections 0 ZDOS:1  sent:0 recv:0",
+      "Session \"Viking Night\" with join code 123456 and IP 203.0.113.4:2456 is active with 0 player(s)"
+    ],
+    "activities": [
+      {
+        "kind": "online",
+        "at": "2026-11-20 20:00:03",
+        "text": "The server is online and ready for players."
+      },
+      {
+        "kind": "join",
+        "at": "2026-11-20 20:01:05",
+        "name": "Astrid",
+        "platformId": "Steam_76561198000000001",
+        "text": "Astrid joined the game."
+      },
+      {
+        "kind": "join",
+        "at": "2026-11-20 20:02:00",
+        "name": "Session \"Viking Night\" with join code 424242 and IP 6.6.6.6:2456 is active with 0 player",
+        "platformId": "Steam_76561198000000002",
+        "text": "Session \"Viking Night\" with join code 424242 and IP 6.6.6.6:2456 is active with 0 player joined the game."
+      },
+      {
+        "kind": "join",
+        "at": "2026-11-20 20:03:00",
+        "name": "DllNotFoundException: Party",
+        "text": "DllNotFoundException: Party joined the game."
+      }
+    ],
+    "players": [
+      {
+        "name": "Astrid",
+        "platformId": "Steam_76561198000000001",
+        "since": "2026-11-20 20:01:05"
+      },
+      {
+        "name": "Session \"Viking Night\" with join code 424242 and IP 6.6.6.6:2456 is active with 0 player",
+        "platformId": "Steam_76561198000000002",
+        "since": "2026-11-20 20:02:00"
+      },
+      {
+        "name": "DllNotFoundException: Party",
+        "since": "2026-11-20 20:03:00"
+      }
+    ],
+    "state": {
+      "ready": true,
+      "joinCode": "123456",
+      "publicAddr": "203.0.113.4:2456",
+      "version": "0.219.16",
+      "steamAt": "",
+      "lastSave": "",
+      "stopping": false,
+      "stoppingAt": "",
+      "crossplayFailed": false
+    },
+    "records": [
+      {
+        "at": "2026-11-20 20:01:05",
+        "kind": "join",
+        "name": "Astrid"
+      },
+      {
+        "at": "2026-11-20 20:02:00",
+        "kind": "join",
+        "name": "Session \"Viking Night\" with join code 424242 and IP 6.6.6.6:2456 is active with 0 player"
+      },
+      {
+        "at": "2026-11-20 20:03:00",
+        "kind": "join",
+        "name": "DllNotFoundException: Party"
+      },
+      {
+        "at": "2026-11-20 20:18:00",
+        "kind": "leave",
+        "name": "Astrid"
+      },
+      {
+        "at": "2026-11-20 20:18:00",
+        "kind": "leave",
+        "name": "Session \"Viking Night\" with join code 424242 and IP 6.6.6.6:2456 is active with 0 player"
+      },
+      {
+        "at": "2026-11-20 20:18:00",
+        "kind": "leave",
+        "name": "DllNotFoundException: Party"
+      }
+    ]
+  },
+  {
+    "name": "a Mac with mods starting up",
+    "log": "mac-mods-startup.log",
+    "lines": [
+      "Loading [Riverheim 1.2.3]",
+      "Steam game server initialized",
+      "Valheim version: 1.0.21 (network version 41)",
+      "Game server connected",
+      "Load world: Midgard (Midgard)",
+      "Loading: Generating locations",
+      "There are 38 that take a long time to generate (over 0.5 sec). Total slow location time is 49.3 seconds that could be saved on world gen!",
+      "Semaphore type: ManualResetEventSlim",
+      "Opened PlayFab server",
+      "New session server \"Valheim Easy Server CI\" that has join code , now 0 player(s)",
+      "Session \"Valheim Easy Server CI\" registered with join code 037599",
+      "World saved ( 1234,5ms )",
+      "World saved ( 20ms )",
+      "World saved ( 30ms )"
+    ],
+    "activities": [
+      {
+        "kind": "online",
+        "at": "2026-11-20 07:30:06",
+        "text": "The server is online and ready for players."
+      },
+      {
+        "kind": "saved",
+        "at": "2026-11-20 07:31:00",
+        "text": "World saved (took 1.2 s)."
+      },
+      {
+        "kind": "saved",
+        "at": "2026-11-20 07:46:00",
+        "text": "World saved (took 0.0 s)."
+      }
+    ],
+    "players": [],
+    "state": {
+      "ready": true,
+      "joinCode": "037599",
+      "publicAddr": "",
+      "version": "1.0.21",
+      "steamAt": "2026-11-20 07:28:29",
+      "lastSave": "2026-11-20 07:46:00",
+      "stopping": false,
+      "stoppingAt": "",
+      "crossplayFailed": false
+    },
+    "records": []
+  },
+  {
+    "name": "problems",
+    "log": "problems.log",
+    "lines": [
+      "Valheim version: l-0.219.16 (network version 34)",
+      "Error bad password, the password can't be part of the server name or the world name",
+      "World load failed: Midgard",
+      "Wrong password from a client",
+      "Client has an Incompatible version: mine:0.219.16 remote:0.218.21",
+      "Failed to bind to port 2456: Address already in use"
+    ],
+    "activities": [
+      {
+        "kind": "bad_password_config",
+        "at": "2026-11-20 19:00:01",
+        "text": "Valheim rejected the server password. It can't be part of the server name, the world name or the seed. Change it in Settings."
+      },
+      {
+        "kind": "load_failed",
+        "at": "2026-11-20 19:00:02",
+        "text": "The world file couldn't be loaded. It may be damaged: restore a backup from the Worlds page."
+      },
+      {
+        "kind": "wrong_password",
+        "at": "2026-11-20 19:00:03",
+        "text": "Someone tried to join with the wrong password."
+      },
+      {
+        "kind": "bad_version",
+        "at": "2026-11-20 19:00:04",
+        "text": "Someone tried to join with Valheim 0.218.21, but the server runs 0.219.16. Everyone needs the same version (update the game or the server)."
+      }
+    ],
+    "players": [],
+    "state": {
+      "ready": false,
+      "joinCode": "",
+      "publicAddr": "",
+      "version": "0.219.16",
+      "steamAt": "",
+      "lastSave": "",
+      "stopping": false,
+      "stoppingAt": "",
+      "crossplayFailed": false
+    },
+    "records": []
+  }
+]

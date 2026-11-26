@@ -41,7 +41,25 @@ var (
 	ErrNoSSH = errors.New("the JetKVM isn’t taking connections from the app. In the JetKVM’s settings, under Advanced, turn on Developer Mode")
 )
 
-const wakerFile = "dist/valheim-waker-armv7.gz"
+// Names and places of the waker. The JetKVM keeps what an older or newer
+// copy of the app put there, and every copy finds, updates, stops and
+// removes the waker by these names, so they never change
+// (jetkvm_identity_test.go checks them).
+const (
+	// wakerFile is where this app carries the waker, built for the JetKVM.
+	wakerFile = "dist/valheim-waker-armv7.gz"
+	// wakerName is the waker program, its folder in the base folder, and
+	// the start of its pid, log and status files in the run folder.
+	wakerName = "valheim-waker"
+	// initScriptName is its start script, in the base folder's init.d,
+	// which the JetKVM runs when it starts.
+	initScriptName = "S99valheim-waker"
+	// defaultBase is the JetKVM's folder that's kept through its own
+	// updates; defaultRun is its folder in memory, cleared when it
+	// restarts.
+	defaultBase = "/userdata"
+	defaultRun  = "/tmp"
+)
 
 // HasWaker reports whether this build carries the waker. Release builds
 // do; the waker is built for the JetKVM first and put in dist.
@@ -95,10 +113,10 @@ type Target struct {
 func (t Target) paths() (base, run string) {
 	base, run = t.Base, t.Run
 	if base == "" {
-		base = "/userdata"
+		base = defaultBase
 	}
 	if run == "" {
-		run = "/tmp"
+		run = defaultRun
 	}
 	return base, run
 }
@@ -106,7 +124,7 @@ func (t Target) paths() (base, run string) {
 // script is where the waker's start script goes.
 func (t Target) script() string {
 	base, _ := t.paths()
-	return base + "/init.d/S99valheim-waker"
+	return base + "/init.d/" + initScriptName
 }
 
 // q quotes a word for the JetKVM's shell.
@@ -220,7 +238,7 @@ status)
 	exit 0
 	;;
 esac
-`, q(base+"/valheim-waker"), q(run+"/valheim-waker.pid"), q(run+"/valheim-waker.log"), q(run+"/valheim-waker.json"))
+`, q(base+"/"+wakerName), q(run+"/"+wakerName+".pid"), q(run+"/"+wakerName+".log"), q(run+"/"+wakerName+".json"))
 }
 
 // Install puts the waker on the JetKVM with its settings, makes it start
@@ -235,7 +253,7 @@ func Install(ctx context.Context, t Target, binary []byte, cfg waker.Config) (wa
 	}
 	defer c.close()
 	base, run := t.paths()
-	dir, initScript := base+"/valheim-waker", t.script()
+	dir, initScript := base+"/"+wakerName, t.script()
 	arch := t.Arch
 	if arch == "" {
 		arch = "armv7"
@@ -251,7 +269,7 @@ func Install(ctx context.Context, t Target, binary []byte, cfg waker.Config) (wa
 	}
 	// The new copy and settings are tried out (which checks the bot token,
 	// and that the JetKVM can reach Discord) before they replace the old.
-	newBin, newCfg := dir+"/valheim-waker.new", dir+"/config.json.new"
+	newBin, newCfg := dir+"/"+wakerName+".new", dir+"/config.json.new"
 	steps := []struct {
 		cmd   string
 		stdin []byte
@@ -280,7 +298,7 @@ func Install(ctx context.Context, t Target, binary []byte, cfg waker.Config) (wa
 	if out, err := c.run("cat >"+q(initScript)+" && chmod 755 "+q(initScript), []byte(script(base, run))); err != nil {
 		return st, nil, fmt.Errorf("couldn’t set up the waker to start with the JetKVM: %s", orErr(out, err))
 	}
-	swap := q(initScript) + " stop; mv -f " + q(newCfg) + " " + q(dir+"/config.json") + " && mv -f " + q(newBin) + " " + q(dir+"/valheim-waker") + " && " + q(initScript) + " start"
+	swap := q(initScript) + " stop; mv -f " + q(newCfg) + " " + q(dir+"/config.json") + " && mv -f " + q(newBin) + " " + q(dir+"/"+wakerName) + " && " + q(initScript) + " start"
 	if out, err := c.run(swap, nil); err != nil {
 		return st, nil, fmt.Errorf("couldn’t start the waker: %s", orErr(out, err))
 	}
@@ -382,8 +400,8 @@ func Remove(ctx context.Context, t Target) error {
 	defer c.close()
 	base, run := t.paths()
 	initScript := t.script()
-	cmd := "if [ -x " + q(initScript) + " ]; then " + q(initScript) + " stop; fi; rm -rf " + q(base+"/valheim-waker") + " " + q(initScript) +
-		" " + q(run+"/valheim-waker.log") + " " + q(run+"/valheim-waker.log.old")
+	cmd := "if [ -x " + q(initScript) + " ]; then " + q(initScript) + " stop; fi; rm -rf " + q(base+"/"+wakerName) + " " + q(initScript) +
+		" " + q(run+"/"+wakerName+".log") + " " + q(run+"/"+wakerName+".log.old")
 	if out, err := c.run(cmd, nil); err != nil {
 		return fmt.Errorf("couldn’t remove the waker from the JetKVM: %s", orErr(out, err))
 	}

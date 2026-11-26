@@ -133,9 +133,9 @@ func TestDiscordPostsJoinCode(t *testing.T) {
 		d := m.Status().Discord
 		return d != nil && d.Posted != nil && d.Error == ""
 	})
-	if !hasActivity(m, "discord", "") {
-		t.Error("no activity about posting")
-	}
+	// The feed entry comes just after the panel's: the run file is saved
+	// in between, which can take a moment on a slow disk.
+	waitFor(t, "an activity about posting", 5*time.Second, func() bool { return hasActivity(m, "discord", "") })
 
 	// A restart says so, then posts the new code.
 	if err := m.RestartServer(); err != nil {
@@ -165,9 +165,7 @@ func TestDiscordPostsJoinCode(t *testing.T) {
 		d := m.Status().Discord
 		return d != nil && strings.Contains(d.Error, "webhook link doesn't work")
 	})
-	if !hasActivity(m, "warning", "") {
-		t.Error("no warning activity")
-	}
+	waitFor(t, "a warning activity", 5*time.Second, func() bool { return hasActivity(m, "warning", "") })
 }
 
 // Turning on "Include the password" while the server is online posts again,

@@ -1,0 +1,7 @@
+11/20/2026 19:00:00: Valheim version: l-0.219.16 (network version 34)
+11/20/2026 19:00:05: Game server connected
+DllNotFoundException: Party assembly:<unknown assembly> type:<unknown type> member:(null)
+  at PlayFab.Party.PlayFabMultiplayerManager.InitializeImpl () [0x000c4] in <5a1d494e032e423ab0fcf9da33b2bcf6>:0
+11/20/2026 19:00:06: DLL Not Found: This error usually occurs when you do not have the correct dependencies installed, and will prevent crossplay from working. The dependencies are different depending on which platform you play on.
+11/20/2026 19:00:30: New session server "Viking Night" that has join code , now 0 player(s)
+11/20/2026 19:05:00: Session "Viking Night" with join code 999999 and IP 6.6.6.6:2456 is active with 0 player(s)
