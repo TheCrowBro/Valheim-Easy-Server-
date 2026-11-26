@@ -105,6 +105,10 @@ func (s *server) Plan(ctx context.Context, req game.PlanRequest) (game.Plan, err
 	if errs := s.Validate(req.Saved, req.World); len(errs) > 0 {
 		return game.Plan{}, errs
 	}
+	// The data folder is on the command line too (-datadir).
+	if p := folderProblem(s.env.Dirs.Saves); p != "" {
+		return game.Plan{}, errors.New(p)
+	}
 	wait := readyWaitStart
 	if req.New {
 		// The server makes the world when it doesn't find it.

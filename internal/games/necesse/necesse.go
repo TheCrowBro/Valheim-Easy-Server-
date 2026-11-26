@@ -218,6 +218,10 @@ func (s *server) ExitHint(tail []string) string {
 		return "Java couldn't have the memory Necesse's settings give it. Lower \"Java memory\" in Necesse's settings, or close other programs."
 	case has("java.lang.OutOfMemoryError"):
 		return "The Necesse server ran out of memory. Raise \"Java memory\" in Necesse's settings."
+	case has("Invalid world path"):
+		// The server refuses a world name with "?" in it, which is what a
+		// character Java couldn't be given turns into (FACTS.md).
+		return "The Necesse server couldn't use the world's name: it got some of its characters as \"?\". Start a world whose name has only plain letters, numbers and spaces."
 	case has("Stuck in crash loop", "with code: SERVER_ERROR"):
 		return "The Necesse server crashed. Start it again; if it keeps crashing, restore a backup of the world on the Worlds page. Its crash report is latest-crash.log in the server folder."
 	}

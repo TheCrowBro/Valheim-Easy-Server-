@@ -104,7 +104,18 @@ func runNecesse(s *Server) {
 		pause: a.String("pausewhenempty", "1") != "0", accounts: map[string]int64{}}
 	data := a.String("datadir", ".")
 	n.worldName = necValue(a, "world", "")
-	s.OnCrash(func() { n.err("Stuck in crash loop, stopping server.") })
+	// A crash (fakeserver.json's crashAfter) ends the way the real
+	// server's does (FACTS.md, the 2022 forum log): it gives up, then
+	// stops with SERVER_ERROR rather than the SERVER_STOPPED of a stop
+	// someone asked for. The framework then exits with code 3.
+	s.OnCrash(func() {
+		n.err("Stuck in crash loop, stopping server.")
+		wd, _ := os.Getwd() // the server folder, where the real one writes it
+		n.err("Printing crash log to " + filepath.Join(wd, "latest-crash.log"))
+		n.log("Stopped server on " + time.Now().Format("2006/01/02 15:04:05") + " with code: SERVER_ERROR")
+		n.log("Server has stopped")
+		n.log("Exiting in 2 seconds...")
+	})
 	if n.worldName == "" {
 		// The real server asks on its console and waits; the app always
 		// names the world, so the stand-in only says what went wrong.
@@ -168,7 +179,8 @@ func runNecesse(s *Server) {
 	s.OnStop(func() { s.Exit(130) })
 	s.OnStep(n.step)
 	s.Every(time.Minute, n.autosave)
-	s.Ready("Type help for list of commands.")
+	// Coloured and time-stamped like every other line, as the real one is.
+	s.Ready(necColour + n.stamp() + "Type help for list of commands.")
 }
 
 // readNecWorld reads how often a world was saved; false when there is no

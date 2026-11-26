@@ -7,9 +7,12 @@ and run headless (`-nogui`) on Linux on 2026-11-26. Its console output is in
 `testdata/real/` (two lines Java printed because of the test machine's own
 environment, "Picked up JAVA_TOOL_OPTIONS/_JAVA_OPTIONS", were removed, and
 the data folder's path was replaced with `/home/owner/EGS/games/necesse/saves`;
-everything else is byte for byte, colour codes included). The Windows and
-macOS downloads of the same build were fetched with SteamCMD
-(`+@sSteamCmdForcePlatformType`) and their files inspected, not run.
+everything else is byte for byte, colour codes included). One of them,
+`world-name-mangled-ascii-locale.log`, was started by hand with the Plan's
+arguments but no Java options and no locale set (see "Characters outside
+Windows' code page"). The Windows and macOS downloads of the same build
+were fetched with SteamCMD (`+@sSteamCmdForcePlatformType`) and their files
+inspected, not run.
 
 Spec section 5.4's "verify" marks are settled in the section that names them
 below ("Settled" headings). Where this file and the spec disagree, the code
@@ -102,6 +105,56 @@ follows this file, and the "Departures from the spec" section lists each case.
   gives every option it cares about, `-password` even when empty.
   `pauseWhenEmpty` is left to server.cfg's `true` (see autosave below).
 
+### Characters outside Windows' code page
+
+- **Java on Windows reads its command line in the computer's ANSI code page,
+  not as Unicode.** Source: the JDK launcher of the bundled Java's version,
+  `src/java.base/share/native/launcher/main.c` at tag `jdk-17.0.19+10` of
+  github.com/openjdk/jdk17u (read 2026-11-26). On Windows `main` takes the
+  command line with `GetCommandLineW` and converts it with
+  `WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS | WC_COMPOSITECHECK |
+  WC_DEFAULTCHAR, …)` before splitting it into arguments, so a character
+  the code page (Windows-1252 on an English or Western European Windows)
+  lacks becomes "?"; Java then reads those bytes in the same code page
+  (`sun.jnu.encoding`). Up to 17.0.16 the launcher called
+  `JLI_CmdToArgs(GetCommandLine())`, the ANSI form, where Windows also put
+  look-alikes ("ł" as "l"): missing characters were lost there too. So such
+  a character never reaches the server as typed: a world name names a
+  different file ("?" can't even be in a Windows file name), a password is
+  one friends can't type, the server name shows "?", and a `-datadir`
+  points somewhere else. With Windows' "Use Unicode UTF-8 for worldwide
+  language support" on, the code page is UTF-8 (65001) and everything gets
+  through (not checked on a real PC). On a Mac, Java reads its arguments as
+  UTF-8.
+- **The same thing seen here, on Linux**, where Java reads its arguments in
+  the locale's character set: with no locale set (ASCII), `-world "Code page
+  ✓ 🏡"` reached the server as "Code page ??? ????", and the server said
+  "(ERR) Invalid world path: Code page ??? ????", "Server has stopped",
+  "Exiting in 2 seconds..." and exited with code 0, with no "Stopped server
+  … with code" line (`testdata/real/world-name-mangled-ascii-locale.log`).
+  With `LANG=C.UTF-8` the same command made `saves/worlds/Code page ✓
+  🏡.zip`, said it was ready and stopped normally. ExitHint explains the
+  "Invalid world path" line.
+- **So on Windows** Validate refuses a server name or password, and the
+  world name rule (`NameProblem`) a name, with a character this computer's
+  code page lacks, naming the characters; Plan refuses a data folder whose
+  path has one. The check makes the launcher's own conversion, one
+  character at a time (`WideCharToMultiByte` into `GetACP()`'s code page
+  with `WC_NO_BEST_FIT_CHARS`, asking whether the default character was
+  used), so "Café" is fine on an English Windows and Chinese names are fine
+  on a Chinese one. Plain ASCII is in every code page. A letter typed as a
+  plain letter plus a combining accent is refused too (the accent alone has
+  no code), which is right: the launcher's `WC_COMPOSITECHECK` would merge
+  the two into a different character.
+- **Checked by the real-server cells**: `codePageFacts` starts the real
+  server directly (past Validate) with the world name "Code page ✓ 🏡" and
+  logs the runner's code page and the world files the server made. On
+  Windows, when the check says the code page lacks those characters, it
+  fails if a file of that exact name appears (the name got through, so the
+  rule refuses names that work and can go); on the Mac it fails if the file
+  doesn't appear. The Windows unit test `TestArgRuneFitsHere` checks the
+  call into Windows on the runner's own code page.
+
 ### Settled: the data folder, and the "APPDATA" question (spec 5.4)
 
 - Without `-datadir` the server used `~/.config/Necesse` on Linux (cfg/,
@@ -121,9 +174,9 @@ follows this file, and the "Departures from the spec" section lists each case.
 - Two lines come before the server's own log starts, without a time: "First
   time launched" and "Cache version was not correct, deleted version cache
   files." (a fresh data folder); their state is also in the data folder.
-- Not checked (only the owner's PC can): a data folder path with characters
-  outside Windows' ANSI code page. Java's launcher on Windows reads its
-  arguments in that code page, so such a `-datadir` could arrive mangled.
+- A data folder path with characters outside Windows' code page can't reach
+  Java whole, like any other value on its command line: see "Characters
+  outside Windows' code page" above.
 - A crash writes `latest-crash.log` in the working directory (the server
   folder): "Printing crash log to C:\steamcmd\steamapps\common\Necesse
   Dedicated Server\latest-crash.log" (Steam forum, 2022, below).
@@ -187,6 +240,22 @@ follows this file, and the "Departures from the spec" section lists each case.
   autosave in 16 minutes and its world time didn't move
   (`testdata/real/paused-when-empty.log`). The Monitor counts "Reloaded file
   system in …" as a save, without a feed text (it comes every minute).
+
+- **A stop nobody asked for ends with the same lines and another code**: a
+  crash with "SERVER_ERROR" (after "(ERR) Stuck in crash loop, stopping
+  server.", the 2022 forum log below), a taken port with "NETWORK_ERROR"
+  (`testdata/real/port-in-use.log`), each followed by "Server has stopped"
+  and "Exiting in 2 seconds...". So the Monitor counts a stop as asked for
+  (`RunState.Stopping`, which makes the manager treat the exit as expected)
+  only on the console's echo of a typed `stop`, `exit` or `quit`, an admin's
+  "… issued command: /stop", or a "Stopped server … with code:
+  SERVER_STOPPED" line; "Server has stopped" alone counts for nothing, as a
+  start that fails on its world name prints it with no code at all (see
+  "Characters outside Windows' code page"). After any other code, or none,
+  the exit is a crash to the manager: its report with ExitHint's reason,
+  and "Start it again if it crashes" (once the server had been ready). The
+  stand-in's crash (fakeserver.json's `crashAfter`) prints the same
+  SERVER_ERROR lines.
 
 ### Settled: Ctrl+C doesn't save (spec 5.4 "verify whether Ctrl+C saves")
 
@@ -297,6 +366,8 @@ lines come from real logs players posted, and from the 1.3.3 server itself:
   worlds or change the console's language), and `-Xmx` from a new advanced
   setting `memoryMB` (default 2048; the spec's `-Xmx<mem>M` named no setting).
 - **No values starting with "-"** for the server name, password and world.
+- **On Windows, no characters the computer's code page lacks** in the server
+  name, password, world name or the data folder's path.
 - **Worlds can't be renamed** in the app (`ErrCantRename`): the world list
   must leave out the server's backup copies, which needs worldstore's `List`,
   and worldstore renames only worlds it lists itself. The server itself
@@ -313,4 +384,6 @@ lines come from real logs players posted, and from the 1.3.3 server itself:
 - The Windows firewall: the server also listens on the LAN socket (UDP 55169
   or another port) besides the game port; whether Windows asks about it when
   the app's rule for java.exe covers only the game port.
-- A data folder path outside Windows' ANSI code page (above).
+- That Java on Windows gets a value outside the code page mangled, as the
+  JDK's launcher source says: the Windows real-server cell's `codePageFacts`
+  checks it on the runner's code page (above).

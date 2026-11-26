@@ -180,8 +180,27 @@ func TestMonitorRealFacts(t *testing.T) {
 		if m.stopCode != "NETWORK_ERROR" {
 			t.Errorf("stop code %q", m.stopCode)
 		}
+		// Nobody asked for this stop: the manager must report it as a
+		// failure with the hint below, not as a normal stop.
+		if count(evs, "stopping") != 0 || m.State().Stopping {
+			t.Errorf("events = %q, Stopping %v: a stop on a taken port counts as asked for", kinds(evs), m.State().Stopping)
+		}
 		hint := (&server{}).ExitHint(shown)
 		if !strings.Contains(hint, "UDP port 14171") {
+			t.Errorf("ExitHint = %q", hint)
+		}
+	})
+
+	t.Run("a world name Java got as question marks", func(t *testing.T) {
+		// Run with an ASCII locale on Linux, where Java turns every
+		// character outside it into "?", as it does on Windows with one
+		// outside the code page (FACTS.md). The server stops without a
+		// stop code: nobody asked for that stop either.
+		m, evs, shown := replay(t, real("world-name-mangled-ascii-locale.log"), nil)
+		if len(evs) != 0 || m.State().Stopping {
+			t.Errorf("events = %q, Stopping %v", kinds(evs), m.State().Stopping)
+		}
+		if hint := (&server{}).ExitHint(shown); !strings.Contains(hint, "world's name") {
 			t.Errorf("ExitHint = %q", hint)
 		}
 	})
@@ -274,10 +293,16 @@ func TestMonitorForumJoinLeave(t *testing.T) {
 
 	t.Run("a known player, then a crash", func(t *testing.T) {
 		m, evs, shown := replay(t, forum("steam-2022-06-28-join-then-crash.log"), nil)
-		if !slices.Equal(kinds(evs), []string{"join", "saved", "stopping"}) {
+		// No "stopping": the server stopped itself with SERVER_ERROR, so
+		// the manager must count the exit as a crash (its report, and
+		// "Start it again if it crashes").
+		if !slices.Equal(kinds(evs), []string{"join", "saved"}) {
 			t.Errorf("events = %q", kinds(evs))
 		}
 		st := m.State()
+		if st.Stopping || m.stopCode != "SERVER_ERROR" {
+			t.Errorf("Stopping %v, stop code %q: a crash counts as a stop someone asked for", st.Stopping, m.stopCode)
+		}
 		if len(st.Players) != 1 || st.Players[0].Name != "icytux" || st.Players[0].Account != "76561198014526397" {
 			t.Errorf("players = %+v: the account comes from the \"Loaded player\" line", st.Players)
 		}
@@ -339,6 +364,48 @@ func TestMonitorOtherLines(t *testing.T) {
 	// The line's own time is kept.
 	if l := line("[2026-11-26 20:18:04] Starting world save"); l.Time.IsZero() || l.Time.Hour() != 20 || l.Text != "Starting world save" {
 		t.Errorf("time and text: %+v", l)
+	}
+}
+
+// Only a stop someone asked for counts as one: the manager restarts a
+// server that stopped by itself, when the owner asked for that, and
+// reports why it stopped.
+func TestMonitorStopAskedOrNot(t *testing.T) {
+	end := []string{
+		"[2026-11-26 20:18:19] World time: 19, day 0",
+		"[2026-11-26 20:18:19] Server has stopped",
+		"[2026-11-26 20:18:19] Exiting in 2 seconds...",
+	}
+	for _, c := range []struct {
+		name  string
+		lines []string
+		asked bool
+	}{
+		{"typed stop", []string{"[2026-11-26 20:18:16] > stop", "[2026-11-26 20:18:19] Stopped server on 2026/11/26 20:18:19 with code: SERVER_STOPPED"}, true},
+		{"typed quit", []string{"[2026-11-26 20:18:16] > quit"}, true},
+		{"SERVER_STOPPED alone", []string{"[2026-11-26 20:18:19] Stopped server on 2026/11/26 20:18:19 with code: SERVER_STOPPED"}, true},
+		{"a crash", []string{"[2026-11-26 20:18:19] (ERR) Stuck in crash loop, stopping server.", "[2026-11-26 20:18:19] Stopped server on 2026/11/26 20:18:19 with code: SERVER_ERROR"}, false},
+		{"a taken port", []string{"[2026-11-26 20:18:19] Stopped server on 2026/11/26 20:18:19 with code: NETWORK_ERROR"}, false},
+		{"only the last lines", nil, false},
+		// Asked for, then it went wrong: still asked for, so it isn't
+		// started again against the wish of whoever stopped it.
+		{"asked, then an error", []string{"[2026-11-26 20:18:16] Alex issued command: /stop", "[2026-11-26 20:18:19] Stopped server on 2026/11/26 20:18:19 with code: SERVER_ERROR"}, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			m := (&server{}).Watch(game.Record{}, nil).(*monitor)
+			now := time.Date(2026, 11, 26, 21, 0, 0, 0, time.Local)
+			var evs []game.Event
+			for _, l := range append(slices.Clone(c.lines), end...) {
+				evs = append(evs, m.Line(l, now).Events...)
+			}
+			st := m.State()
+			if st.Stopping != c.asked || (count(evs, "stopping") == 1) != c.asked || count(evs, "stopping") > 1 {
+				t.Errorf("Stopping %v, events %q; want a stop asked for: %v", st.Stopping, kinds(evs), c.asked)
+			}
+			if c.asked && st.StoppingAt.IsZero() {
+				t.Errorf("StoppingAt not set")
+			}
+		})
 	}
 }
 

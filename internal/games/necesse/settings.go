@@ -47,7 +47,8 @@ func (s *server) Schema() game.Schema {
 // The server reads every value from its command line, and takes a value
 // that starts with "-" for the next option instead (FACTS.md: a password
 // of "-abc" left the server with no password at all). So no value may
-// start with a dash.
+// start with a dash. On Windows, Java gets that command line in an older
+// character set, so no value may have a character it lacks (charset.go).
 func (s *server) Validate(sv game.Saved, world string) game.FieldErrors {
 	errs := game.FieldErrors{}
 	name := s.value(sv, "serverName")
@@ -60,6 +61,10 @@ func (s *server) Validate(sv game.Saved, world string) game.FieldErrors {
 		errs["serverName"] = "The server name can't have line breaks or other control characters."
 	case strings.HasPrefix(name, "-"):
 		errs["serverName"] = "The server name can't start with a dash (-)."
+	default:
+		if p := codePageProblem("The server name", name, `friends would see "?" instead`); p != "" {
+			errs["serverName"] = p
+		}
 	}
 	pw := sv.Server["password"]
 	switch {
@@ -73,6 +78,10 @@ func (s *server) Validate(sv game.Saved, world string) game.FieldErrors {
 		errs["password"] = "The password can't start or end with a space."
 	case strings.HasPrefix(pw, "-"):
 		errs["password"] = "The password can't start with a dash (-): the server would ignore it and let anyone in."
+	default:
+		if p := codePageProblem("The password", pw, `the server would get "?" instead and turn friends away`); p != "" {
+			errs["password"] = p
+		}
 	}
 	if msg := intProblem(sv.Server, "maxPlayers", 1, maxSlots, "Most players at once"); msg != "" {
 		errs["maxPlayers"] = msg

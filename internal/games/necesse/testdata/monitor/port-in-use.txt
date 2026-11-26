@@ -1,5 +1,4 @@
 # Events the Monitor finds in testdata/real/port-in-use.log, then its state at the end.
 saved text="World saved."
-stopping
-state: ready=false version="1.3.3" count=0 players=[] saved=true stopping=true stopCode="NETWORK_ERROR" bindFailed=true
+state: ready=false version="1.3.3" count=0 players=[] saved=true stopping=false stopCode="NETWORK_ERROR" bindFailed=true
 shown: 33 lines

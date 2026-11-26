@@ -2,6 +2,7 @@ package necesse
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -113,6 +114,63 @@ func TestStandInMatch(t *testing.T) {
 			t.Errorf("%s's command line started the Necesse stand-in:\n%s", game, out)
 		}
 	}
+}
+
+// The stand-in crashes the way the real server does (fakeserver.json's
+// crashAfter): its last lines must leave the Monitor saying nobody asked
+// for the stop, so the manager reports a crash and can start it again.
+func TestStandInCrash(t *testing.T) {
+	dir := t.TempDir()
+	java := filepath.Join(dir, "java")
+	if runtime.GOOS == "windows" {
+		java += ".exe"
+	}
+	b, err := os.ReadFile(gametest.BuildFakeserver(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(java, b, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "fakeserver.json"), []byte(`{"speed":60,"crashAfter":2}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := Game{}.New(testEnv(t)).(*server)
+	sv := defaultSaved()
+	sv.Ports["game"] = freeUDPPort(t)
+	cmd := exec.Command(java, s.args(sv, "World")...)
+	cmd.Dir = dir
+	out, _ := cmd.CombinedOutput() // it ends by itself: the crash
+	m := s.Watch(game.Record{}, nil)
+	var evs []game.Event
+	var shown []string
+	for _, l := range strings.Split(string(out), "\n") {
+		line := m.Line(l, time.Now())
+		evs = append(evs, line.Events...)
+		if !line.Hide {
+			shown = append(shown, line.Text)
+		}
+	}
+	// "online" comes first unless the computer is too slow to make the
+	// world within crashAfter; either way, no stop was asked for.
+	if count(evs, "stopping") != 0 || m.State().Stopping || m.(*monitor).stopCode != "SERVER_ERROR" {
+		t.Errorf("events %q, Stopping %v, stop code %q: want a crash nobody asked for\n%s",
+			kinds(evs), m.State().Stopping, m.(*monitor).stopCode, out)
+	}
+	if hint := s.ExitHint(shown); !strings.Contains(hint, "crashed") {
+		t.Errorf("ExitHint = %q", hint)
+	}
+}
+
+// freeUDPPort is a UDP port nothing listens on just now.
+func freeUDPPort(t *testing.T) int {
+	t.Helper()
+	c, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	return c.LocalAddr().(*net.UDPAddr).Port
 }
 
 func testEnv(t *testing.T) game.Env {
@@ -365,5 +423,79 @@ func TestPlanMissingWorld(t *testing.T) {
 	os.Remove(filepath.Join(env.Dirs.Server, jarName))
 	if _, err := s.Plan(t.Context(), game.PlanRequest{World: "New", New: true, Saved: defaultSaved()}); err == nil || !strings.Contains(err.Error(), "isn't installed") {
 		t.Errorf("Plan without Server.jar: %v", err)
+	}
+}
+
+// On Windows, Java gets its command line in the computer's old character
+// set (charset.go), so values with characters it lacks are refused. Here
+// argRuneFits acts as an English Windows, whose Windows-1252 has the
+// accented letters of Western Europe but no "ł", "✓" or emoji.
+func TestCodePageRule(t *testing.T) {
+	orig := argRuneFits
+	t.Cleanup(func() { argRuneFits = orig })
+
+	// What every system says: on a Mac every character gets through.
+	if runtime.GOOS != "windows" {
+		s := Game{}.New(testEnv(t))
+		sv := defaultSaved()
+		sv.Server["serverName"], sv.Server["password"] = "Our base 🏡", "łódź✓"
+		if errs := s.Validate(sv, "Our base 🏡"); len(errs) > 0 {
+			t.Errorf("off Windows, Java gets every character, but Validate says %v", errs)
+		}
+	}
+
+	argRuneFits = func(r rune) bool { return r <= 0xFF }
+	env := testEnv(t)
+	s := Game{}.New(env).(*server)
+	ok := defaultSaved()
+	ok.Server["serverName"], ok.Server["password"] = "Café Noël", "fête"
+	if errs := s.Validate(ok, "Été"); len(errs) > 0 {
+		t.Errorf("letters the code page has: %v", errs)
+	}
+	for _, c := range []struct {
+		key, value, world, want, says string
+	}{
+		{"serverName", "Our base 🏡", "World", "serverName", `"🏡"`},
+		{"password", "pass✓", "World", "password", `"✓"`},
+		{"password", "łódź", "World", "password", `"ł" and "ź"`},
+		{"serverName", "Fine", "Our base 🏡", "world", `"🏡"`},
+	} {
+		sv := ok.Clone()
+		sv.Server[c.key] = c.value
+		got := s.Validate(sv, c.world)[c.want]
+		if !strings.Contains(got, c.says) || !strings.Contains(got, "character set") {
+			t.Errorf("%s=%q world %q: %s error %q, want one naming %s", c.key, c.value, c.world, c.want, got, c.says)
+		}
+		if strings.Contains(got, `"ó"`) {
+			t.Errorf("%q names a letter the code page has", got)
+		}
+	}
+	if p := s.Worlds().NameProblem("Base 🏡"); !strings.Contains(p, `"🏡"`) {
+		t.Errorf("NameProblem = %q", p)
+	}
+
+	// The data folder is on the command line too.
+	installed(t, s)
+	wenv := env
+	wenv.Dirs.Saves = filepath.Join(env.Dirs.Root, "Michał", "saves")
+	_, err := Game{}.New(wenv).Plan(t.Context(), game.PlanRequest{World: "New", New: true, Saved: defaultSaved()})
+	if err == nil || !strings.Contains(err.Error(), `"ł"`) {
+		t.Errorf("Plan with a data folder the code page can't name: %v", err)
+	}
+	if _, err := s.Plan(t.Context(), game.PlanRequest{World: "New", New: true, Saved: defaultSaved()}); err != nil {
+		t.Errorf("Plan with a plain data folder: %v", err)
+	}
+}
+
+func TestQuoteRunes(t *testing.T) {
+	for in, want := range map[string]string{
+		"ł":       `"ł"`,
+		"łź":      `"ł" and "ź"`,
+		"łźń":     `"ł", "ź" and "ń"`,
+		"abcdefg": `"a", "b", "c", "d", "e" and others`,
+	} {
+		if got := quoteRunes([]rune(in)); got != want {
+			t.Errorf("quoteRunes(%q) = %s, want %s", in, got, want)
+		}
 	}
 }

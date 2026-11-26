@@ -45,10 +45,17 @@ var (
 	// before 1.0 said "Saved all data." instead (the forum logs in
 	// testdata/forum).
 	reSaved = regexp.MustCompile(`^(?:Completed world save( before stopping server)?|(?:Auto save: )?Reloaded file system in .*|Saved all data\.)$`)
-	// The stop, in the order the server says it.
-	reStopCmd  = regexp.MustCompile(`^(?:> |.* issued command: /)(?:stop|exit|quit)\s*$`)
+	// A stop someone asked for: the app's own "stop" as the console
+	// echoes it, or an admin's in the game.
+	reStopCmd = regexp.MustCompile(`^(?:> |.* issued command: /)(?:stop|exit|quit)\s*$`)
+	// A server that got as far as its world ends with this line and a
+	// code: SERVER_STOPPED for a stop someone asked for, SERVER_ERROR
+	// after a crash ("Stuck in crash loop, stopping server."),
+	// NETWORK_ERROR when the port was taken (FACTS.md). "Server has
+	// stopped" and "Exiting in 2 seconds..." follow every one of them, and
+	// also end a start that failed on its world's name, with no code at
+	// all; so they say nothing about why it stopped.
 	reStopped  = regexp.MustCompile(`^Stopped server on .* with code: (\w+)$`)
-	reStopEnd  = regexp.MustCompile(`^(?:Server has stopped|Exiting in \d+ seconds\.\.\.)$`)
 	reBadVer   = regexp.MustCompile(`had wrong version \(`)
 	reQuotedNm = regexp.MustCompile(`^Client "(.+?)"`)
 	// Chat: "(name): message". Anything a player types arrives this way,
@@ -95,7 +102,7 @@ type monitor struct {
 
 	bindFailed bool   // the port couldn't be opened: the server says it started, but it stops at once
 	stopCode   string // "SERVER_STOPPED", "NETWORK_ERROR"…, once it said
-	stopping   bool
+	stopping   bool   // someone asked for the stop (see stopAsked)
 	// lastJoin is the player who got in last and whose account isn't
 	// known yet; the next "Loaded player" line names it.
 	lastJoin string
@@ -226,15 +233,19 @@ func (m *monitor) Line(raw string, now time.Time) game.Line {
 		}
 		add(e)
 
-	case reStopCmd.MatchString(text), reStopped.MatchString(text), reStopEnd.MatchString(text):
-		if g := reStopped.FindStringSubmatch(text); g != nil {
-			m.stopCode = g[1]
-		}
-		if !m.stopping {
-			m.stopping = true
-			m.state.Stopping = true
-			m.state.StoppingAt = when
-			add(game.Event{Kind: "stopping"})
+	case reStopCmd.MatchString(text):
+		m.stopAsked(when, add)
+
+	case reStopped.MatchString(text):
+		m.stopCode = reStopped.FindStringSubmatch(text)[1]
+		// Only SERVER_STOPPED is a stop someone asked for. Any other code
+		// is the server giving up by itself, and the manager must see that
+		// exit as the crash it is: it says why (ExitHint) and starts the
+		// server again when "Start it again if it crashes" is on. A stop
+		// that was asked for and then ended badly stays asked for, so the
+		// server isn't started again against someone's wish.
+		if m.stopCode == stopAskedCode {
+			m.stopAsked(when, add)
 		}
 
 	case reBadVer.MatchString(text):
@@ -250,6 +261,22 @@ func (m *monitor) Line(raw string, now time.Time) game.Line {
 			Text: who + " couldn't join: their Necesse is a different version from the server's."})
 	}
 	return out
+}
+
+// stopAskedCode is the stop code of a stop someone asked for.
+const stopAskedCode = "SERVER_STOPPED"
+
+// stopAsked notes a stop someone asked for. The manager counts the exit
+// that follows as expected (RunState.Stopping): no crash report and no
+// automatic restart.
+func (m *monitor) stopAsked(when time.Time, add func(game.Event)) {
+	if m.stopping {
+		return
+	}
+	m.stopping = true
+	m.state.Stopping = true
+	m.state.StoppingAt = when
+	add(game.Event{Kind: "stopping"})
 }
 
 // isAccount says whether a name is really an account number, as the

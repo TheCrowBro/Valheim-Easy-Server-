@@ -18,13 +18,16 @@ import (
 	"debug/macho"
 	"debug/pe"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -137,7 +140,95 @@ func realServerChecks(t *testing.T, g game.Game) {
 			t.Errorf("the third start didn't load the saved world")
 		}
 		s.Stop()
+
+		codePageFacts(t, s.Server().(*server), s.Env().Store.Get())
 	})
+}
+
+// codePageFacts settles how a value with characters outside Windows' code
+// page reaches the server's Java (charset.go, FACTS.md). Validate refuses
+// such a value, so this starts the real server itself, with such a world
+// name and a data folder of its own, and looks at the world file the
+// server makes: a file under the name as given means the name got through
+// whole.
+func codePageFacts(t *testing.T, srv *server, sv game.Saved) {
+	t.Helper()
+	const world = "Code page ✓ 🏡"
+	own := *srv
+	own.env.Dirs.Saves = t.TempDir()
+	cmd := exec.Command(srv.Program(), own.args(sv, world)...)
+	cmd.Dir = srv.env.Dirs.Server
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := &lockedBuffer{}
+	cmd.Stdout, cmd.Stderr = out, out
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { cmd.Wait(); close(done) }()
+	// It makes the world, then says it's ready; or, given a name it can't
+	// use, it may end or hang instead.
+	deadline := time.Now().Add(3 * time.Minute)
+	for time.Now().Before(deadline) && !strings.Contains(out.String(), "Type help for list of commands.") {
+		select {
+		case <-done:
+			deadline = time.Now()
+		case <-time.After(time.Second):
+		}
+	}
+	io.WriteString(stdin, "stop\n")
+	select {
+	case <-done:
+	case <-time.After(time.Minute):
+		cmd.Process.Kill()
+		<-done
+	}
+	entries, _ := os.ReadDir(worldsDir(own.env.Dirs.Saves))
+	var files []string
+	for _, e := range entries {
+		files = append(files, e.Name())
+	}
+	whole := slices.Contains(files, world+worldExt)
+	fits := len(argLacks(world)) == 0
+	t.Logf("FACTS: %s: the world name %q, which the check says %s, made the world files %q (the name got through whole: %v)",
+		codePage(), world, map[bool]string{true: "gets through", false: "doesn't get through"}[fits], files, whole)
+	// What the server said about the name (with an ASCII locale on Linux:
+	// "(ERR) Invalid world path: Code page ??? ????").
+	for _, l := range strings.Split(out.String(), "\n") {
+		if text, _ := splitLine(l); strings.Contains(text, "Invalid world path") || strings.Contains(text, "Creating new world at") {
+			t.Logf("FACTS: %s", text)
+		}
+	}
+	switch {
+	case runtime.GOOS == "linux":
+		// Not a system the app is offered on; there Java reads its
+		// arguments in the locale's character set.
+	case fits && !whole:
+		t.Errorf("the check says %q reaches Java whole, but the server made %q:\n%s", world, files, out.String())
+	case !fits && whole:
+		t.Errorf("%q reached Java whole though %s lacks some of it: the code page rule in charset.go refuses names that work, and can go", world, codePage())
+	}
+}
+
+// lockedBuffer collects a program's output while the test reads it.
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (l *lockedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *lockedBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
 }
 
 // defaultDataFolder is where the server would keep its data without

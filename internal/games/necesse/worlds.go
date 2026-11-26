@@ -51,8 +51,10 @@ func newWorldStore(d game.Dirs) worldStore {
 }
 
 // NameProblem adds Necesse's rules to the shared ones: the server's own
-// backup names are taken, and a name starting with "-" would be read as an
-// option on the server's command line.
+// backup names are taken, a name starting with "-" would be read as an
+// option on the server's command line, and on Windows a character the
+// command line's older character set lacks would reach the server as "?"
+// (charset.go), which it refuses in a world name.
 func (w worldStore) NameProblem(name string) string {
 	if p := w.Worlds.NameProblem(name); p != "" {
 		return p
@@ -63,7 +65,7 @@ func (w worldStore) NameProblem(name string) string {
 	case strings.HasPrefix(name, "-"):
 		return "A world name can't start with a dash (-)."
 	}
-	return ""
+	return codePageProblem("A world name", name, `the server would get "?" instead and refuse the name`)
 }
 
 func isBackupName(name string) bool {
