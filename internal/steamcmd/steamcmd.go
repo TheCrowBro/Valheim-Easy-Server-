@@ -1,5 +1,8 @@
-// Package steamcmd installs and updates the Valheim dedicated server with
-// Valve's SteamCMD tool, reporting progress as it goes.
+// Package steamcmd installs and updates a game's dedicated server with
+// Valve's SteamCMD tool, reporting progress as it goes. Valheim's is the
+// default: a SteamCMD with no app id, name or size installs exactly what
+// this package always has. Every game shares one SteamCMD, so only one
+// install runs at a time (lock.go).
 package steamcmd
 
 import (
@@ -26,6 +29,13 @@ import (
 // can be downloaded with an anonymous login.
 const AppID = "896660"
 
+// Valheim's name and download size, used when a SteamCMD leaves Name and
+// SizeGB empty, so its texts stay word for word what they always were.
+const (
+	valheimName   = "Valheim"
+	valheimSizeGB = 2
+)
+
 // downloads is where SteamCMD comes from on each system.
 var downloads = map[string]string{
 	"windows": "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip",
@@ -51,7 +61,42 @@ type SteamCMD struct {
 	Dir        string       // where steamcmd lives
 	InstallDir string       // where the server goes
 	Output     func(string) // receives raw SteamCMD output, may be nil
+
+	// The game's dedicated server; empty means Valheim's (AppID, "Valheim",
+	// about 2 GB), so Valheim's install is unchanged.
+	AppID  string  // Steam app id, "1169370"
+	Branch string  // a Steam beta branch; "" = the public one
+	Name   string  // the game's name in texts: "Downloading the Necesse server…"
+	SizeGB float64 // for "not enough free disk space … (it needs about 6 GB)"
 }
+
+func (s *SteamCMD) appID() string {
+	if s.AppID == "" {
+		return AppID
+	}
+	return s.AppID
+}
+
+func (s *SteamCMD) name() string {
+	if s.Name == "" {
+		return valheimName
+	}
+	return s.Name
+}
+
+func (s *SteamCMD) sizeGB() float64 {
+	if s.SizeGB <= 0 {
+		return valheimSizeGB
+	}
+	return s.SizeGB
+}
+
+// App ids are numbers and branch names are plain words; anything else in
+// them would be read by SteamCMD as more of its own commands.
+var (
+	reAppID  = regexp.MustCompile(`^[0-9]{1,10}$`)
+	reBranch = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
+)
 
 func (s *SteamCMD) exe() string {
 	if runtime.GOOS == "windows" {
@@ -60,8 +105,24 @@ func (s *SteamCMD) exe() string {
 	return filepath.Join(s.Dir, "steamcmd.sh")
 }
 
-// Install implements Installer.
+// Install implements Installer. It waits while another game's install
+// holds SteamCMD, unless ctx is marked with SkipIfBusy: then it returns a
+// *BusyError at once.
 func (s *SteamCMD) Install(ctx context.Context, validate bool, progress func(Progress)) error {
+	if !reAppID.MatchString(s.appID()) {
+		return fmt.Errorf("%q isn't a Steam app id", s.appID())
+	}
+	if s.Branch != "" && !reBranch.MatchString(s.Branch) {
+		return fmt.Errorf("%q isn't a Steam branch name", s.Branch)
+	}
+	unlock, err := lockSteam(ctx, s.name(), !skipsIfBusy(ctx), progress)
+	if err != nil {
+		if ctx.Err() != nil {
+			return errors.New("cancelled")
+		}
+		return err
+	}
+	defer unlock()
 	if err := s.ensureSteamCMD(ctx, progress); err != nil {
 		return err
 	}
@@ -72,7 +133,10 @@ func (s *SteamCMD) Install(ctx context.Context, validate bool, progress func(Pro
 	if err != nil {
 		return err
 	}
-	args := []string{"+force_install_dir", installDir, "+login", "anonymous", "+app_update", AppID}
+	args := []string{"+force_install_dir", installDir, "+login", "anonymous", "+app_update", s.appID()}
+	if s.Branch != "" {
+		args = append(args, "-beta", s.Branch)
+	}
 	if validate {
 		args = append(args, "validate")
 	}
@@ -183,9 +247,14 @@ func extractOne(zipPath, name, dest string) error {
 var (
 	reUpdateState = regexp.MustCompile(`Update state \(0x([0-9a-fA-F]+)\) ([^,]+), progress: ([\d.]+)`)
 	reSelfUpdate  = regexp.MustCompile(`^\[\s*(\d+)%\]\s*(.*)`)
-	reSuccess     = regexp.MustCompile(`(?i)^Success! App '` + AppID + `'`)
 	reError       = regexp.MustCompile(`(?i)^(?:ERROR!|Error!)\s*(.*)`)
 )
+
+// successLine matches SteamCMD's "Success! App '<id>' fully installed." for
+// this app only: another app's success says nothing about ours.
+func successLine(appID string) *regexp.Regexp {
+	return regexp.MustCompile(`(?i)^Success! App '` + regexp.QuoteMeta(appID) + `'`)
+}
 
 // run starts SteamCMD and follows its output. Lines can end in \r or \n.
 func (s *SteamCMD) run(ctx context.Context, args []string, progress func(Progress)) error {
@@ -212,6 +281,7 @@ func (s *SteamCMD) run(ctx context.Context, args []string, progress func(Progres
 		success  bool
 		failMsg  string
 		lastLine string
+		reOK     = successLine(s.appID())
 	)
 	sc := bufio.NewScanner(stdout)
 	sc.Buffer(make([]byte, 64*1024), 1<<20)
@@ -226,17 +296,19 @@ func (s *SteamCMD) run(ctx context.Context, args []string, progress func(Progres
 		}
 		lastLine = line
 		switch {
-		case reSuccess.MatchString(line):
+		case reOK.MatchString(line):
 			success = true
+			// The manager compares this text (it shows "The server is up to
+			// date." instead), so it never changes.
 			progress(Progress{Step: "Server files are up to date.", Percent: 100})
 		case reError.MatchString(line):
-			failMsg = FriendlyError(reError.FindStringSubmatch(line)[1])
+			failMsg = friendlyError(reError.FindStringSubmatch(line)[1], s.name(), s.sizeGB())
 		case strings.Contains(strings.ToLower(line), "bad cpu type"):
 			// The shell, not SteamCMD, says when a Mac can't run SteamCMD
 			// (Apple silicon without Rosetta), so there's no "Error!".
-			failMsg = FriendlyError(line)
+			failMsg = friendlyError(line, s.name(), s.sizeGB())
 		default:
-			if p, ok := ParseProgress(line); ok {
+			if p, ok := parseProgress(line, s.name()); ok {
 				progress(p)
 			}
 		}
@@ -257,15 +329,21 @@ func (s *SteamCMD) run(ctx context.Context, args []string, progress func(Progres
 	return fmt.Errorf("SteamCMD finished without confirming the install. Last message: %s", lastLine)
 }
 
-// ParseProgress turns one SteamCMD output line into a progress update.
+// ParseProgress turns one SteamCMD output line into a progress update,
+// in Valheim's words.
 func ParseProgress(line string) (Progress, bool) {
+	return parseProgress(line, valheimName)
+}
+
+// parseProgress is ParseProgress for the game called name.
+func parseProgress(line, name string) (Progress, bool) {
 	if m := reUpdateState.FindStringSubmatch(line); m != nil {
 		pct, _ := strconv.ParseFloat(m[3], 64)
 		state := strings.ToLower(strings.TrimSpace(m[2]))
 		step := "Working…"
 		switch {
 		case strings.Contains(state, "download"):
-			step = "Downloading the Valheim server…"
+			step = "Downloading the " + name + " server…"
 		case strings.Contains(state, "verif"):
 			step = "Checking the server files…"
 		case strings.Contains(state, "prealloc"):
@@ -290,12 +368,20 @@ func ParseProgress(line string) (Progress, bool) {
 	return Progress{}, false
 }
 
-// FriendlyError explains common SteamCMD errors in plain words.
+// FriendlyError explains common SteamCMD errors in plain words, in
+// Valheim's.
 func FriendlyError(msg string) string {
+	return friendlyError(msg, valheimName, valheimSizeGB)
+}
+
+// friendlyError is FriendlyError for the game called name, whose server
+// needs about sizeGB of disk.
+func friendlyError(msg, name string, sizeGB float64) string {
 	low := strings.ToLower(msg)
 	switch {
 	case strings.Contains(low, "0x202"), strings.Contains(low, "disk space"):
-		return "There isn't enough free disk space for the Valheim server (it needs about 2 GB)."
+		return "There isn't enough free disk space for the " + name + " server (it needs about " +
+			strconv.FormatFloat(sizeGB, 'f', -1, 64) + " GB)."
 	case strings.Contains(low, "disk write"), strings.Contains(low, "0x602"):
 		return "SteamCMD couldn't write the server files. Make sure the disk isn't full and the server isn't running."
 	case strings.Contains(low, "timeout"), strings.Contains(low, "no connection"), strings.Contains(low, "connect"):
@@ -349,9 +435,19 @@ func (p *progressReader) Read(b []byte) (int, error) {
 var reBuildID = regexp.MustCompile(`"buildid"\s+"(\d+)"`)
 var reLastUpdated = regexp.MustCompile(`"LastUpdated"\s+"(\d+)"`)
 
-// InstalledBuild reads the Steam build ID and update time of the server.
+// InstalledBuild reads the Steam build ID and update time of the Valheim
+// server.
 func InstalledBuild(installDir string) (buildID string, updated time.Time, ok bool) {
-	b, err := os.ReadFile(filepath.Join(installDir, "steamapps", "appmanifest_"+AppID+".acf"))
+	return InstalledBuildFor(installDir, AppID)
+}
+
+// InstalledBuildFor reads the Steam build ID and update time of the app
+// installed in installDir, from SteamCMD's steamapps/appmanifest_<id>.acf.
+func InstalledBuildFor(installDir, appID string) (buildID string, updated time.Time, ok bool) {
+	if !reAppID.MatchString(appID) {
+		return "", time.Time{}, false
+	}
+	b, err := os.ReadFile(filepath.Join(installDir, "steamapps", "appmanifest_"+appID+".acf"))
 	if err != nil {
 		return "", time.Time{}, false
 	}
