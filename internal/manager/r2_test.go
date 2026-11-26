@@ -396,6 +396,41 @@ func TestStatusWhileThingsChange(t *testing.T) {
 	}
 }
 
+// The old panel follows one job (Status.job): the newer of the legacy
+// game's and the app's. The waker's install and removal aren't jobs, so they
+// never change it, and a finished Sleep job is still reported (spec 4.2).
+func TestStatusJobIsTheOldPanels(t *testing.T) {
+	env := setup(t)
+	m := env.m
+	if err := m.BackupWorld("Nowhere"); err != nil {
+		t.Fatal(err)
+	}
+	backup := waitJob(t, m, currentJobID(m))
+	if backup.Kind != "backup" || backup.Game != m.legacyID {
+		t.Fatalf("job %+v", backup)
+	}
+	// (FixFirewall isn't called here: on a Mac it asks for an admin
+	// password, and it is a plain call, not a job, as before.)
+	m.RemoveWaker(true)
+	if j := m.Status().Job; j == nil || j.ID != backup.ID {
+		t.Fatalf("after taking the waker off: job %+v", j)
+	}
+	if err := m.Hibernate(""); err != nil {
+		t.Fatal(err)
+	}
+	slept := waitJob(t, m, currentJobID(m))
+	if slept.Kind != "hibernate" || slept.Game != "" || slept.Error != "" || slept.ID <= backup.ID {
+		t.Fatalf("sleep job %+v", slept)
+	}
+	st := m.Status()
+	if st.Job == nil || st.Job.ID != slept.ID || st.Job.Result == "" {
+		t.Fatalf("the finished sleep job isn't reported: %+v", st.Job)
+	}
+	if len(st.Jobs) != 2 {
+		t.Fatalf("jobs %+v", st.Jobs)
+	}
+}
+
 // I9: the files with passwords and tokens are readable only by the user
 // running the app.
 func TestSecretFilesPrivate(t *testing.T) {
