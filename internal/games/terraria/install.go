@@ -126,7 +126,8 @@ func (s *server) Installer() game.Installer {
 type installer struct{ s *server }
 
 // Install puts the newest server in place, or checks the one there is
-// current. Repair downloads it again whatever is installed.
+// current. Repair downloads it again whatever is installed and, on
+// Windows, installs XNA again over itself (installXNA).
 func (i installer) Install(ctx context.Context, repair bool, progress func(game.Progress)) error {
 	if progress == nil {
 		progress = func(game.Progress) {}
@@ -143,7 +144,7 @@ func (i installer) Install(ctx context.Context, repair bool, progress func(game.
 		}
 	}
 	if runtime.GOOS == "windows" {
-		if err := ensureXNA(ctx, progress); err != nil {
+		if err := ensureXNA(ctx, repair, progress); err != nil {
 			return err
 		}
 	}
@@ -284,9 +285,61 @@ func swapIn(src, dest, aside string) error {
 	return nil
 }
 
-// ensureXNA installs XNA unless it is there; tests replace it.
-var ensureXNA = func(ctx context.Context, progress func(game.Progress)) error {
-	return install.EnsurePrereq(ctx, xnaPrereq, progress)
+// ensureXNA puts XNA in place on Windows; tests of the server's install
+// replace it.
+var ensureXNA = installXNA
+
+// ensurePrereq is install.EnsurePrereq; tests replace it to see which
+// installer would run, and how.
+var ensurePrereq = install.EnsurePrereq
+
+// installXNA installs XNA when Windows doesn't list it, and on a repair
+// installs it again over itself even when Windows does.
+//
+// The repair matters because of when the owner is sent to it: a start is
+// refused while XNA isn't listed (Plan), so the server only ever runs, and
+// ExitHint only ever says "Click Repair" over an XNA error, when Windows
+// lists XNA as installed but it doesn't work (its files damaged or
+// removed, with its registry key still there). The usual install would
+// see the key and do nothing, and the owner would go round in a loop.
+func installXNA(ctx context.Context, repair bool, progress func(game.Progress)) error {
+	if !repair || !haveXNA() {
+		return ensurePrereq(ctx, xnaPrereq, progress)
+	}
+	if err := ensurePrereq(ctx, xnaRepairPrereq(), progress); err != nil {
+		return err
+	}
+	// The repair runs without EnsurePrereq's own checks, so check here
+	// that Windows still lists XNA afterwards.
+	if !haveXNA() {
+		return fmt.Errorf("The %s installer finished, but Windows doesn't list %s as installed. Try again, or restart the computer and try again.", xnaPrereq.Name, xnaPrereq.Name)
+	}
+	return nil
+}
+
+// xnaRepairPrereq is XNA's installer run as a repair of the XNA that is
+// installed. It has no Installed check, so EnsurePrereq doesn't skip it
+// because the registry key is there. And a plain "msiexec /i" of a
+// package that is already installed only opens its maintenance mode and,
+// run quietly, changes nothing, so these properties ask for a
+// reinstall of everything in it:
+//
+//   - REINSTALL=ALL: every feature of the package.
+//   - REINSTALLMODE=vamus: v runs from this downloaded package and caches
+//     it again (the copy Windows kept may be what's damaged, and the
+//     folder XNA was first installed from is long gone); a puts back every
+//     file whatever its version, since a damaged file usually has the
+//     same version as a good one (o, the usual choice, would skip it); m
+//     and u write its registry entries again; s its shortcuts.
+//
+// These are only for a package that is installed: on a computer without
+// it they would install nothing, so a repair there is the usual install
+// (installXNA).
+func xnaRepairPrereq() install.Prereq {
+	p := xnaPrereq
+	p.Installed = nil
+	p.Args = append([]string{"REINSTALL=ALL", "REINSTALLMODE=vamus"}, xnaPrereq.Args...)
+	return p
 }
 
 // xnaPrereq is Microsoft XNA Framework 4.0 Redistributable, which the

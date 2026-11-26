@@ -88,6 +88,20 @@ Every "verify" mark of spec 5.3 is settled in section 9.
   the key is in the 32-bit view: `HKLM\SOFTWARE\WOW6432Node\Microsoft\XNA\Framework\v4.0`.
   The adapter reads `Installed` there through `registry.WOW64_32KEY`. It
   installs with `msiexec /i xnafx40_redist.msi /quiet /norestart`.
+- **Repair puts XNA back even when the key is there.** A start is refused
+  while the key is missing, so the XNA exit hint ("Click Repair") can only
+  appear when Windows lists XNA but it doesn't work. The usual install
+  would see the key and do nothing, and a quiet `msiexec /i` of a package
+  that is already installed changes nothing either. So a repair with the
+  key present runs `msiexec /i xnafx40_redist.msi REINSTALL=ALL
+  REINSTALLMODE=vamus /quiet /norestart` (Windows Installer's documented
+  reinstall properties: every feature; run from this package and cache it
+  again, every file whatever its version, the HKLM and HKCU registry
+  entries, the shortcuts), then checks the key again. Without the key a
+  repair is the usual install, since REINSTALL only reinstalls what is
+  already there. A repair therefore asks for administrator rights once
+  more on Windows, whatever it was clicked for. Seen only in the docs so
+  far; the Windows real-server cell checks it (11).
 - The Terraria wiki's Server page lists ".NET Framework 4.0" and "XNA
   Framework" as the Windows server's requirements
   (https://terraria.wiki.gg/wiki/Server, read 2026-11-26).
@@ -344,14 +358,16 @@ The realserver-tagged `TestRealServer` (run by the matrix from
 `realserver.json`) installs, makes a small world, checks the server answers
 on its TCP port and logs `PortInUse` for TCP and UDP ("FACTS:" lines), saves
 with the console, stops with `exit` (the world file newer), starts again,
-takes over and stops with Ctrl+C, and loads the world again. It passed on
-Linux on 2026-11-26 against the real 1.4.6.1 server (Linux build). Still to
-see on the runners:
+takes over and stops with Ctrl+C, and loads the world again. On Windows it
+then takes XNA's main file out of the global assembly cache and repairs XNA
+(the "XNA repair" step). It passed on Linux on 2026-11-26 against the real
+1.4.6.1 server (Linux build). Still to see on the runners:
 
 - Windows: XNA's silent install through `install.EnsurePrereq`, the server
   starting with it, the Ctrl+C step ending it (and whether it saves), the
-  console lines being the same as on Linux, and `PortInUse` for TCP and
-  UDP.
+  console lines being the same as on Linux, `PortInUse` for TCP and UDP,
+  and the repair's reinstall over an installed XNA (msiexec's exit code,
+  the key still there, the removed file back; "FACTS:" lines).
 - macOS (Intel): the program starting with Dir and DYLD_LIBRARY_PATH as
   above, the GNS library loading, and `PortInUse` for TCP and UDP.
 

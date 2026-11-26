@@ -15,11 +15,14 @@ package terraria
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"net"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -100,6 +103,43 @@ func TestRealServer(t *testing.T) {
 			t.Errorf("after loading the world again: %+v", st)
 		}
 		s.Stop()
+	})
+
+	// Repair over an XNA that Windows lists but that is damaged: the one
+	// state in which ExitHint sends the owner to Repair over an XNA error.
+	// Runs last, as it takes one of XNA's files away for a moment.
+	t.Run("XNA repair", func(t *testing.T) {
+		if runtime.GOOS != "windows" {
+			t.Skip("only the Windows server uses XNA")
+		}
+		if !haveXNA() {
+			t.Fatal("Windows doesn't list XNA after the install")
+		}
+		// Damage it: take its main file out of the global assembly cache.
+		// If Windows won't let the runner, the repair still runs.
+		root := os.Getenv("SystemRoot")
+		found, _ := filepath.Glob(filepath.Join(root, "Microsoft.NET", "assembly", "GAC_*", "Microsoft.Xna.Framework", "*", "Microsoft.Xna.Framework.dll"))
+		removed := ""
+		for _, f := range found {
+			if err := os.Remove(f); err != nil {
+				t.Logf("FACTS: couldn't remove %s for the repair check: %v", f, err)
+				continue
+			}
+			removed = f
+			break
+		}
+		t.Logf("FACTS: XNA's main file: %q, removed %q", found, removed)
+		var steps []string
+		err := installXNA(context.Background(), true, func(p game.Progress) { steps = append(steps, p.Step) })
+		t.Logf("FACTS: XNA repair: %v; listed after: %v; steps %q", err, haveXNA(), steps)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if removed != "" {
+			if _, err := os.Stat(removed); err != nil {
+				t.Errorf("the repair didn't put back %s: %v", removed, err)
+			}
+		}
 	})
 }
 

@@ -46,8 +46,11 @@ type Game struct{}
 func (Game) Info() game.Info {
 	return game.Info{
 		ID: ID, Name: "Terraria", Short: "Terraria", Letter: "T", Color: "#2c7fb8", Command: ID,
-		// Its section in the spec is 5.3; Valheim is 0.
-		Order: 3,
+		// The catalog lists the games in the spec's order, ten apart:
+		// section 5.n is (n-1)*10, so Valheim (5.1) is 0, Minecraft (5.2)
+		// is 10 and Terraria (5.3) is 20. The gaps leave room for a game
+		// placed between two others later without renumbering.
+		Order: 20,
 		// Preview until its real-server cells are green on Windows and the
 		// Intel Mac (spec 8.2).
 		Stage: game.Preview,

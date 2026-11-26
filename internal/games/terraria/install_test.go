@@ -5,6 +5,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -146,14 +149,17 @@ func (f *fakeSite) count() int {
 }
 
 // useSite points the adapter at f for the test, and stands in for XNA's
-// installer on Windows.
-func useSite(t *testing.T, f *fakeSite) *int {
+// installer on Windows. It returns the XNA calls' repair flags, in order.
+func useSite(t *testing.T, f *fakeSite) *[]bool {
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
 	savedSite, savedXNA := site, ensureXNA
 	site = srv.URL
-	xnaCalls := 0
-	ensureXNA = func(context.Context, func(game.Progress)) error { xnaCalls++; return nil }
+	var xnaCalls []bool
+	ensureXNA = func(_ context.Context, repair bool, _ func(game.Progress)) error {
+		xnaCalls = append(xnaCalls, repair)
+		return nil
+	}
 	t.Cleanup(func() { site, ensureXNA = savedSite, savedXNA })
 	return &xnaCalls
 }
@@ -203,8 +209,8 @@ func TestInstall(t *testing.T) {
 	if got := site.count(); got != 1 {
 		t.Errorf("%d downloads", got)
 	}
-	if runtime.GOOS == "windows" && *xnaCalls != 1 {
-		t.Errorf("XNA was checked %d times, want once", *xnaCalls)
+	if runtime.GOOS == "windows" && fmt.Sprint(*xnaCalls) != "[false]" {
+		t.Errorf("XNA calls (repair flags) %v, want one, not a repair", *xnaCalls)
 	}
 	if !strings.Contains(strings.Join(steps, "\n"), "Downloading the Terraria server 1.4.6.1") {
 		t.Errorf("progress steps: %q", steps)
@@ -226,6 +232,10 @@ func TestInstall(t *testing.T) {
 	}
 	if _, err := os.Stat(program); err != nil || site.count() != 2 {
 		t.Errorf("the repair: %v, %d downloads", err, site.count())
+	}
+	// Only the repair puts XNA back (TestXNARepair has how).
+	if runtime.GOOS == "windows" && fmt.Sprint(*xnaCalls) != "[false false true]" {
+		t.Errorf("XNA calls (repair flags) %v, want the repair's last", *xnaCalls)
 	}
 }
 
@@ -314,5 +324,104 @@ func TestXNAPrereq(t *testing.T) {
 		!strings.HasPrefix(p.URL, "https://download.microsoft.com/") || !strings.HasSuffix(p.URL, "/xnafx40_redist.msi") ||
 		strings.Join(p.Args, " ") != "/quiet /norestart" || p.Installed == nil {
 		t.Errorf("prereq %+v", p)
+	}
+}
+
+// TestXNARepair: a repair installs XNA again even though Windows lists it,
+// because that is the only state in which ExitHint sends the owner to
+// Repair over an XNA error (a start is refused while XNA isn't listed).
+// Without a repair, or with XNA not listed, it is the usual install.
+func TestXNARepair(t *testing.T) {
+	listed := true
+	savedHave, savedEnsure := haveXNA, ensurePrereq
+	haveXNA = func() bool { return listed }
+	var got []install.Prereq
+	ensurePrereq = func(_ context.Context, p install.Prereq, _ func(game.Progress)) error {
+		got = append(got, p)
+		return nil
+	}
+	t.Cleanup(func() { haveXNA, ensurePrereq = savedHave, savedEnsure })
+	ctx := context.Background()
+	plain := func(p install.Prereq) bool {
+		return p.Installed != nil && strings.Join(p.Args, " ") == "/quiet /norestart" && p.URL == xnaPrereq.URL
+	}
+
+	// Listed, no repair: the usual install, whose Installed check skips it.
+	if err := installXNA(ctx, false, nil); err != nil || len(got) != 1 || !plain(got[0]) {
+		t.Fatalf("install with XNA listed: %v, %+v", err, got)
+	}
+	// Listed, a repair: no Installed check (so it isn't skipped), and the
+	// properties that make msiexec reinstall an installed package.
+	got = nil
+	if err := installXNA(ctx, true, nil); err != nil || len(got) != 1 {
+		t.Fatalf("repair with XNA listed: %v, %+v", err, got)
+	}
+	r := got[0]
+	if r.Installed != nil || strings.Join(r.Args, " ") != "REINSTALL=ALL REINSTALLMODE=vamus /quiet /norestart" ||
+		r.URL != xnaPrereq.URL || r.Hash != xnaPrereq.Hash || r.Name != xnaPrereq.Name {
+		t.Errorf("the repair's installer: %+v", r)
+	}
+	if strings.Join(xnaPrereq.Args, " ") != "/quiet /norestart" || xnaPrereq.Installed == nil {
+		t.Errorf("the repair changed the usual install: %+v", xnaPrereq)
+	}
+	// Not listed, a repair: REINSTALL would install nothing on a computer
+	// without XNA, so it is the usual install.
+	listed, got = false, nil
+	if err := installXNA(ctx, true, nil); err != nil || len(got) != 1 || !plain(got[0]) {
+		t.Errorf("repair with XNA not listed: %v, %+v", err, got)
+	}
+	// A repair after which Windows no longer lists XNA is an error.
+	listed = true
+	ensurePrereq = func(context.Context, install.Prereq, func(game.Progress)) error {
+		listed = false
+		return nil
+	}
+	if err := installXNA(ctx, true, nil); err == nil || !strings.Contains(err.Error(), "doesn't list") {
+		t.Errorf("a repair that left XNA unlisted: %v", err)
+	}
+}
+
+// TestXNARepairRunsInstaller goes through the real install.EnsurePrereq,
+// with the installer served from here: with XNA listed, the usual install
+// downloads nothing, and the repair downloads the installer and goes on to
+// run it. On Linux running it as administrator is "not on this computer",
+// which is how the test sees it got that far; on Windows and macOS it
+// would really ask for administrator rights, so it runs on Linux only.
+func TestXNARepairRunsInstaller(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("on Windows and macOS this would really run an installer as administrator")
+	}
+	body := []byte("a stand-in for xnafx40_redist.msi")
+	sum := sha256.Sum256(body)
+	var mu sync.Mutex
+	served := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		served++
+		mu.Unlock()
+		w.Write(body)
+	}))
+	downloads := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return served
+	}
+	t.Cleanup(srv.Close)
+	savedHave, savedEnsure := haveXNA, ensurePrereq
+	haveXNA = func() bool { return true }
+	ensurePrereq = func(ctx context.Context, p install.Prereq, step func(game.Progress)) error {
+		p.URL = srv.URL + "/xnafx40_redist.msi"
+		p.Hash = install.Hash{Algo: "sha256", Hex: hex.EncodeToString(sum[:])}
+		return install.EnsurePrereq(ctx, p, step)
+	}
+	t.Cleanup(func() { haveXNA, ensurePrereq = savedHave, savedEnsure })
+	ctx := context.Background()
+
+	if err := installXNA(ctx, false, nil); err != nil || downloads() != 0 {
+		t.Fatalf("the usual install with XNA listed: %v, %d downloads", err, downloads())
+	}
+	err := installXNA(ctx, true, nil)
+	if err == nil || !strings.Contains(err.Error(), "can't install it on this computer") || downloads() != 1 {
+		t.Errorf("the repair didn't get to running the installer: %v, %d downloads", err, downloads())
 	}
 }
