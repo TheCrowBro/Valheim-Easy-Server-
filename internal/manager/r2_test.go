@@ -414,13 +414,48 @@ func TestStatusWhileThingsChange(t *testing.T) {
 // Saving the settings while the server starts is safe: a save replaces the
 // legacy instance's folders (the owner can move the server and save
 // folders), and the start reads them to name its log file and to prune old
-// logs (run with -race).
+// logs (run with -race). The saves don't stop, restart or fail the start.
+//
+// The saves go on, back to back, until the start has launched the server,
+// which it does after naming the log (the second goroutine prunes the logs
+// all the while); only then does the test wait for the server. It never
+// times the start while the saves go on: a save holds the manager's lock
+// while it flushes settings.json to the disk, which on a Mac is a full
+// flush of the drive (F_FULLFSYNC) and on a busy CI Mac can take hundreds
+// of milliseconds, and the start takes turns at that lock with the saves,
+// so there a start under this load can take many times as long as usual
+// (build 33 saved the same way). Nobody saves like this in real use.
 func TestSettingsSaveDuringStart(t *testing.T) {
 	env := setup(t)
 	m := env.m
 	install(t, m)
+	inst := m.legacy()
+
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
+	var once sync.Once
+	stopLoad := func() { once.Do(func() { close(stop); wg.Wait() }) }
+	var start *Job // the start's job
+	startEnded := func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return start == nil || start.Finished != nil
+	}
+	// Cleanups run last first, so this one runs before setup's, which
+	// closes the manager, and before the test's folder is removed: nothing
+	// may still be saving there, and the server must have exited.
+	t.Cleanup(func() {
+		stopLoad()
+		waitFor(t, "the start to end", time.Minute, startEnded)
+		if m.ForceStop() == nil {
+			waitFor(t, "the server to exit", 30*time.Second, func() bool {
+				m.mu.Lock()
+				defer m.mu.Unlock()
+				return inst.run == nil
+			})
+		}
+	})
+
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
@@ -445,19 +480,53 @@ func TestSettingsSaveDuringStart(t *testing.T) {
 			case <-stop:
 				return
 			default:
-				m.pruneLogs(m.legacy())
+				m.pruneLogs(inst)
 				m.CurrentLogPath()
 			}
 		}
 	}()
+
 	if err := m.StartServer(); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, "server online", 20*time.Second, func() bool { return m.Status().State == StateOnline })
-	close(stop)
-	wg.Wait()
+	m.mu.Lock()
+	start = inst.job // set before StartServer returns
+	m.mu.Unlock()
+	// Only a guard against a hang, not a time the start must keep to.
+	waitFor(t, "the start to launch the server", 5*time.Minute, func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return inst.run != nil || start.Finished != nil
+	})
+	stopLoad()
+
+	// With the saves over, the start finishes as usual.
+	waitFor(t, "the start to end", 2*time.Minute, startEnded)
+	m.mu.Lock()
+	failed := start.Error
+	m.mu.Unlock()
+	if failed != "" {
+		t.Fatalf("the start failed: %s", failed)
+	}
+	// Online, and never stopped on the way (a stop or a restart would have
+	// left how it ended).
+	if st := m.Status(); st.State != StateOnline || st.LastExit != nil {
+		t.Fatalf("state %s, last exit %+v after the start, want online and none", st.State, st.LastExit)
+	}
 	if got := m.CurrentLogPath(); filepath.Dir(got) != m.Paths().Logs {
 		t.Fatalf("log %s isn't in %s", got, m.Paths().Logs)
+	}
+
+	// Stopped the usual way, so it has exited before the test's folder,
+	// where it writes its log and world, is removed.
+	if err := m.StopServer(); err != nil {
+		t.Fatal(err)
+	}
+	if job := waitJob(t, m, currentJobID(m)); job.Kind != "stop" || job.Error != "" {
+		t.Fatalf("stop: %+v", job)
+	}
+	if st := m.Status(); st.State != StateStopped {
+		t.Fatalf("state %s after the stop, want stopped", st.State)
 	}
 }
 
