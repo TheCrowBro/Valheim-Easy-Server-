@@ -14,7 +14,10 @@ the safety net for the rebuild: the new code has to give the same answers.
   a server log (the Log page, the activity feed, who's online, the join
   code, and the records kept afterwards).
 - `status.json`: every key `/api/status` has, with its JSON type.
-- `routes.json`: how every route of the control panel answers.
+- `routes.json`: how every route of the control panel answers, as a
+  release answers: the test gives the app a stand-in for the JetKVM's
+  waker, which every release carries, so `GET /api/jetkvm` has no
+  `missing` whether or not this build has the real one.
 
 `../legacy/` holds each file the app keeps in its data folder, as bed004b
 writes it.

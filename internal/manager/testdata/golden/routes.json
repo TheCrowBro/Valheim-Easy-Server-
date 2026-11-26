@@ -581,7 +581,6 @@
       "$.canPost": "bool",
       "$.guild": "bool",
       "$.key": "string",
-      "$.missing": "string",
       "$.on": "bool",
       "$.token": "bool"
     }

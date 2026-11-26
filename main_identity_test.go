@@ -261,13 +261,147 @@ func TestProgramIdentityUnchanged(t *testing.T) {
 		t.Fatalf("the build workflow moved: %v", err)
 	}
 	for _, s := range []string{
-		"ValheimEasyServer.exe", "ValheimEasyServer.exe.sha256", "ValheimEasyServer-windows.zip",
-		"ValheimEasyServer-mac", "ValheimEasyServer-mac.sha256", "ValheimEasyServer-mac.zip",
 		"Valheim Easy Server.app", "Contents/MacOS/ValheimEasyServer",
-		"build-$RUN_NUMBER", "internal/jetkvm/dist/valheim-waker-armv7.gz",
+		"internal/jetkvm/dist/valheim-waker-armv7.gz",
 	} {
 		if !strings.Contains(string(wf), s) {
 			t.Errorf("build.yml no longer has %q", s)
+		}
+	}
+	for _, p := range releaseJobProblems(string(wf)) {
+		t.Errorf("build.yml: %s", p)
+	}
+}
+
+// releaseFiles are the files every release has, in the order build.yml
+// lists them. Installed copies update only from a build-N release that has
+// their program and its checksum (selfupdate.Latest), and the README sends
+// people to the zips.
+var releaseFiles = []string{
+	"ValheimEasyServer-windows.zip", "ValheimEasyServer.exe", "ValheimEasyServer.exe.sha256",
+	"ValheimEasyServer-mac.zip", "ValheimEasyServer-mac", "ValheimEasyServer-mac.sha256",
+}
+
+// releaseJob is build.yml's release job: from its "  release:" line to the
+// next job, or the end of the file.
+func releaseJob(wf string) string {
+	wf = strings.ReplaceAll(wf, "\r\n", "\n") // as Git may check it out on Windows
+	i := strings.Index(wf, "\n  release:\n")
+	if i < 0 {
+		return ""
+	}
+	job := wf[i+1:]
+	if next := regexp.MustCompile(`\n  [A-Za-z0-9_-]+:[ \t]*\n`).FindStringIndex(job); next != nil {
+		job = job[:next[0]+1]
+	}
+	return job
+}
+
+// releaseJobProblems lists what in build.yml's release job is no longer
+// what installed copies need: the tag, the build number it carries, the
+// checksum files and the published file lists. The same names appear in
+// other jobs too, so these are checked in the release job itself, which
+// is what publishes them. The rest of the job, and the other jobs, may
+// change (the multi-game CI adds steps).
+func releaseJobProblems(wf string) []string {
+	job := releaseJob(wf)
+	if job == "" {
+		return []string{`the release job ("  release:") is gone`}
+	}
+	var out []string
+	lines := map[string]bool{}
+	for _, l := range strings.Split(job, "\n") {
+		lines[strings.Join(strings.Fields(l), " ")] = true
+	}
+	for _, l := range []string{
+		// The run number, as the build-N tag installed copies look for.
+		"RUN_NUMBER: ${{ github.run_number }}",
+		`tag="build-$RUN_NUMBER"`,
+		// Each checksum file is the sum of its own program.
+		"sha256sum ValheimEasyServer.exe > ValheimEasyServer.exe.sha256",
+		"sha256sum ValheimEasyServer-mac > ValheimEasyServer-mac.sha256",
+	} {
+		if !lines[l] {
+			out = append(out, "the release job has no line "+l)
+		}
+	}
+
+	// A build's release is published from $files under $tag.
+	want := strings.Join(releaseFiles, " ")
+	files := regexp.MustCompile(`(?m)^\s*files="([^"]*)"\s*$`).FindAllStringSubmatch(job, -1)
+	if len(files) != 1 {
+		out = append(out, fmt.Sprintf(`the release job has %d files="…" lines, want one`, len(files)))
+	} else if got := strings.Join(strings.Fields(files[0][1]), " "); got != want {
+		out = append(out, fmt.Sprintf(`the release job publishes files="%s", want files="%s"`, got, want))
+	}
+	for _, cmd := range []string{`gh release create "$tag" $files `, `gh release upload "$tag" $files `} {
+		if !strings.Contains(job, cmd) {
+			out = append(out, "the release job no longer runs "+strings.TrimSpace(cmd))
+		}
+	}
+
+	// A version tag's release names the same files itself.
+	version := regexp.MustCompile(`gh release create "\$TAG" ([^\n]*)`).FindAllStringSubmatch(job, -1)
+	if len(version) != 1 {
+		out = append(out, fmt.Sprintf(`the release job has %d gh release create "$TAG" lines, want one`, len(version)))
+	} else {
+		var got []string
+		for _, f := range strings.Fields(version[0][1]) {
+			if strings.HasPrefix(f, "--") {
+				break
+			}
+			got = append(got, f)
+		}
+		if strings.Join(got, " ") != want {
+			out = append(out, fmt.Sprintf(`a version's release publishes %q, want %q`, strings.Join(got, " "), want))
+		}
+	}
+	return out
+}
+
+// TestReleaseJobCheck: releaseJobProblems notices a change made only in the
+// release job, where the same name elsewhere in build.yml would hide it from
+// a search of the whole file.
+func TestReleaseJobCheck(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join(".github", "workflows", "build.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wf := strings.ReplaceAll(string(b), "\r\n", "\n")
+	job := releaseJob(wf)
+	if job == "" {
+		t.Fatal("build.yml has no release job")
+	}
+	for _, c := range []struct{ what, old, new string }{
+		{"the Windows checksum renamed", "ValheimEasyServer.exe.sha256", "EasyGameServer.exe.sha256"},
+		{"the Windows program renamed", "ValheimEasyServer.exe ", "EasyGameServer.exe "},
+		{"the Mac program renamed", "ValheimEasyServer-mac ", "EasyGameServer-mac "},
+		{"the Mac checksum left out", " ValheimEasyServer-mac.sha256", ""},
+		{"the tag renamed", `tag="build-$RUN_NUMBER"`, `tag="egs-$RUN_NUMBER"`},
+		{"the build number changed", "${{ github.run_number }}", "${{ github.run_id }}"},
+		{"the checksums swapped", "sha256sum ValheimEasyServer-mac >", "sha256sum ValheimEasyServer.exe >"},
+	} {
+		changed := strings.ReplaceAll(job, c.old, c.new)
+		if changed == job {
+			t.Errorf("%s: the release job has no %q to change", c.what, c.old)
+			continue
+		}
+		if len(releaseJobProblems(strings.Replace(wf, job, changed, 1))) == 0 {
+			t.Errorf("%s only in the release job: not noticed", c.what)
+		}
+	}
+	// The rest may change: a step added to the release job (the multi-game
+	// CI adds one), or a job after it that publishes something else.
+	for what, changed := range map[string]string{
+		"a step added to the release job": strings.Replace(wf, job, strings.Replace(job, "    steps:\n",
+			"    steps:\n      - name: Check\n        run: gh run list --workflow real-server.yml\n", 1), 1),
+		"a job after the release job": strings.TrimRight(wf, "\n") +
+			"\n  extra:\n    runs-on: ubuntu-latest\n    steps:\n      - run: gh release create \"$TAG\" other.zip --repo x\n",
+	} {
+		if changed == wf {
+			t.Errorf("%s: build.yml didn't change", what)
+		} else if p := releaseJobProblems(changed); len(p) > 0 {
+			t.Errorf("%s: %q", what, p)
 		}
 	}
 }

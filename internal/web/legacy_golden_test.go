@@ -312,7 +312,14 @@ type routesServer struct {
 
 // newRoutesServer is a control panel whose manager stands in for
 // everything outside the app: a pretend install, Discord, resting, network
-// adapters. Nothing it's asked to do reaches this computer's settings.
+// adapters, the JetKVM's waker. Nothing it's asked to do reaches this
+// computer's settings.
+//
+// The waker stand-in keeps the answers the same whether or not this build
+// carries the real waker: CI builds it into internal/jetkvm/dist before the
+// Linux tests, a developer's copy usually doesn't have it, and without it
+// GET /api/jetkvm gains "missing". With the stand-in the panel answers as
+// every release does. It's never sent anywhere: no JetKVM is asked.
 func newRoutesServer(t *testing.T) *routesServer {
 	t.Helper()
 	dir := t.TempDir()
@@ -334,6 +341,7 @@ func newRoutesServer(t *testing.T) *routesServer {
 			return []platform.NetAdapter{{Name: "Ethernet", Description: "Stand-in", MAC: "3C:07:54:5A:21:9F",
 				IPv4: []string{"192.168.1.20"}, Wired: true, Connected: true, WakeArmed: true}}
 		},
+		WakerBinary: func() ([]byte, error) { return []byte("stand-in waker"), nil },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -536,6 +544,13 @@ func TestLegacyRoutes(t *testing.T) {
 		for _, p := range shapeProblems(w.Shape, g.Shape, func(string) bool { return true }) {
 			t.Errorf("%s %s: %s", what, w.Body, p)
 		}
+	}
+
+	// GET /api/jetkvm above had the stand-in waker, so it had no "missing".
+	// A copy without the waker says why there, and the old panel shows that
+	// text and greys out Install, so it stays a string under that name.
+	if b, err := json.Marshal(manager.WakerView{Missing: "x"}); err != nil || shapeOf(t, b)["$.missing"] != "string" {
+		t.Errorf("GET /api/jetkvm no longer says in \"missing\" why the waker can't be installed: %s %v", b, err)
 	}
 
 	// The routes that change this computer (its firewall, network adapter
