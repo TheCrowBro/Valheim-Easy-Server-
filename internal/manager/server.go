@@ -714,6 +714,11 @@ func (m *Manager) caughtUp(run *serverRun) {
 	inst := run.inst
 	m.mu.Lock()
 	run.replaying = false // caught up with the existing log
+	// Tell the Monitor too, so what no line says (such as Valheim's "ready
+	// after a while" fallback) works straight away, not at the next line.
+	if r, ok := run.mon.(replayer); ok {
+		r.Replaying(false)
+	}
 	// Remember players who joined while this app was closed.
 	for _, p := range run.state().Players {
 		if inst.known[p.Name] == nil {
