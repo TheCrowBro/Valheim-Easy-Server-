@@ -1,0 +1,25 @@
+# How the app starts the Enshrouded server (spec 5.7): its program, with no
+# arguments, from its own folder; everything else is in enshrouded_server.json.
+# Paths are relative to the instance's folder, games/enshrouded.
+
+## A new world
+exe: <instance>/server/enshrouded_server.exe
+dir: <instance>/server
+args: (none)
+env: (none)
+output: GameLog
+log: <instance>/logs/game/enshrouded_server.log
+console: no
+readyWait: 10m0s
+record: server Enshrouded server, port 15637, ports map[query:15637], password set true
+
+## The same world later, renamed, on port 15700
+exe: <instance>/server/enshrouded_server.exe
+dir: <instance>/server
+args: (none)
+env: (none)
+output: GameLog
+log: <instance>/logs/game/enshrouded_server.log
+console: no
+readyWait: 5m0s
+record: server Friends' Embervale, port 15700, ports map[query:15700], password set true

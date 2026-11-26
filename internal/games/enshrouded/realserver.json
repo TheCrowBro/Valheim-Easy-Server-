@@ -1,0 +1,7 @@
+{
+  "os": ["windows-latest"],
+  "onDemand": false,
+  "timeoutMinutes": 90,
+  "package": "./internal/games/enshrouded/",
+  "run": "TestRealServer"
+}
