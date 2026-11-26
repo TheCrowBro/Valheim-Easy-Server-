@@ -361,6 +361,17 @@ jobs:
             echo "::error::$SHA isn't a merge, so nothing shows the real servers were checked on it. Release by merging the tested branch with git merge --no-ff (docs/dev/multigame/spec.md, 8.2)."
             exit 1
           fi
+          # What's released must be exactly what was tested. A --no-ff merge
+          # onto a default branch that hasn't moved since the last gate has
+          # the merged-in commit's files. A plain merge that fast-forwards
+          # would push the integration branch's own newest commit, whose
+          # second parent is only one stream's branch, so that's refused.
+          tree=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA" --jq '.commit.tree.sha')
+          tested=$(gh api "repos/$GITHUB_REPOSITORY/commits/$parent" --jq '.commit.tree.sha')
+          if [ -z "$tree" ] || [ "$tree" != "$tested" ]; then
+            echo "::error::$SHA's files aren't the same as those of $parent, the commit merged in, so they aren't what the real servers were checked on. Release by merging the tested branch with git merge --no-ff onto the default branch as it was at the last release (docs/dev/multigame/spec.md, 8.2)."
+            exit 1
+          fi
           runs=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow real-server.yml --commit "$parent" --limit 100 --json conclusion,event,url)
           echo "real-server.yml's runs on $parent: $runs"
           passed=$(echo "$runs" | jq -r '[.[] | select(.conclusion == "success" and .event == "workflow_dispatch")][0].url // ""')
