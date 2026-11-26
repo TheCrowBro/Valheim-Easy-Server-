@@ -1,0 +1,23 @@
+[34m[2026-11-26 20:23:19] (DEBUG) Started logging to: /home/owner/EGS/games/necesse/saves/latest-server-log.txt
+[39m[2026-11-26 20:23:19] Launched game with arguments: -nogui -datadir /home/owner/EGS/games/necesse/saves -world RealCheck -port 14161 -slots 10 -password  -motd a -logging 0
+[34m[2026-11-26 20:23:20] (DEBUG) Initializing DesktopPlatform
+[39m[2026-11-26 20:23:20] Loading dedicated server on version 1.3.3.
+[39m[2026-11-26 20:23:25] Loading existing world at /home/owner/EGS/games/necesse/saves/saves/worlds/RealCheck.zip
+[39m[2026-11-26 20:23:25] Started lan socket at port 51868
+[39m[2026-11-26 20:23:25] Started server using port 14161 with 10 slots on world "RealCheck.zip", game version 1.3.3.
+[39m[2026-11-26 20:23:25] Found 0 saved players.
+[39m[2026-11-26 20:23:25] Local address: 127.0.0.1:14161
+[39m[2026-11-26 20:23:25] Type help for list of commands.
+[39m[2026-11-26 20:23:40] Suggesting garbage collection due to empty server...
+[39m[2026-11-26 20:24:00] Suggesting garbage collection due to empty server and unloaded levels...
+[39m[2026-11-26 20:39:19] > stop
+[39m[2026-11-26 20:39:19] Starting world save
+[39m[2026-11-26 20:39:20] Completed world save before stopping server
+[39m[2026-11-26 20:39:20] Stopped server on 2026/11/26 20:39:20 with code: SERVER_STOPPED
+[39m[2026-11-26 20:39:20] World time: 19, day 0
+[39m[2026-11-26 20:39:20] Game time: 19990
+[39m[2026-11-26 20:39:20] Total ticks: 19093
+[39m[2026-11-26 20:39:20] Received: 0 B (0 packets)
+[39m[2026-11-26 20:39:20] Sent: 0 B (0 packets)
+[39m[2026-11-26 20:39:20] Server has stopped
+[39m[2026-11-26 20:39:20] Exiting in 2 seconds...

@@ -1,0 +1,75 @@
+First time launched
+Cache version was not correct, deleted version cache files.
+[34m[2026-11-26 20:17:36] (DEBUG) Started logging to: /home/owner/EGS/games/necesse/saves/latest-server-log.txt
+[39m[2026-11-26 20:17:36] Launched game with arguments: -nogui -datadir /home/owner/EGS/games/necesse/saves -world RealCheck -port 14159 -slots 10 -password  -motd "Necesse at home" -logging 0
+[34m[2026-11-26 20:17:36] (DEBUG) Initializing DesktopPlatform
+[39m[2026-11-26 20:17:37] Could not load settings file, does not exist. Creating new default settings.cfg
+[39m[2026-11-26 20:17:37] Could not load server settings file, does not exist. Creating new default server.cfg
+[39m[2026-11-26 20:17:37] Loading dedicated server on version 1.3.3.
+[39m[2026-11-26 20:17:40] Creating new world at /home/owner/EGS/games/necesse/saves/saves/worlds/RealCheck.zip
+[39m[2026-11-26 20:17:40] Creating save with name: RealCheck.zip
+[39m[2026-11-26 20:17:40] Could not find world file, creating new one: RealCheck.zip
+[39m[2026-11-26 20:17:40] Could not find Level: RealCheck/levels/surface.dat file for RealCheck.zip
+[39m[2026-11-26 20:17:40] Finding spawn position...
+[2026-11-26 20:17:40] This may take a moment
+[39m[2026-11-26 20:17:40] Starting to load level presets region surface (0x0)
+[39m[2026-11-26 20:17:41] Starting to load level presets region surface (-64x-64)
+[39m[2026-11-26 20:17:41] Starting to load level presets region surface (-128x-64)
+[39m[2026-11-26 20:17:41] Starting to load level presets region surface (-128x0)
+[39m[2026-11-26 20:17:42] Starting to load level presets region surface (-64x0)
+[39m[2026-11-26 20:17:42] Starting to load level presets region surface (0x-64)
+[39m[2026-11-26 20:17:42] Starting to load level presets region surface (64x64)
+[39m[2026-11-26 20:17:42] Starting to load level presets region surface (-64x64)
+[39m[2026-11-26 20:17:42] Starting to load level presets region surface (64x-64)
+[39m[2026-11-26 20:17:42] Starting to load level presets region surface (-64x-128)
+[39m[2026-11-26 20:17:42] Starting to load level presets region surface (0x-128)
+[39m[2026-11-26 20:17:42] Starting to load level presets region surface (64x-128)
+[39m[2026-11-26 20:17:42] Starting to load level presets region surface (64x0)
+[39m[2026-11-26 20:17:43] Starting to load level presets region surface (0x64)
+[39m[2026-11-26 20:17:43] Starting to load level presets region surface (0x128)
+[39m[2026-11-26 20:17:43] Starting to load level presets region surface (64x128)
+[39m[2026-11-26 20:17:43] Starting to load level presets region surface (-64x128)
+[39m[2026-11-26 20:17:43] Starting to load level presets region surface (128x-64)
+[39m[2026-11-26 20:17:43] Starting to load level presets region surface (128x0)
+[39m[2026-11-26 20:17:43] Starting to load level presets region surface (128x64)
+[39m[2026-11-26 20:17:43] Starting to load level presets region surface (-128x-128)
+[39m[2026-11-26 20:17:43] Starting to load level presets region surface (128x128)
+[39m[2026-11-26 20:17:43] Starting to load level presets region surface (-128x128)
+[39m[2026-11-26 20:17:43] Starting to load level presets region surface (128x-128)
+[39m[2026-11-26 20:17:44] Starting to load level presets region surface (-64x-192)
+[39m[2026-11-26 20:17:44] Starting to load level presets region surface (0x-192)
+[39m[2026-11-26 20:17:44] Starting to load level presets region surface (64x-192)
+[39m[2026-11-26 20:17:44] Starting to load level presets region surface (-128x64)
+[39m[2026-11-26 20:17:44] Starting to load level presets region surface (192x-64)
+[39m[2026-11-26 20:17:44] Starting to load level presets region surface (192x0)
+[39m[2026-11-26 20:17:44] Found spawn tile at: 2712, -136
+[39m[2026-11-26 20:17:45] Started lan socket at port 55169
+[39m[2026-11-26 20:17:45] Started server using port 14159 with 10 slots on world "RealCheck.zip", game version 1.3.3.
+[39m[2026-11-26 20:17:45] Found 0 saved players.
+[39m[2026-11-26 20:17:45] Local address: 127.0.0.1:14159
+[39m[2026-11-26 20:17:45] Type help for list of commands.
+[39m[2026-11-26 20:18:00] Suggesting garbage collection due to empty server...
+[39m[2026-11-26 20:18:01] > help
+[39m[2026-11-26 20:18:01] Commands page 1 of 17 (Server):
+[39m[2026-11-26 20:18:01] allowcheats 
+[39m[2026-11-26 20:18:01] armorset [<player>] <setname>
+[39m[2026-11-26 20:18:01] ban <authentication/name>
+[39m[2026-11-26 20:18:01] bans 
+[39m[2026-11-26 20:18:01] buff [<player>] <buff> [<seconds>]
+[39m[2026-11-26 20:18:04] > players
+[39m[2026-11-26 20:18:04] Players online: 0/10
+[39m[2026-11-26 20:18:06] > save
+[39m[2026-11-26 20:18:06] Starting world save
+[39m[2026-11-26 20:18:06] Starting save...
+[39m[2026-11-26 20:18:08] Completed world save
+[39m[2026-11-26 20:18:16] > stop
+[39m[2026-11-26 20:18:16] Starting world save
+[39m[2026-11-26 20:18:19] Completed world save before stopping server
+[39m[2026-11-26 20:18:19] Stopped server on 2026/11/26 20:18:19 with code: SERVER_STOPPED
+[39m[2026-11-26 20:18:19] World time: 9, day 0
+[39m[2026-11-26 20:18:19] Game time: 9992
+[39m[2026-11-26 20:18:19] Total ticks: 667
+[39m[2026-11-26 20:18:19] Received: 0 B (0 packets)
+[39m[2026-11-26 20:18:19] Sent: 0 B (0 packets)
+[39m[2026-11-26 20:18:19] Server has stopped
+[39m[2026-11-26 20:18:19] Exiting in 2 seconds...

@@ -1,0 +1,32 @@
+First time launched
+Cache version was not correct, deleted version cache files.
+[34m[2026-11-26 20:16:18] (DEBUG) Started logging to: /root/.config/Necesse/latest-server-log.txt
+[39m[2026-11-26 20:16:18] Launched game with arguments: -nogui -help
+[34m[2026-11-26 20:16:18] (DEBUG) Initializing DesktopPlatform
+[39m[2026-11-26 20:16:19] Could not load settings file, does not exist. Creating new default settings.cfg
+[39m[2026-11-26 20:16:19] Available parameters:
+[39m[2026-11-26 20:16:19] -help - Shows this help menu
+[39m[2026-11-26 20:16:19] -nogui - Runs the server in terminal instead of opening the GUI
+[39m[2026-11-26 20:16:19] -settings <file> - Settings file path to load server settings from
+[39m[2026-11-26 20:16:19] Parameters not given will be loaded from server settings file
+[39m[2026-11-26 20:16:19] -world <name> - World to load instead of being asked which to load
+[39m[2026-11-26 20:16:19] -port <port> - Port to host at
+[39m[2026-11-26 20:16:19] -slots <slots> - Amount of player slots
+[39m[2026-11-26 20:16:19] -owner <name> - Anyone that connects with this name, will get owner permissions
+[39m[2026-11-26 20:16:19] -motd <message> - Sets the message of the day. Use \n for new line
+[39m[2026-11-26 20:16:19] -password <password> - The password for the server, blank for no password
+[39m[2026-11-26 20:16:19] -pausewhenempty <1/0> - Pauses the world when there are no players in server, defaults 0
+[39m[2026-11-26 20:16:19] -giveclientspower <1/0> - If the server should check client actions, a kind of anti-cheat. When off it will give a much smoother experience for clients. Defaults off.
+[39m[2026-11-26 20:16:19] -logging <1/0> - If on the server will generate a log file for each session, defaults 1
+[39m[2026-11-26 20:16:19] -logs <folder> - What folder to place the logs, if logging is enabled
+[39m[2026-11-26 20:16:19] -zipsaves <1/0> - If saves should be compressed, defaults to 1
+[39m[2026-11-26 20:16:19] -language <language> - Sets the language of the server, only used for occasional messages in log
+[39m[2026-11-26 20:16:19] -ip <address> - Binds the server IP to the address
+[39m[2026-11-26 20:16:19] -datadir <path> - Sets the path where cache, latest log, saves etc. are stored. Defaults to Necesse folder in appdata on different platforms
+[39m[2026-11-26 20:16:19] -localdir - Same as -datadir, but uses the local directory the server is launched from
+[39m[2026-11-26 20:16:19] 
+[39m[2026-11-26 20:16:19] You can now exit
+[39m[2026-11-26 20:16:19] Could not load server settings file, does not exist. Creating new default server.cfg
+[34m[2026-11-26 20:16:19] (DEBUG) Started logging to: /root/.config/Necesse/logs/2026-11-26 20h16m19s.txt
+[39m[2026-11-26 20:16:19] Loading dedicated server on version 1.3.3.
+[39m[2026-11-26 20:16:21] Type a name for the world to create

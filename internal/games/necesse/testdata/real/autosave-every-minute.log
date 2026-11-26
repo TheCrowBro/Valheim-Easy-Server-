@@ -1,0 +1,41 @@
+[34m[2026-11-26 20:23:19] (DEBUG) Started logging to: /home/owner/EGS/games/necesse/saves/latest-server-log.txt
+[39m[2026-11-26 20:23:19] Launched game with arguments: -nogui -datadir /home/owner/EGS/games/necesse/saves -world RealCheck -port 14163 -slots 10 -password  -motd b -logging 0 -pausewhenempty 0
+[34m[2026-11-26 20:23:19] (DEBUG) Initializing DesktopPlatform
+[39m[2026-11-26 20:23:20] Loading dedicated server on version 1.3.3.
+[39m[2026-11-26 20:23:24] Loading existing world at /home/owner/EGS/games/necesse/saves/saves/worlds/RealCheck.zip
+[39m[2026-11-26 20:23:25] Started lan socket at port 55169
+[39m[2026-11-26 20:23:25] Started server using port 14163 with 10 slots on world "RealCheck.zip", game version 1.3.3.
+[39m[2026-11-26 20:23:25] Found 0 saved players.
+[39m[2026-11-26 20:23:25] Local address: 127.0.0.1:14163
+[39m[2026-11-26 20:23:25] Type help for list of commands.
+[39m[2026-11-26 20:24:00] Suggesting garbage collection due to empty server and unloaded levels...
+[39m[2026-11-26 20:24:25] Running an auto save with backup...
+[39m[2026-11-26 20:24:25] Starting world save
+[39m[2026-11-26 20:24:25] Reloaded file system in 438.70 us
+[39m[2026-11-26 20:24:25] Copying backup to path: /home/owner/EGS/games/necesse/saves/saves/worlds/LATEST_BACKUP1.zip
+[39m[2026-11-26 20:24:25] Finished backup
+[39m[2026-11-26 20:25:25] Auto save: Reloaded file system in 2.90 ms
+[39m[2026-11-26 20:26:25] Auto save: Reloaded file system in 2.16 ms
+[39m[2026-11-26 20:27:25] Auto save: Reloaded file system in 2.19 ms
+[39m[2026-11-26 20:28:25] Auto save: Reloaded file system in 2.36 ms
+[39m[2026-11-26 20:29:25] Auto save: Reloaded file system in 3.19 ms
+[39m[2026-11-26 20:30:25] Auto save: Reloaded file system in 2.28 ms
+[39m[2026-11-26 20:31:26] Auto save: Reloaded file system in 2.74 ms
+[39m[2026-11-26 20:32:26] Auto save: Reloaded file system in 2.04 ms
+[39m[2026-11-26 20:33:26] Auto save: Reloaded file system in 2.42 ms
+[39m[2026-11-26 20:34:26] Auto save: Reloaded file system in 2.26 ms
+[39m[2026-11-26 20:35:26] Auto save: Reloaded file system in 2.58 ms
+[39m[2026-11-26 20:36:26] Auto save: Reloaded file system in 2.74 ms
+[39m[2026-11-26 20:37:26] Auto save: Reloaded file system in 2.17 ms
+[39m[2026-11-26 20:38:26] Auto save: Reloaded file system in 1.87 ms
+[39m[2026-11-26 20:39:19] > stop
+[39m[2026-11-26 20:39:19] Starting world save
+[39m[2026-11-26 20:39:20] Completed world save before stopping server
+[39m[2026-11-26 20:39:20] Stopped server on 2026/11/26 20:39:20 with code: SERVER_STOPPED
+[39m[2026-11-26 20:39:20] World time: 4, day 1
+[39m[2026-11-26 20:39:20] Game time: 964377
+[39m[2026-11-26 20:39:20] Total ticks: 19095
+[39m[2026-11-26 20:39:20] Received: 0 B (0 packets)
+[39m[2026-11-26 20:39:20] Sent: 0 B (0 packets)
+[39m[2026-11-26 20:39:20] Server has stopped
+[39m[2026-11-26 20:39:20] Exiting in 2 seconds...

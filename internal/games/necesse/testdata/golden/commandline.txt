@@ -1,0 +1,63 @@
+# The command line the Plan gives the server's Java (<saves> is the instance's saves folder).
+
+## A new world with the defaults
+-Xmx2048M
+-XX:+UnlockExperimentalVMOptions
+-XX:+UseG1GC
+-XX:+ExplicitGCInvokesConcurrent
+-XX:G1NewSizePercent=20
+-XX:G1ReservePercent=20
+-XX:MaxGCPauseMillis=50
+-XX:G1HeapRegionSize=32M
+-jar
+Server.jar
+-nogui
+-datadir
+<saves>
+-world
+My World
+-port
+14159
+-slots
+10
+-password
+
+-motd
+Necesse server
+-logging
+0
+-zipsaves
+1
+-language
+en
+
+## With a password, a name with spaces, 4 players and 4 GB
+-Xmx4096M
+-XX:+UnlockExperimentalVMOptions
+-XX:+UseG1GC
+-XX:+ExplicitGCInvokesConcurrent
+-XX:G1NewSizePercent=20
+-XX:G1ReservePercent=20
+-XX:MaxGCPauseMillis=50
+-XX:G1HeapRegionSize=32M
+-jar
+Server.jar
+-nogui
+-datadir
+<saves>
+-world
+My World
+-port
+14160
+-slots
+4
+-password
+two words
+-motd
+Friday night
+-logging
+0
+-zipsaves
+1
+-language
+en

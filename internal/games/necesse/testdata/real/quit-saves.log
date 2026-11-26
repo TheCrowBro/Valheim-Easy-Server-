@@ -1,0 +1,21 @@
+[34m[2026-11-26 20:24:15] (DEBUG) Started logging to: /home/owner/EGS/games/necesse/saves/latest-server-log.txt
+[39m[2026-11-26 20:24:15] Launched game with arguments: -nogui -datadir /home/owner/EGS/games/necesse/saves -world Renamed -port 14165 -slots 10 -password  -motd r -logging 0
+[34m[2026-11-26 20:24:15] (DEBUG) Initializing DesktopPlatform
+[39m[2026-11-26 20:24:15] Loading dedicated server on version 1.3.3.
+[39m[2026-11-26 20:24:17] Loading existing world at /home/owner/EGS/games/necesse/saves/saves/worlds/Renamed.zip
+[39m[2026-11-26 20:24:17] Started lan socket at port 49745
+[39m[2026-11-26 20:24:17] Started server using port 14165 with 10 slots on world "Renamed.zip", game version 1.3.3.
+[39m[2026-11-26 20:24:17] Found 0 saved players.
+[39m[2026-11-26 20:24:17] Local address: 127.0.0.1:14165
+[39m[2026-11-26 20:24:17] Type help for list of commands.
+[39m[2026-11-26 20:24:29] > quit
+[39m[2026-11-26 20:24:29] Starting world save
+[39m[2026-11-26 20:24:30] Completed world save before stopping server
+[39m[2026-11-26 20:24:30] Stopped server on 2026/11/26 20:24:30 with code: SERVER_STOPPED
+[39m[2026-11-26 20:24:30] World time: 29, day 0
+[39m[2026-11-26 20:24:30] Game time: 29962
+[39m[2026-11-26 20:24:30] Total ticks: 249
+[39m[2026-11-26 20:24:30] Received: 0 B (0 packets)
+[39m[2026-11-26 20:24:30] Sent: 0 B (0 packets)
+[39m[2026-11-26 20:24:30] Server has stopped
+[39m[2026-11-26 20:24:30] Exiting in 2 seconds...
