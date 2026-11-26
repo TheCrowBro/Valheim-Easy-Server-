@@ -443,10 +443,17 @@ func TestSettingsSaveDuringStart(t *testing.T) {
 	}
 	// Cleanups run last first, so this one runs before setup's, which
 	// closes the manager, and before the test's folder is removed: nothing
-	// may still be saving there, and the server must have exited.
+	// may still be saving there, and the server must have exited (on
+	// Windows a server that is still running holds its log open, and the
+	// folder can't be removed).
+	//
+	// It forces the server to stop before it waits for the start: if the
+	// test failed because the server never came online, the start would
+	// otherwise go on waiting for it for many minutes (the game's ready
+	// wait, plus the manager's 5). The server exiting ends that wait at
+	// once. With no server running, ForceStop only returns an error.
 	t.Cleanup(func() {
 		stopLoad()
-		waitFor(t, "the start to end", time.Minute, startEnded)
 		if m.ForceStop() == nil {
 			waitFor(t, "the server to exit", 30*time.Second, func() bool {
 				m.mu.Lock()
@@ -454,6 +461,7 @@ func TestSettingsSaveDuringStart(t *testing.T) {
 				return inst.run == nil
 			})
 		}
+		waitFor(t, "the start to end", time.Minute, startEnded)
 	})
 
 	wg.Add(2)
