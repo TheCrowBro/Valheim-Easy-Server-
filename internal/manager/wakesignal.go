@@ -80,10 +80,9 @@ func (m *Manager) hearWakeSignals(conn net.PacketConn) {
 // wakePacketGame is the game a wake packet asks for: the instance id a
 // newer waker puts after the tag, or "" for a packet without one (an older
 // waker, or the KVM's own Wake-on-LAN button). It is the one place the
-// app reads it. Until wol.GameOf (stream SV, internal/wol/game.go) is
-// merged it reads no game in any packet, which is what this app has always
-// done; then this becomes wol.GameOf. Tests replace it.
-var wakePacketGame = func(packet []byte) string { return "" }
+// app reads it; a packet for another game (or one this version can't read)
+// is left for the copy of the app that runs that game. Tests replace it.
+var wakePacketGame = wol.GameOf
 
 // wakeSignal starts the server, unless it's running or busy, and keeps the
 // computer awake for a while: someone wants to play. The waker repeats its
