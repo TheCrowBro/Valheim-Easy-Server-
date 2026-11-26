@@ -1,0 +1,18 @@
+== defaults, a new world
+exe: <instance>/server/Engine/Binaries/Win64/FactoryServer-Win64-Shipping-Cmd
+args: FactoryGame -Port=7777 -ReliablePort=8888 -ini:Game:[/Script/Engine.GameSession]:MaxPlayers=4 -ini:GameUserSettings:[/Script/Engine.GameSession]:MaxPlayers=4 -log -unattended
+dir: <instance>/server/Engine/Binaries/Win64
+env (fake mode only): LOCALAPPDATA=<instance>/saves
+output: GameLog
+log: <instance>/server/FactoryGame/Saved/Logs/FactoryGame.log
+ready wait: 10m0s
+record: server Factory Friends, port 7777, password , ports {"game":7777,"reliable":8888}, secrets admin, extra {"newWorld":{"startingLocation":"Northern Forest"}}
+== ports 7800 and 8900, 8 players, a password
+exe: <instance>/server/Engine/Binaries/Win64/FactoryServer-Win64-Shipping-Cmd
+args: FactoryGame -Port=7800 -ReliablePort=8900 -ini:Game:[/Script/Engine.GameSession]:MaxPlayers=8 -ini:GameUserSettings:[/Script/Engine.GameSession]:MaxPlayers=8 -log -unattended
+dir: <instance>/server/Engine/Binaries/Win64
+env (fake mode only): LOCALAPPDATA=<instance>/saves
+output: GameLog
+log: <instance>/server/FactoryGame/Saved/Logs/FactoryGame.log
+ready wait: 10m0s
+record: server Factory Friends, port 7800, password letmein, ports {"game":7800,"reliable":8900}, secrets admin, extra null

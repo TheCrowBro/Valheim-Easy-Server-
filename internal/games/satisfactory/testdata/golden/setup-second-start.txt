@@ -1,0 +1,3 @@
+HealthCheck(clientCustomData="") as no token
+PasswordLogin(minimumPrivilegeLevel="Administrator", password=<admin password>) as no token
+QueryServerState() as Administrator

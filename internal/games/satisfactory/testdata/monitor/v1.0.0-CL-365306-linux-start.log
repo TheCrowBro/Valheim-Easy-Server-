@@ -1,0 +1,35 @@
+LogInit: Display: Running engine for game: FactoryGame
+LogInit: ExecutableName: FactoryServer-Linux-Shipping
+LogInit: Build: ++FactoryGame+rel-main-1.0.0-CL-365306
+LogInit: Engine Version: 5.3.2-365306+++FactoryGame+rel-main-1.0.0
+LogInit: Compatible Engine Version: 5.3.2-365306+++FactoryGame+rel-main-1.0.0
+LogInit: Net CL: 365306
+LogInit: Build Configuration: Shipping
+LogInit: Branch Name: ++FactoryGame+rel-main-1.0.0
+LogInit: Command Line: -Port=7777 -ini:Engine:[HTTPServer.Listeners]:DefaultBindAddress=any -ini:Engine:[Core.Log]:LogNet=Error -ini:Engine:[Core.Log]:LogNetTraffic=Warning -ini:Engine:[/Script/FactoryGame.FGSaveSession]:mNumRotatingAutosaves=5 -ini:Engine:[/Script/Engine.GarbageCollectionSettings]:gc.MaxObjectsInEditor=2162688 -ini:Engine:[/Script/OnlineSubsystemUtils.IpNetDriver]:LanServerMaxTickRate=30 -ini:Engine:[/Script/OnlineSubsystemUtils.IpNetDriver]:NetServerMaxTickRate=30 -ini:Engine:[/Script/OnlineSubsystemUtils.IpNetDriver]:ConnectionTimeout=30 -ini:Engine:[/Script/OnlineSubsystemUtils.IpNetDriver]:InitialConnectTimeout=30 -ini:Engine:[ConsoleVariables]:wp.Runtime.EnableServerStreaming=1 -ini:Game:[/Script/Engine.GameSession]:ConnectionTimeout=30 -ini:Game:[/Script/Engine.GameSession]:InitialConnectTimeout=30 -ini:Game:[/Script/Engine.GameSession]:MaxPlayers=6 -ini:GameUserSettings:[/Script/Engine.GameSession]:MaxPlayers=6
+[2024.09.12-11.27.37:992][  0]LogNetVersion: Set ProjectVersion to 0.0.1.0. Version Checksum will be recalculated on next use.
+[2024.09.12-11.27.37:992][  0]LogInit: Texture streaming: Disabled
+[2024.09.12-11.27.37:994][  0]LogUserSetting: Initializing user settings
+[2024.09.12-11.27.38:027][  0]LogLoad: Loading WwiseSoundEngine module: WwiseSoundEngine
+[2024.09.12-11.27.38:027][  0]LogWwiseSoundEngine: Display: Loading Wwise Sound Engine version 2022.1
+[2024.09.12-11.27.38:027][  0]LogAkAudio: FAkAudioModule::StartupModule: Couldn't initialize FAkAudioDevice. AkAudioModule will not be fully initialized.
+[2024.09.12-11.27.38:032][  0]LogChaos: FPhysicsSolverBase::AsyncDt:-1.000000
+[2024.09.12-11.27.38:033][  0]LogOnlineSchema: Error: Invalid schema category lobby: Service descriptor id lobby not found.
+[2024.09.12-11.27.38:033][  0]LogOnlineSchema: Error: Invalid schema category lobbymember: Service descriptor id lobbymember not found.
+[2024.09.12-11.27.38:033][  0]LogOnlineServices: Error: [FLobbiesCommon::Initialize] Failed to initialize schema registry
+[2024.09.12-11.27.38:033][  0]LogOnlineIntegration: Initialized 'NULL' online backend
+[2024.09.12-11.27.38:034][  0]LogCommonUser: HandleNetworkConnectionStatusChanged(Context:Offline, ServiceName:, OldStatus:NotConnected, NewStatus:Connected)
+[2024.09.12-11.27.38:034][  0]LogStreaming: Warning: Failed to read file '/home/steam/.config/Epic/FactoryGame/Saved/SaveGames/ServerSettings.7777.sav' error.
+[2024.09.12-11.27.38:034][  0]LogHttpServerModule: Starting all listeners...
+[2024.09.12-11.27.38:034][  0]LogHttpServerModule: All listeners started
+[2024.09.12-11.27.38:063][  0]LogServer: Display: Generated a new Self-Signed certificate for the Server API (old certificate invalid or expired)
+[2024.09.12-11.27.38:063][  0]LogServer: Warning: ==============================================================
+[2024.09.12-11.27.38:063][  0]LogServer: Warning: Server API is running using a Self-Signed Certificate.
+[2024.09.12-11.27.38:063][  0]LogServer: Warning: To verify the certificate integrity on the Client, make sure the following Fingerprint matches with the Client one: 
+[2024.09.12-11.27.38:063][  0]LogServer: Warning: SHA256:Re8Y8l7EB+699kPspYduzdfA9PewDxrATl2tZlL2kRQ=
+[2024.09.12-11.27.38:063][  0]LogServer: Warning: ==============================================================
+[2024.09.12-11.27.38:063][  0]LogHttpListener: Warning: HttpListener unable to set desired buffer size (524288): Limited to 425984
+[2024.09.12-11.27.38:063][  0]LogHttpListener: Created new HttpListener on 0.0.0.0:7777
+[2024.09.12-11.27.38:063][  0]LogServer: Display: Server API listening on '0.0.0.0:7777' (Standalone)
+[2024.09.12-11.27.38:063][  0]LogGame: MaxNumBackupsaves: 25
+[2024.09.12-11.27.38:064][  0]LogLoad: Loading WwiseSoundEngine module: WwiseSoundEngine
