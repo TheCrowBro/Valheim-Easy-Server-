@@ -76,3 +76,8 @@ Games whose server can't run on this computer are listed in "Add a game" but gre
 - R2 reaches the owner as a normal auto-update (that is how the update and takeover get tested for real); R3 waits for the owner's OK.
 - The R3 Mac checklist test copy runs on the owner's REAL data folder (it takes over as the final update would; backups are kept).
 - Windows tray menu: Open the control panel, Stop all games, Quit. No per-game entries.
+- Releases between the gates: fixes found during the R2 soak, and after R3 the releases that turn one game from preview to ready or fix it, go out as normal updates as soon as they're ready; the owner is told about each one.
+- A game added with "Add a game" is NOT starred by default.
+- Tray "Quit" leaves running games running (as today); "Stop all games" stops them.
+- Minecraft on a Mac whose macOS can't run the Java the newest Minecraft needs: show Minecraft as "Needs Windows" there (don't pin an older Minecraft).
+- (Lead's calls) A "still playing?" game with no Discord channel at all uses the same 4 h + 2 h clock with the question shown in the panel. Windrose (3 GB download) gets real-server checks like the other games; only Satisfactory stays on demand.
