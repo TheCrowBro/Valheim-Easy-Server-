@@ -6,12 +6,17 @@ import (
 	"fmt"
 	"runtime/debug"
 	"time"
+
+	"valheim-easy-server/internal/config"
+	"valheim-easy-server/internal/game"
 )
 
 // Job is a longer task (install, start, stop, backup…) shown with progress.
-// Only one runs at a time so they can't step on each other.
+// Each instance has one job slot, so a game's jobs can't step on each
+// other, and the app has one more slot for going to sleep (spec 4.2).
 type Job struct {
 	ID          int        `json:"id"`
+	Game        string     `json:"game,omitempty"` // the instance it's for; "" for the app's own
 	Kind        string     `json:"kind"`
 	Title       string     `json:"title"`
 	Message     string     `json:"message"`
@@ -42,6 +47,11 @@ func (e *BusyError) Error() string {
 
 var errCancelled = errors.New("Cancelled.")
 
+// fieldErrors hands a game's field errors to the panel the way settings
+// errors always went (config.FieldErrors), so the old panel shows them
+// next to the settings as before.
+func fieldErrors(e game.FieldErrors) error { return config.FieldErrors(e) }
+
 type jobCtl struct {
 	m   *Manager
 	job *Job
@@ -68,8 +78,10 @@ func (j *jobCtl) result(msg string) {
 	j.m.mu.Unlock()
 }
 
-// runJob starts fn as the current job. It fails with BusyError when another
-// job is still running.
+func running(j *Job) bool { return j != nil && j.Finished == nil }
+
+// runJob starts fn as the legacy instance's job. It fails with BusyError
+// when that instance's job or the app's is still running.
 func (m *Manager) runJob(kind, title string, cancellable bool, fn func(ctx context.Context, j *jobCtl) error) error {
 	_, err := m.startJob(kind, title, cancellable, fn)
 	return err
@@ -77,9 +89,62 @@ func (m *Manager) runJob(kind, title string, cancellable bool, fn func(ctx conte
 
 // startJob is runJob that also returns the new job's ID.
 func (m *Manager) startJob(kind, title string, cancellable bool, fn func(ctx context.Context, j *jobCtl) error) (int, error) {
+	return m.startInstJob(m.legacy(), kind, title, cancellable, fn)
+}
+
+// runInstJob starts fn in an instance's job slot.
+func (m *Manager) runInstJob(inst *instance, kind, title string, cancellable bool, fn func(ctx context.Context, j *jobCtl) error) error {
+	_, err := m.startInstJob(inst, kind, title, cancellable, fn)
+	return err
+}
+
+func (m *Manager) startInstJob(inst *instance, kind, title string, cancellable bool, fn func(ctx context.Context, j *jobCtl) error) (int, error) {
+	return m.launchJob(inst, kind, title, cancellable, fn)
+}
+
+// runAppJob starts fn in the app's own slot, which only going to sleep
+// uses. It waits for no instance, but is refused while any instance's
+// job runs, as before.
+func (m *Manager) runAppJob(kind, title string, cancellable bool, fn func(ctx context.Context, j *jobCtl) error) error {
+	_, err := m.launchJob(nil, kind, title, cancellable, fn)
+	return err
+}
+
+// busyJobLocked is the running job that stops a new one in inst's slot
+// (the app's slot for nil): the slot's own job, the app's job, and for the
+// app's slot any instance's job.
+func (m *Manager) busyJobLocked(inst *instance) *Job {
+	if running(m.appJob) {
+		return m.appJob
+	}
+	if inst != nil {
+		if running(inst.job) {
+			return inst.job
+		}
+		return nil
+	}
+	var busy *Job
+	m.eachInstance(func(i *instance) {
+		if busy == nil && running(i.job) {
+			busy = i.job
+		}
+	})
+	return busy
+}
+
+// anyJobLocked reports whether a job runs in any slot.
+func (m *Manager) anyJobLocked() bool {
+	busy := running(m.appJob)
+	m.eachInstance(func(i *instance) { busy = busy || running(i.job) })
+	return busy
+}
+
+// launchJob starts fn as the current job of inst's slot (the app's slot
+// for nil).
+func (m *Manager) launchJob(inst *instance, kind, title string, cancellable bool, fn func(ctx context.Context, j *jobCtl) error) (int, error) {
 	m.mu.Lock()
-	if m.job != nil && m.job.Finished == nil {
-		t := m.job.Title
+	if busy := m.busyJobLocked(inst); busy != nil {
+		t := busy.Title
 		m.mu.Unlock()
 		return 0, &BusyError{Title: lowerFirst(t)}
 	}
@@ -87,6 +152,8 @@ func (m *Manager) startJob(kind, title string, cancellable bool, fn func(ctx con
 		m.mu.Unlock()
 		return 0, errUpdatingBusy
 	}
+	// One sequence for every slot, so ids never repeat across games: the
+	// old panel tells jobs apart by id.
 	m.jobSeq++
 	parent := m.ctx
 	if parent == nil {
@@ -94,8 +161,13 @@ func (m *Manager) startJob(kind, title string, cancellable bool, fn func(ctx con
 	}
 	ctx, cancel := context.WithCancel(parent)
 	job := &Job{ID: m.jobSeq, Kind: kind, Title: title, Percent: -1, Started: time.Now(), Cancellable: cancellable}
-	m.job, m.jobCancel = job, cancel
-	m.idleSince = time.Now() // someone is doing something: not idle
+	if inst != nil {
+		job.Game = inst.id
+		inst.job, inst.jobCancel = job, cancel
+	} else {
+		m.appJob, m.appJobCancel = job, cancel
+	}
+	m.machineIdleSince = time.Now() // someone is doing something: not idle
 	m.mu.Unlock()
 	m.notify()
 
@@ -113,6 +185,7 @@ func (m *Manager) startJob(kind, title string, cancellable bool, fn func(ctx con
 			}()
 			err = fn(ctx, &jobCtl{m: m, job: job})
 		}()
+		err = actionOf(err)
 		m.mu.Lock()
 		now := time.Now()
 		job.Finished = &now
@@ -135,17 +208,34 @@ func (m *Manager) startJob(kind, title string, cancellable bool, fn func(ctx con
 	return job.ID, nil
 }
 
-// CancelJob cancels the current job if it can be cancelled.
+// legacyJobLocked is the job the old panel shows (Status.job): the newer
+// of the legacy instance's and the app's current or last job (spec 4.2).
+// With only Valheim that is exactly the one job of older builds.
+func (m *Manager) legacyJobLocked() *Job {
+	j := m.legacy().job
+	if a := m.appJob; a != nil && (j == nil || a.ID > j.ID) {
+		j = a
+	}
+	return j
+}
+
+// CancelJob cancels the legacy instance's job (or the app's), if it can be
+// cancelled.
 func (m *Manager) CancelJob() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.job == nil || m.job.Finished != nil {
+	inst := m.legacy()
+	job, cancel := inst.job, inst.jobCancel
+	if !running(job) {
+		job, cancel = m.appJob, m.appJobCancel
+	}
+	if !running(job) {
 		return nil
 	}
-	if !m.job.Cancellable {
+	if !job.Cancellable {
 		return errors.New("This can't be cancelled at this point.")
 	}
-	m.jobCancel()
+	cancel()
 	return nil
 }
 

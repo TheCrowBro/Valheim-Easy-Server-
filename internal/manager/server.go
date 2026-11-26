@@ -3,72 +3,77 @@ package manager
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"sort"
-	"strings"
 	"time"
 
-	"valheim-easy-server/internal/config"
+	"valheim-easy-server/internal/game"
 	"valheim-easy-server/internal/logparse"
-	"valheim-easy-server/internal/mods"
 	"valheim-easy-server/internal/platform"
-	"valheim-easy-server/internal/steamcmd"
 	"valheim-easy-server/internal/worlds"
 )
 
-var errNotInstalled = &ActionError{
-	Msg:    "The Valheim server isn't installed yet. Click Install first (it's free, about a 1 GB download).",
-	Action: "install",
+// errNotInstalled is the answer to starting a server that isn't installed.
+func errNotInstalled(inst *instance) error {
+	return &ActionError{
+		Msg:    inst.exact("not_installed", fmt.Sprintf("The %s server isn't installed yet. Click Install first.", inst.short())),
+		Action: "install",
+	}
 }
 
-// StartServer starts the Valheim server (updating it first if that setting
-// is on).
-func (m *Manager) StartServer() error {
+// StartServer starts the legacy game's server (updating it first if that
+// setting is on).
+func (m *Manager) StartServer() error { return m.startGame(m.legacy()) }
+
+// startGame starts an instance's server as a job.
+func (m *Manager) startGame(inst *instance) error {
 	m.mu.Lock()
-	running := m.run != nil
-	installed := m.installedLocked()
-	errs := m.settings.Validate()
+	running := inst.run != nil
+	installed := m.installedLocked(inst)
 	m.mu.Unlock()
+	errs := inst.srv.Validate(inst.saved(), "")
 	switch {
 	case running:
 		return errors.New("The server is already running.")
 	case !installed:
-		return errNotInstalled
+		return errNotInstalled(inst)
 	case errs != nil:
-		return errs // the panel shows these next to the settings
+		return fieldErrors(errs) // the panel shows these next to the settings
 	}
-	return m.runJob("start", "Starting the server", true, func(ctx context.Context, j *jobCtl) error {
-		return m.doStart(ctx, j, "")
+	return m.runInstJob(inst, "start", "Starting the server", true, func(ctx context.Context, j *jobCtl) error {
+		return m.doStart(ctx, j, inst, "")
 	})
 }
 
-// StopServer saves the world and stops the server.
-func (m *Manager) StopServer() error {
+// StopServer saves the world and stops the legacy game's server.
+func (m *Manager) StopServer() error { return m.stopGame(m.legacy()) }
+
+func (m *Manager) stopGame(inst *instance) error {
 	m.mu.Lock()
-	running := m.run != nil
+	running := inst.run != nil
 	m.mu.Unlock()
 	if !running {
 		return errors.New("The server isn't running.")
 	}
-	m.endStartWait()
-	return m.runJob("stop", "Stopping the server", false, m.doStop)
+	m.endStartWait(inst)
+	return m.runInstJob(inst, "stop", "Stopping the server", false, func(ctx context.Context, j *jobCtl) error {
+		return m.doStop(ctx, j, inst)
+	})
 }
 
 // endStartWait finishes a job (a start, a restart, or an import that
 // replaced the running world) that has launched the server and is only
 // waiting for the world to load, so Stop works straight away.
-func (m *Manager) endStartWait() {
+func (m *Manager) endStartWait(inst *instance) {
 	m.mu.Lock()
-	job, cancel := m.job, m.jobCancel
-	waiting := job != nil && job.Finished == nil && m.loadWait == job && m.run != nil
+	job, cancel := inst.job, inst.jobCancel
+	waiting := job != nil && job.Finished == nil && inst.loadWait == job && inst.run != nil
 	m.mu.Unlock()
 	if !waiting {
 		return
@@ -87,20 +92,23 @@ func (m *Manager) endStartWait() {
 	}
 }
 
-// RestartServer stops and starts the server again.
+// RestartServer stops and starts the legacy game's server again.
 func (m *Manager) RestartServer() error {
-	return m.runJob("restart", "Restarting the server", false, func(ctx context.Context, j *jobCtl) error {
-		if err := m.doStop(ctx, j); err != nil {
+	inst := m.legacy()
+	return m.runInstJob(inst, "restart", "Restarting the server", false, func(ctx context.Context, j *jobCtl) error {
+		if err := m.doStop(ctx, j, inst); err != nil {
 			return err
 		}
-		return m.doStart(ctx, j, "")
+		return m.doStart(ctx, j, inst, "")
 	})
 }
 
-// ForceStop ends the server process immediately, without saving.
+// ForceStop ends the legacy game's server process immediately, without
+// saving.
 func (m *Manager) ForceStop() error {
+	inst := m.legacy()
 	m.mu.Lock()
-	run := m.run
+	run := inst.run
 	var stopping, forced bool
 	if run != nil {
 		// Marked before killing it, so its exit counts as expected.
@@ -128,183 +136,115 @@ func (m *Manager) ForceStop() error {
 	return nil
 }
 
-// InstallServer installs or updates the server. repair re-checks all files.
+// InstallServer installs or updates the legacy game's server. repair
+// re-checks all files.
 func (m *Manager) InstallServer(repair bool) error {
+	inst := m.legacy()
 	m.mu.Lock()
-	running := m.run != nil
-	installed := m.installedLocked()
+	running := inst.run != nil
+	installed := m.installedLocked(inst)
 	m.mu.Unlock()
+	short := inst.short()
 	if running {
-		return errors.New("Stop the server before updating it (Valheim can't update files that are in use).")
+		return fmt.Errorf("Stop the server before updating it (%s can't update files that are in use).", short)
 	}
-	title := "Installing the Valheim server"
+	title := "Installing the " + short + " server"
 	switch {
 	case repair:
-		title = "Repairing the Valheim server"
+		title = "Repairing the " + short + " server"
 	case installed:
-		title = "Updating the Valheim server"
+		title = "Updating the " + short + " server"
 	}
-	return m.runJob("install", title, true, func(ctx context.Context, j *jobCtl) error {
-		err := m.opt.Installer.Install(ctx, repair, func(p steamcmd.Progress) { j.step(p.Step, p.Percent) })
+	return m.runInstJob(inst, "install", title, true, func(ctx context.Context, j *jobCtl) error {
+		err := inst.srv.Installer().Install(ctx, repair, func(p game.Progress) { j.step(p.Step, p.Percent) })
 		if ctx.Err() != nil {
 			return errCancelled
 		}
 		if err != nil {
 			return err
 		}
-		m.mu.Lock()
-		exe := m.paths.ServerExe
-		m.mu.Unlock()
-		if _, err := os.Stat(exe); err != nil {
-			return fmt.Errorf("SteamCMD finished, but %s wasn't found. Try Repair.", filepath.Base(exe))
+		if _, err := os.Stat(inst.srv.Program()); err != nil {
+			return fmt.Errorf(inst.exact("install_missing", "The download finished, but %s wasn't found. Try Repair."), filepath.Base(inst.srv.Program()))
 		}
-		m.addActivity("update", "", "The Valheim server is installed and up to date.")
-		j.result("The Valheim server is installed and up to date.")
+		done := "The " + short + " server is installed and up to date."
+		m.addActivity("update", "", done)
+		j.result(done)
 		return nil
 	})
 }
 
-// argsKey identifies the settings a server was started with, so the panel
-// can say when a restart is needed for changes to apply.
-func argsKey(s config.Settings, saveDir string) string {
-	args, err := s.ServerArgs(saveDir, "")
-	if err != nil {
-		return ""
-	}
-	key := strings.Join(args, "\x00")
-	if ids := mods.ServerMods(s.WorldMods()); len(ids) > 0 { // players' own mods need no restart
-		key += "\x00mods\x00" + strings.Join(slices.Sorted(slices.Values(ids)), "\x00")
-	}
-	sum := sha256.Sum256([]byte(key))
-	return hex.EncodeToString(sum[:8])
-}
-
-// prepareMods installs, updates and switches on the mods the selected world
-// is played with, or switches the mod loader off when it has none.
-func (m *Manager) prepareMods(ctx context.Context, j *jobCtl, s config.Settings, p config.Paths) error {
-	in := &mods.Installer{Dir: p.Server, URL: m.opt.ModsURL}
-	ids := s.WorldMods()
-	if len(mods.ServerMods(ids)) > 0 {
-		j.step("Getting the mods ready…", -1)
-	}
-	res, err := in.Prepare(ctx, ids, s.UpdateOnStart, j.step)
-	installed := in.Installed()
+// doStart starts the instance's server with world, or the selected world
+// when world is empty.
+func (m *Manager) doStart(ctx context.Context, j *jobCtl, inst *instance, world string) error {
 	m.mu.Lock()
-	m.modVersions = installed
-	m.mu.Unlock()
-	for _, c := range res.Changed {
-		m.addActivity("update", "", c)
-	}
-	if res.Warning != "" {
-		m.addActivity("warning", "", res.Warning)
-	}
-	if ctx.Err() != nil {
-		return errCancelled
-	}
-	if err != nil {
-		return &ActionError{Msg: fmt.Sprintf("Couldn't get the mods ready (%v). To start without them, turn them off on the world's card on the Worlds page.", err), Action: "worlds"}
-	}
-	return nil
-}
-
-// doStart starts the server with world, or the selected world when world
-// is empty.
-func (m *Manager) doStart(ctx context.Context, j *jobCtl, world string) error {
-	m.mu.Lock()
-	if m.run != nil {
+	if inst.run != nil {
 		m.mu.Unlock()
 		return errors.New("The server is already running.")
 	}
-	s, p := m.settings.Clone(), m.paths
-	if world != "" {
-		s.World = world
-	}
-	installed := m.installedLocked()
+	installed := m.installedLocked(inst)
+	logs := inst.dirs.Logs // a settings save may replace dirs once the lock is let go
 	m.mu.Unlock()
+	saved := inst.saved()
+	if world == "" {
+		world = saved.World
+	}
 
-	if errs := s.Validate(); errs != nil {
+	if errs := inst.srv.Validate(saved, world); errs != nil {
 		return &ActionError{Msg: "Please fix the settings first: " + errs.Error(), Action: "settings"}
 	}
 	if !installed {
-		return errNotInstalled
+		return errNotInstalled(inst)
 	}
 	// A copy may already be running (for example started before this app).
-	if procs, _ := platform.FindByExe(p.ServerExe); len(procs) > 0 {
-		if m.adopt(procs[0], runInfo{}) {
+	if procs, _ := platform.FindByExe(inst.srv.Program()); len(procs) > 0 {
+		if m.adopt(inst, procs[0], nil) {
 			j.result("The server was already running.")
 			return nil
 		}
 	}
-	if s.UpdateOnStart {
-		j.step("Checking for Valheim server updates…", -1)
-		err := m.opt.Installer.Install(ctx, false, func(pr steamcmd.Progress) {
-			msg := pr.Step
-			if msg == "Server files are up to date." {
-				msg = "The server is up to date."
-			}
-			j.step(msg, pr.Percent)
-		})
-		if ctx.Err() != nil {
-			return errCancelled
-		}
-		if err != nil {
-			m.addActivity("warning", "", "Couldn't check for server updates ("+err.Error()+"). Starting the version that's installed.")
-		}
+	plan, err := inst.srv.Plan(ctx, game.PlanRequest{
+		World: world, Saved: saved, Update: saved.Server.Bool("updateOnStart"),
+		LogPath:     filepath.Join(logs, logPrefix(inst)+time.Now().Format("2006-01-02_15-04-05")+".log"),
+		Step:        j.step,
+		Cancellable: j.setCancellable,
+	})
+	if ctx.Err() != nil {
+		return errCancelled
 	}
-	if err := m.prepareMods(ctx, j, s, p); err != nil {
-		return err
+	if err != nil {
+		return actionOf(err)
 	}
 	j.setCancellable(false)
-	if platform.UDPPortInUse(s.Port) {
-		return fmt.Errorf("Port %d is already being used by another program, maybe another Valheim server. Close it or pick another port in Settings.", s.Port)
-	}
-	for _, dir := range []string{p.Save, p.Worlds, p.Logs} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
-	}
-	logPath := filepath.Join(p.Logs, "server-"+time.Now().Format("2006-01-02_15-04-05")+".log")
-	args, err := s.ServerArgs(p.Save, logPath)
+	j.step(fmt.Sprintf("Starting the %s server…", inst.short()), -1)
+	proc, err := platform.StartDetached(plan.Exe, plan.Args, plan.Dir, append(os.Environ(), plan.Env...))
 	if err != nil {
-		return err
+		return fmt.Errorf("Couldn't start the %s server: %v", inst.short(), err)
 	}
-	env := append(os.Environ(), "SteamAppId=892970")
-	if runtime.GOOS == "darwin" {
-		// The macOS server comes without Steam's client library: SteamCMD
-		// has one, for both kinds of Mac.
-		env = append(env, "DYLD_FALLBACK_LIBRARY_PATH="+p.SteamCMD+":/usr/local/lib:/usr/lib")
+	rec := plan.Record
+	rec.PID, rec.Started, rec.Launched, rec.LogPath = proc.PID(), proc.StartTime(), time.Now(), plan.LogPath
+	rec.World, rec.ArgsKey, rec.Exe = world, plan.Fingerprint, plan.Exe
+	rec.Played = m.startedWith(inst, world, rec.Password)
+	if !inst.legacy {
+		rec.Game, rec.Instance, rec.Name = inst.info.ID, inst.id, inst.short()
 	}
-	env = append(env, mods.Env(p.Server, len(mods.ServerMods(s.WorldMods())) > 0)...)
-	j.step("Starting the Valheim server…", -1)
-	proc, err := platform.StartDetached(p.ServerExe, args, p.Server, env)
-	if err != nil {
-		return fmt.Errorf("Couldn't start the Valheim server: %v", err)
-	}
-	info := runInfo{PID: proc.PID(), Started: proc.StartTime(), Launched: time.Now(), LogPath: logPath,
-		World: s.World, ArgsKey: argsKey(s, p.Save), Exe: p.ServerExe, Played: m.startedWith(s), NoCrossplay: !s.Crossplay,
-		CodeMods: sortedIDs(s.WorldMods()), Server: s.ServerName, Port: s.Port, Password: s.Password}
-	info.codePending = len(info.CodeMods) > 0
 	// From now on the job only waits for the world to load, which Stop
 	// can end (see endStartWait).
 	m.mu.Lock()
-	m.loadWait = j.job
+	inst.loadWait = j.job
 	m.mu.Unlock()
 	defer func() {
 		m.mu.Lock()
-		if m.loadWait == j.job {
-			m.loadWait = nil
+		if inst.loadWait == j.job {
+			inst.loadWait = nil
 		}
 		m.mu.Unlock()
 	}()
-	run := m.attach(proc, info, false)
-	if info.codePending {
-		m.go_(func() { m.makeModsCode(run, info.CodeMods, info.World, p) })
-	}
-	m.addActivity("starting", "", fmt.Sprintf("Starting the server with the world %q.", s.World))
-	m.pruneLogs()
+	run := m.attach(inst, proc, rec, false)
+	m.addActivity("starting", "", fmt.Sprintf("Starting the server with the world %q.", world))
+	m.pruneLogs(inst)
 
 	loading := "Loading the world… The first start after an update can take a few minutes."
-	if w, err := m.library().Get(s.World); errors.Is(err, worlds.ErrNotFound) || err == nil && w.NeverSaved {
+	if w, err := inst.srv.Worlds().Get(world); errors.Is(err, worlds.ErrNotFound) || err == nil && w.NeverSaved {
 		loading = "Making the new world… A world’s first start takes a few minutes."
 	}
 	j.step(loading, -1)
@@ -313,62 +253,114 @@ func (m *Manager) doStart(ctx context.Context, j *jobCtl, world string) error {
 		j.result("The server is online.")
 		return nil
 	case <-run.done:
-		msg := "The server stopped while starting. " + m.exitHint()
-		for _, id := range s.WorldMods() {
-			if md, ok := mods.Find(id); ok && md.NewWorlds {
-				msg += fmt.Sprintf(" %s only loads worlds that were created with it: if %q wasn't, turn %s off for it on the Worlds page.", md.Name, s.World, md.Name)
+		msg := "The server stopped while starting. " + m.exitHintFor(inst)
+		if ml, ok := inst.srv.(game.ModLister); ok {
+			for _, md := range ml.PlayerMods(world, nil) {
+				if md.NewWorlds {
+					msg += fmt.Sprintf(" %s only loads worlds that were created with it: if %q wasn't, turn %s off for it on the Worlds page.", md.Name, world, md.Name)
+				}
 			}
 		}
 		return &ActionError{Msg: msg, Action: "log"}
 	case <-ctx.Done():
 		j.result("Stopped waiting for the server to finish loading.")
 		return nil
-	case <-time.After(readyWait + 5*time.Minute):
+	case <-time.After(plan.ReadyWait + 5*time.Minute):
 		j.result("The server is running but hasn't said it's ready yet.")
 		return nil
 	}
 }
 
-// exitHint explains the most likely reason the server stopped, from the
-// last lines of its log.
-func (m *Manager) exitHint() string {
-	lines, _ := m.logs.after(0, 80)
-	for i := len(lines) - 1; i >= 0; i-- {
-		t := lines[i].Text
-		switch {
-		case strings.Contains(t, "Error bad password"):
-			return "Valheim rejected the password: it can't be part of the server name, the world name or the seed."
-		case strings.Contains(t, "World load failed"):
-			return "The world file couldn't be loaded. It may be damaged: restore a backup on the Worlds page."
-		case strings.Contains(strings.ToLower(t), "address already in use"), strings.Contains(t, "Failed to bind"):
-			return "The network port is in use by another program."
-		}
+// exitHintFor explains the most likely reason the instance's server
+// stopped, from the last lines of its log.
+func (m *Manager) exitHintFor(inst *instance) string {
+	lines, _ := inst.logs.after(0, 80)
+	tail := make([]string, len(lines))
+	for i, l := range lines {
+		tail[i] = l.Text
 	}
-	return "Open the Log page to see what happened."
+	return inst.srv.ExitHint(tail)
 }
 
-func (m *Manager) doStop(ctx context.Context, j *jobCtl) error {
+// defaultStopSay is a stop step's job text when the game gives none.
+const defaultStopSay = "Saving the world and shutting down… Please don't turn off the computer."
+
+// doStop runs the game's stop chain (spec 2.7): each step asks the server
+// to save and stop, and waits for it to exit. Killing it is never
+// automatic: only the owner's Force stop does that.
+func (m *Manager) doStop(ctx context.Context, j *jobCtl, inst *instance) error {
 	m.mu.Lock()
-	run := m.run
+	run := inst.run
 	if run == nil {
 		m.mu.Unlock()
 		return nil
 	}
 	run.stopping = true
-	lastSave := run.tracker.LastSave
+	lastSave := run.state().LastSave
+	steps := inst.srv.Stop(run.rec)
 	m.mu.Unlock()
 	m.notify()
 
-	j.step("Saving the world and shutting down… Please don't turn off the computer.", -1)
-	if err := run.proc.Interrupt(); err != nil {
+	notStopping := func() {
 		m.mu.Lock()
 		run.stopping = false
 		m.mu.Unlock()
-		return &ActionError{
-			Msg:    fmt.Sprintf("Couldn't ask the server to save and stop (%v). You can force it to stop, but progress since the last save%s will be lost.", err, sinceText(lastSave)),
-			Action: "force_stop",
+	}
+	if len(steps) == 0 {
+		steps = []game.StopStep{{Kind: "interrupt", Wait: 4 * time.Minute}}
+	}
+	for i, step := range steps {
+		last := i == len(steps)-1
+		say := step.Say
+		if say == "" {
+			say = defaultStopSay
+		}
+		j.step(say, -1)
+		if err := m.sendStop(ctx, run, step); err != nil {
+			if !last && errors.Is(err, game.ErrNoConsole) {
+				continue // this way can't be used now: the next one at once
+			}
+			notStopping()
+			return &ActionError{
+				Msg:    fmt.Sprintf("Couldn't ask the server to save and stop (%v). You can force it to stop, but progress since the last save%s will be lost.", err, sinceText(lastSave)),
+				Action: "force_stop",
+			}
+		}
+		stopped, err := m.waitStop(ctx, j, run, step)
+		if stopped || err != nil {
+			return err
+		}
+		if last {
+			notStopping()
+			return &ActionError{
+				Msg:    "The server is taking unusually long to stop. You can wait and try again, or force it to stop (progress since the last save will be lost).",
+				Action: "force_stop",
+			}
 		}
 	}
+	return nil
+}
+
+// sendStop sends one stop step to the server.
+func (m *Manager) sendStop(ctx context.Context, run *serverRun, step game.StopStep) error {
+	switch step.Kind {
+	case "interrupt":
+		return run.proc.Interrupt()
+	case "call":
+		if step.Call == nil {
+			return game.ErrNoConsole
+		}
+		return step.Call(ctx)
+	}
+	// "console" needs the stdin pipe and "rcon" an RCON client, which no
+	// game in this release uses: the next step runs at once.
+	return game.ErrNoConsole
+}
+
+// waitStop waits up to step.Wait for the server to exit, sending the step
+// once more after step.Resend. It reports whether the server stopped (or
+// the app is closing, when the server finishes stopping by itself).
+func (m *Manager) waitStop(ctx context.Context, j *jobCtl, run *serverRun, step game.StopStep) (bool, error) {
 	start := time.Now()
 	resent := false
 	tick := time.NewTicker(time.Second)
@@ -384,31 +376,25 @@ func (m *Manager) doStop(ctx context.Context, j *jobCtl) error {
 			} else {
 				j.result("The world was saved and the server stopped.")
 			}
-			return nil
+			return true, nil
 		case <-ctx.Done():
-			return nil // the app is closing; the server finishes stopping by itself
+			return true, nil // the app is closing; the server finishes stopping by itself
 		case <-tick.C:
 			waited := time.Since(start)
 			m.mu.Lock()
-			saved := run.tracker.LastSave.After(start)
+			saved := run.state().LastSave.After(start)
 			m.mu.Unlock()
 			if saved {
 				j.step("World saved. Shutting down…", -1)
 			} else {
 				j.step(fmt.Sprintf("Saving the world… (%d s) Please don't turn off the computer.", int(waited.Seconds())), -1)
 			}
-			if waited > 90*time.Second && !resent {
+			if step.Resend > 0 && waited > step.Resend && !resent {
 				resent = true
-				run.proc.Interrupt()
+				m.sendStop(ctx, run, step)
 			}
-			if waited > 4*time.Minute {
-				m.mu.Lock()
-				run.stopping = false
-				m.mu.Unlock()
-				return &ActionError{
-					Msg:    "The server is taking unusually long to stop. You can wait and try again, or force it to stop (progress since the last save will be lost).",
-					Action: "force_stop",
-				}
+			if waited > step.Wait {
+				return false, nil
 			}
 		}
 	}
@@ -422,28 +408,34 @@ func sinceText(t time.Time) string {
 }
 
 // attach starts following a server process: its log and its exit.
-func (m *Manager) attach(proc *platform.Proc, info runInfo, adopted bool) *serverRun {
+func (m *Manager) attach(inst *instance, proc *platform.Proc, rec game.Record, adopted bool) *serverRun {
 	ctx, cancel := context.WithCancel(m.ctx)
-	run := &serverRun{proc: proc, info: info, done: make(chan struct{}), readyCh: make(chan struct{}),
-		cancelTail: cancel, replaying: adopted, discordAt: info.Posted, discordErr: info.PostError}
-	if adopted && info.Announced != "" && info.Posted.IsZero() && info.PostError == "" {
+	run := &serverRun{inst: inst, proc: proc, rec: rec, done: make(chan struct{}), readyCh: make(chan struct{}),
+		cancelTail: cancel, replaying: adopted, discordAt: rec.Posted, discordErr: rec.PostError}
+	if adopted && rec.Announced != "" && rec.Posted.IsZero() && rec.PostError == "" {
 		// The app that posted it didn't note how it went (older versions
 		// don't): it most likely went out soon after the start.
-		run.info.Posted, run.discordAt = info.Launched, info.Launched
+		run.rec.Posted, run.discordAt = rec.Launched, rec.Launched
 	}
-	run.tracker.NoJoinCode = info.NoCrossplay
+	// The game's work after launch (Valheim's mods code) runs for a new
+	// start, and again after a takeover when the app that started the
+	// server closed before it was done.
+	after, isAfterer := inst.srv.(game.Afterer)
+	run.afterPending = isAfterer && after.Pending(rec)
 	// Friends who connect at the same time are told apart by the account
-	// each last played from. Apply only runs from handleEvent, which already
-	// holds m.mu, so this mustn't lock it again.
-	run.tracker.KnownPlatformID = m.knownPlatformIDLocked
+	// each last played from. The Monitor runs with m.mu held, so this
+	// mustn't lock it again.
+	run.mon = inst.srv.Watch(rec, func(name string) string { return m.knownAccountLocked(inst, name) })
 	m.mu.Lock()
-	m.run = run
-	m.idleSince = time.Now()
-	runtimePath := m.dataFile("runtime.json")
+	inst.run = run
+	m.machineIdleSince = time.Now()
 	m.mu.Unlock()
-	saveRuntime(runtimePath, info)
+	saveRuntime(m.runFile(inst), rec)
 	m.updateAwake()
 	m.go_(func() { m.tail(ctx, run) })
+	if run.afterPending {
+		m.go_(func() { m.runAfter(run, after) })
+	}
 	go func() {
 		defer m.recoverPanic()
 		code, err := proc.Wait()
@@ -470,54 +462,95 @@ func (m *Manager) attach(proc *platform.Proc, info runInfo, adopted bool) *serve
 	return run
 }
 
-// adopt takes over a server that is already running.
-func (m *Manager) adopt(pi platform.ProcInfo, saved runInfo) bool {
+// replayer is a Monitor that reads a log back differently while the app
+// catches up with a server it took over (games/valheim's Monitor: a line
+// then counts at its own time when that is earlier). The manager tells it
+// before each line whether it is catching up.
+type replayer interface{ Replaying(on bool) }
+
+// fromLogReader is a Monitor that can read a finished run's log for the
+// records, by the log's own clock.
+type fromLogReader interface{ FromLog() }
+
+// runAfter runs the game's work after launch, then lets the online post go
+// out, with what it made (the mods code) if anything.
+func (m *Manager) runAfter(run *serverRun, after game.Afterer) {
+	var extra map[string]json.RawMessage
+	defer func() { // whatever happens, the post doesn't wait any longer
+		m.mu.Lock()
+		run.afterPending = false
+		for k, v := range extra {
+			if run.rec.Extra == nil {
+				run.rec.Extra = map[string]json.RawMessage{}
+			}
+			run.rec.Extra[k] = v
+		}
+		var post discordPost
+		announce := false
+		if !m.closing && m.ctx.Err() == nil { // closing: the app that takes over posts it
+			post, announce = m.announceLocked(run)
+		}
+		m.mu.Unlock()
+		if announce {
+			m.queueDiscord(post)
+		}
+		m.saveRunInfo(run)
+		m.notify()
+	}()
+	m.mu.Lock()
+	rec := run.rec
+	m.mu.Unlock()
+	var err error
+	if extra, err = after.After(m.ctx, rec); err != nil {
+		m.log.Printf("after the start: %v", err)
+	}
+}
+
+// adopt takes over a server that is already running. saved is its run
+// record when it has one.
+func (m *Manager) adopt(inst *instance, pi platform.ProcInfo, saved *game.Record) bool {
 	proc, err := platform.OpenProc(pi.PID)
 	if err != nil {
 		return false
 	}
-	info := saved
-	if info.PID != pi.PID {
-		m.mu.Lock()
-		info = runInfo{PID: pi.PID, Started: pi.Started, Launched: pi.Started, World: m.settings.World,
-			LogPath: newestLog(m.paths.Logs), Exe: pi.Exe, NoCrossplay: !m.settings.Crossplay}
-		m.mu.Unlock()
+	var rec game.Record
+	if saved != nil && saved.PID == pi.PID {
+		rec = *saved
+	} else if rc, ok := inst.srv.(game.Recoverer); ok {
+		rec = rc.Recover(pi.PID, pi.Started)
+		if pi.Exe != "" {
+			rec.Exe = pi.Exe
+		}
+	} else {
+		rec = game.Record{PID: pi.PID, Started: pi.Started, Launched: pi.Started, World: inst.saved().World,
+			LogPath: newestLog(inst, m.dirsOf(inst).Logs), Exe: inst.srv.Program(), Played: game.Played{Mods: map[string]string{}}}
 	}
-	if info.Launched.IsZero() {
-		info.Launched = proc.StartTime()
+	if rec.Launched.IsZero() {
+		rec.Launched = proc.StartTime()
 	}
-	// The app that started it closed before the mods code was made.
-	info.codePending = info.ModsCode == "" && len(info.CodeMods) > 0
-	run := m.attach(proc, info, true)
-	if info.codePending {
-		m.mu.Lock()
-		p := m.paths
-		m.mu.Unlock()
-		m.go_(func() { m.makeModsCode(run, info.CodeMods, info.World, p) })
-	}
-	m.addActivity("info", "", "Found the Valheim server already running and took over watching it.")
+	m.attach(inst, proc, rec, true)
+	m.addActivity("info", "", fmt.Sprintf("Found the %s server already running and took over watching it.", inst.short()))
 	return true
 }
 
-// adoptRunning looks for a server left running by an earlier session.
-func (m *Manager) adoptRunning() {
-	m.mu.Lock()
-	exe := m.paths.ServerExe
-	runtimePath := m.dataFile("runtime.json")
-	m.mu.Unlock()
-	if info, err := loadRuntime(runtimePath); err == nil {
-		if proc, err := platform.OpenProc(info.PID); err == nil {
-			same := absDuration(proc.StartTime().Sub(info.Started)) < 2*time.Second
+// adoptRunning looks for the instance's server left running by an earlier
+// session of the app (spec 4.4): its run record, if the process it names
+// is still the same one, else a process running the server's program.
+func (m *Manager) adoptRunning(inst *instance) {
+	path := m.runFile(inst)
+	if rec, err := loadRuntime(path); err == nil {
+		if proc, err := platform.OpenProc(rec.PID); err == nil {
+			same := absDuration(proc.StartTime().Sub(rec.Started)) < 2*time.Second
 			proc.Close()
 			if same {
-				m.adopt(platform.ProcInfo{PID: info.PID, Exe: info.Exe, Started: info.Started}, info)
+				m.adopt(inst, platform.ProcInfo{PID: rec.PID, Exe: rec.Exe, Started: rec.Started}, &rec)
 				return
 			}
 		}
-		os.Remove(runtimePath)
+		os.Remove(path)
 	}
-	if procs, _ := platform.FindByExe(exe); len(procs) > 0 {
-		m.adopt(procs[0], runInfo{})
+	if procs, _ := platform.FindByExe(inst.srv.Program()); len(procs) > 0 {
+		m.adopt(inst, procs[0], nil)
 	}
 }
 
@@ -530,47 +563,49 @@ func absDuration(d time.Duration) time.Duration {
 
 // onExit records that the server process ended.
 func (m *Manager) onExit(run *serverRun, code int) {
+	inst := run.inst
 	now := time.Now()
 	if m.ctx.Err() != nil {
 		return // the app is closing; the next start of the app takes over
 	}
 	m.mu.Lock()
-	if m.run != run {
+	if inst.run != run {
 		m.mu.Unlock()
 		return
 	}
 	// A shutdown line only counts shortly before the exit: a player can
 	// make one up, which mustn't hide a later crash.
-	expected := run.stopping || (run.tracker.Stopping && now.Sub(run.tracker.StoppingAt) < 5*time.Minute)
-	for _, p := range run.tracker.Players() {
-		m.notePlayerLocked(logparse.Activity{Kind: "leave", Time: now, Name: p.Name, PlatformID: p.PlatformID}, p.Since)
+	st := run.state()
+	expected := run.stopping || (st.Stopping && now.Sub(st.StoppingAt) < 5*time.Minute)
+	for _, p := range st.Players {
+		m.notePlayerLocked(inst, game.Event{Kind: "leave", Time: now, Name: p.Name, Account: p.Account}, p.Since)
 	}
-	noteEventsLocked(run, run.tracker.Reset(now))
+	noteEventsLocked(run, run.mon.End(now))
 	archived := m.archiveRunLocked(run)
-	m.run = nil
-	m.idleSince = now
-	exit := &ExitInfo{At: now, Code: code, Expected: expected, World: run.info.World,
-		Uptime: now.Sub(run.info.Launched).Seconds()}
+	inst.run = nil
+	m.machineIdleSince = now
+	exit := &ExitInfo{At: now, Code: code, Expected: expected, World: run.rec.World,
+		Uptime: now.Sub(run.rec.Launched).Seconds()}
 	autoRestart := false
 	if !expected {
-		lines, _ := m.logs.after(0, 30)
+		lines, _ := inst.logs.after(0, 30)
 		for _, l := range lines {
 			exit.LogTail = append(exit.LogTail, l.Text)
 		}
 		// Restart after a crash, but give up after 3 crashes in 15 minutes.
-		recent := m.crashes[:0]
-		for _, t := range m.crashes {
+		recent := inst.crashes[:0]
+		for _, t := range inst.crashes {
 			if now.Sub(t) < 15*time.Minute {
 				recent = append(recent, t)
 			}
 		}
-		m.crashes = append(recent, now)
-		autoRestart = m.settings.AutoRestart && len(m.crashes) <= 3 && run.ready
+		inst.crashes = append(recent, now)
+		autoRestart = inst.saved().Server.Bool("autoRestart") && len(inst.crashes) <= 3 && run.ready
 	}
-	m.lastExit = exit
-	runtimePath := m.dataFile("runtime.json")
+	inst.lastExit = exit
+	runtimePath := m.runFile(inst)
 	why := stopStopped
-	job := m.job
+	job, app := inst.job, m.appJob
 	switch {
 	case !expected && autoRestart:
 		why = stopCrashRestart
@@ -578,7 +613,7 @@ func (m *Manager) onExit(run *serverRun, code int) {
 		why = stopCrash
 	case job != nil && job.Finished == nil && job.Kind == "restart":
 		why = stopRestart
-	case job != nil && job.Finished == nil && job.Kind == "hibernate":
+	case app != nil && app.Finished == nil && app.Kind == "hibernate":
 		why = stopRest
 	}
 	// Queued before unlocking, so anyone who sees the server stopped (and
@@ -594,16 +629,16 @@ func (m *Manager) onExit(run *serverRun, code int) {
 	if expected {
 		m.addActivity("stopped", "", "The server stopped.")
 	} else {
-		m.addActivity("crashed", "", fmt.Sprintf("The server stopped unexpectedly (exit code %d). %s", code, m.exitHint()))
+		m.addActivity("crashed", "", fmt.Sprintf("The server stopped unexpectedly (exit code %d). %s", code, m.exitHintFor(inst)))
 	}
 	if autoRestart {
 		m.addActivity("info", "", fmt.Sprintf("Restarting the server in %d seconds because \"Restart if it crashes\" is on.", int(m.opt.RestartDelay.Seconds())))
 		time.AfterFunc(m.opt.RestartDelay, func() {
 			m.mu.Lock()
-			still := m.run == nil && m.ctx.Err() == nil
+			still := inst.run == nil && m.ctx.Err() == nil
 			m.mu.Unlock()
 			if still {
-				if err := m.StartServer(); err != nil {
+				if err := m.startGame(inst); err != nil {
 					m.log.Printf("auto restart: %v", err)
 				}
 			}
@@ -611,7 +646,7 @@ func (m *Manager) onExit(run *serverRun, code int) {
 	}
 	m.saveData()
 	if archived {
-		m.saveRecords()
+		m.saveRecordsFor(inst)
 	}
 	m.notify()
 }
@@ -630,8 +665,8 @@ func (m *Manager) tail(ctx context.Context, run *serverRun) {
 	tick := time.NewTicker(400 * time.Millisecond)
 	defer tick.Stop()
 	for {
-		if f == nil && run.info.LogPath != "" {
-			if fh, err := os.Open(run.info.LogPath); err == nil {
+		if f == nil && run.rec.LogPath != "" {
+			if fh, err := os.Open(run.rec.LogPath); err == nil {
 				f = fh
 			}
 		}
@@ -659,25 +694,10 @@ func (m *Manager) tail(ctx context.Context, run *serverRun) {
 				}
 			}
 			if run.replaying {
-				m.mu.Lock()
-				run.replaying = false // caught up with the existing log
-				// Remember players who joined while this app was closed.
-				for _, p := range run.tracker.Players() {
-					if m.known[p.Name] == nil {
-						m.notePlayerLocked(logparse.Activity{Kind: "join", Time: p.Since, Name: p.Name, PlatformID: p.PlatformID}, time.Time{})
-					}
-				}
-				// Post the join code if the app that started the server didn't.
-				post, announce := m.announceLocked(run)
-				m.mu.Unlock()
-				if announce {
-					m.queueDiscord(post)
-					m.saveRunInfo(run)
-				}
-				m.notify()
+				m.caughtUp(run)
 			}
 		}
-		m.checkOverdue(run)
+		m.tick(run)
 		select {
 		case <-ctx.Done():
 			if len(partial) > 0 {
@@ -689,92 +709,122 @@ func (m *Manager) tail(ctx context.Context, run *serverRun) {
 	}
 }
 
+// caughtUp ends the catching up with a taken-over server's log.
+func (m *Manager) caughtUp(run *serverRun) {
+	inst := run.inst
+	m.mu.Lock()
+	run.replaying = false // caught up with the existing log
+	// Remember players who joined while this app was closed.
+	for _, p := range run.state().Players {
+		if inst.known[p.Name] == nil {
+			m.notePlayerLocked(inst, game.Event{Kind: "join", Time: p.Since, Name: p.Name, Account: p.Account}, time.Time{})
+		}
+	}
+	// Post the online message if the app that started the server didn't.
+	post, announce := m.announceLocked(run)
+	m.mu.Unlock()
+	if announce {
+		m.queueDiscord(post)
+		m.saveRunInfo(run)
+	}
+	m.notify()
+}
+
 // handleLine processes one line of server output.
 func (m *Manager) handleLine(run *serverRun, line string) {
-	if logparse.IsNoise(line) {
-		return
-	}
-	ev := logparse.Parse(line)
-	at := ev.Time
-	if at.IsZero() {
-		at = time.Now()
-	}
-	text := ev.Text // without Valheim's own timestamp; Time carries it
-	m.logs.add(func(seq int64) LogLine { return LogLine{Seq: seq, Time: at, Text: text} })
-	m.handleEvent(run, ev)
-}
-
-// readyWait is how long after logging in to Steam a server that never says
-// it opened is counted as ready anyway. Making a big new world can take
-// several minutes on an older computer.
-var readyWait = 10 * time.Minute
-
-// checkOverdue counts a server as ready when it logged in to Steam long ago
-// but never said it opened, so a Valheim update that words that line
-// differently can't leave it "starting" forever.
-func (m *Manager) checkOverdue(run *serverRun) {
 	m.mu.Lock()
-	overdue := m.run == run && !run.replaying && run.tracker.Overdue(time.Now(), readyWait)
-	m.mu.Unlock()
-	if overdue {
-		m.log.Printf("the server logged in to Steam %v ago but never said it opened; counting it as online", readyWait)
-		m.handleEvent(run, logparse.Event{Kind: logparse.ServerReady, Count: -1})
-	}
-}
-
-// handleEvent updates the server's state with one log event.
-func (m *Manager) handleEvent(run *serverRun, ev logparse.Event) {
-	m.mu.Lock()
-	if m.run != run {
+	if run.inst.run != run {
 		m.mu.Unlock()
 		return
 	}
-	before := m.stateLocked()
-	sinceByName := map[string]time.Time{}
-	for _, p := range run.tracker.Players() {
-		sinceByName[p.Name] = p.Since
+	sinceByName := m.sinceByNameLocked(run)
+	// The Monitor times a taken-over server's lines by their own clock
+	// while the app catches up with its log (run.replaying says when).
+	if r, ok := run.mon.(replayer); ok {
+		r.Replaying(run.replaying)
 	}
-	now := time.Now()
-	if run.replaying && !ev.Time.IsZero() && ev.Time.Before(now) {
-		now = ev.Time // a log read back all at once: time its player counts by its own lines
+	l := run.mon.Line(line, time.Now())
+	m.mu.Unlock()
+	if l.Hide {
+		return
 	}
-	acts := run.tracker.Apply(ev, now)
-	noteEventsLocked(run, acts)
-	if run.tracker.Ready && !run.ready {
+	at := l.Time
+	if at.IsZero() {
+		at = time.Now()
+	}
+	run.inst.logs.add(func(seq int64) LogLine { return LogLine{Seq: seq, Time: at, Text: l.Text} })
+	m.handleEvents(run, l.Events, sinceByName)
+}
+
+// tick lets the Monitor notice what no line says, such as a server that
+// never said it's ready (Valheim counts it as ready after a while).
+func (m *Manager) tick(run *serverRun) {
+	m.mu.Lock()
+	if run.inst.run != run || run.replaying {
+		m.mu.Unlock()
+		return
+	}
+	sinceByName := m.sinceByNameLocked(run)
+	evs := run.mon.Tick(time.Now())
+	m.mu.Unlock()
+	if len(evs) > 0 {
+		m.handleEvents(run, evs, sinceByName)
+	}
+}
+
+// sinceByNameLocked is when each listed player joined, for their play time.
+func (m *Manager) sinceByNameLocked(run *serverRun) map[string]time.Time {
+	out := map[string]time.Time{}
+	for _, p := range run.state().Players {
+		out[p.Name] = p.Since
+	}
+	return out
+}
+
+// handleEvents updates the instance with what the Monitor made of a line
+// (or a tick). sinceByName is when each player joined, from before it.
+func (m *Manager) handleEvents(run *serverRun, evs []game.Event, sinceByName map[string]time.Time) {
+	inst := run.inst
+	m.mu.Lock()
+	if inst.run != run {
+		m.mu.Unlock()
+		return
+	}
+	noteEventsLocked(run, evs)
+	if !run.ready && (hasKind(evs, "online") || run.state().Ready) {
 		run.ready, run.readyAt = true, time.Now()
 		close(run.readyCh)
 	}
 	post, announce := m.announceLocked(run)
 	replaying := run.replaying
 	savePlayed := false
+	var shown []game.Event
 	if !replaying {
-		for _, a := range acts {
-			m.notePlayerLocked(a, sinceByName[a.Name])
-			if a.Kind == "join" {
-				m.idleSince = time.Now()
+		for _, ev := range evs {
+			if ev.Text != "" {
+				shown = append(shown, ev)
+			}
+			m.notePlayerLocked(inst, ev, sinceByName[ev.Name])
+			if ev.Kind == "join" {
+				m.machineIdleSince = time.Now()
 				savePlayed = m.notePlayedLocked(run) || savePlayed
 			}
-		}
-		// The server's own count of who's connected. Lines a player makes up
-		// can wrongly empty the player list, but the server keeps logging
-		// its true count about every 10 minutes, so this stops the computer
-		// going to sleep while friends play. A made-up count above 0 can
-		// only keep it awake.
-		if ev.Count > 0 && (ev.Kind == logparse.PeerCount || (ev.Kind == logparse.JoinCode && ev.Addr != "")) {
-			now := time.Now()
-			m.idleSince = now
-			// And at least until the next count, even with the shortest
-			// idle time, which is just as long as the gap between counts.
-			if hold := now.Add(15 * time.Minute); m.keepAwakeUntil.Before(hold) {
-				m.keepAwakeUntil = hold
+			// The server's own count of who's connected, which a player
+			// can't fake to empty the list: it holds the computer awake,
+			// at least until the next count (spec 2.6).
+			if ev.Kind == "count" && ev.Hold && ev.Count > 0 {
+				now := time.Now()
+				m.machineIdleSince = now
+				if hold := now.Add(15 * time.Minute); m.keepAwakeUntil.Before(hold) {
+					m.keepAwakeUntil = hold
+				}
 			}
 		}
 	}
-	changed := before != m.stateLocked()
 	m.mu.Unlock()
 
 	if savePlayed {
-		m.savePlayed()
+		m.savePlayedFor(inst)
 	}
 	if announce {
 		m.queueDiscord(post)
@@ -783,20 +833,27 @@ func (m *Manager) handleEvent(run *serverRun, ev logparse.Event) {
 	if replaying {
 		return // don't repeat old news when taking over a running server
 	}
-	for _, a := range acts {
-		m.addActivityAt(a.Time, a.Kind, a.Name, a.Text)
+	for _, ev := range shown {
+		m.addActivityAt(ev.Time, ev.Kind, ev.Name, ev.Text)
 	}
-	if changed || len(acts) > 0 {
+	if len(evs) > 0 {
 		m.notify()
 	}
 }
 
-// pruneLogs keeps the 30 newest server logs.
-func (m *Manager) pruneLogs() {
-	m.mu.Lock()
-	dir := m.paths.Logs
-	m.mu.Unlock()
-	matches, _ := filepath.Glob(filepath.Join(dir, "server-*.log"))
+func hasKind(evs []game.Event, kind string) bool {
+	for _, ev := range evs {
+		if ev.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
+// pruneLogs keeps the instance's 30 newest server logs. It runs without
+// m.mu, so it reads the folders through dirsOf.
+func (m *Manager) pruneLogs(inst *instance) {
+	matches, _ := filepath.Glob(filepath.Join(m.dirsOf(inst).Logs, logPrefix(inst)+"*.log"))
 	sort.Strings(matches)
 	for i := 0; i < len(matches)-30; i++ {
 		os.Remove(matches[i])

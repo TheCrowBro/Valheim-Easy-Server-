@@ -82,7 +82,7 @@ func TestModsCode(t *testing.T) {
 		waitFor(t, "the mods code", 20*time.Second, func() bool {
 			m.mu.Lock()
 			defer m.mu.Unlock()
-			return m.run != nil && !m.run.info.codePending
+			return m.legacy().run != nil && !m.legacy().run.afterPending
 		})
 	}
 	// The same mods keep the same code.

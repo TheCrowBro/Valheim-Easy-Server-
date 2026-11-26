@@ -49,7 +49,8 @@ func (m *Manager) Hibernate(reason string) error {
 	if sleep {
 		title = "Putting the computer to sleep"
 	}
-	return m.runJob("hibernate", title, false, func(ctx context.Context, j *jobCtl) error {
+	inst := m.legacy()
+	return m.runAppJob("hibernate", title, false, func(ctx context.Context, j *jobCtl) error {
 		if ok, detail := m.restStatus(sleep); !ok {
 			if sleep {
 				return &ActionError{Msg: detail, Action: "settings"}
@@ -57,10 +58,10 @@ func (m *Manager) Hibernate(reason string) error {
 			return &ActionError{Msg: detail, Action: "enable_hibernate"}
 		}
 		m.mu.Lock()
-		running := m.run != nil
+		running := inst.run != nil
 		m.mu.Unlock()
 		if running {
-			if err := m.doStop(ctx, j); err != nil {
+			if err := m.doStop(ctx, j, inst); err != nil {
 				// Resting keeps everything in memory, so nothing is lost
 				// even if the server didn't stop.
 				m.log.Printf("stopping before resting: %v", err)
@@ -133,7 +134,7 @@ func (m *Manager) EnableHibernation() error {
 // KeepAwake postpones automatic hibernation (or sleep).
 func (m *Manager) KeepAwake() {
 	m.mu.Lock()
-	m.idleSince = time.Now()
+	m.machineIdleSince = time.Now()
 	m.keepAwakeUntil = time.Now().Add(time.Duration(m.settings.IdleMinutes) * time.Minute)
 	sleep := m.settings.RestMode == config.RestSleep
 	m.mu.Unlock()
@@ -204,10 +205,10 @@ func (m *Manager) sampleLoop() {
 func (m *Manager) sample(now time.Time, gap time.Duration) {
 	sys := m.sys.Sample()
 	m.mu.Lock()
-	run := m.run
+	run := m.legacy().run
 	players, ready := 0, false
 	if run != nil {
-		players, ready = run.tracker.Count(), run.ready
+		players, ready = run.state().Count, run.ready
 	}
 	m.mu.Unlock()
 
@@ -291,7 +292,7 @@ func (m *Manager) sleptSince(t time.Time) bool {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	j := m.job
+	j := m.appJob
 	return j != nil && j.Kind == "hibernate" && j.Result == sleptResult && j.Finished != nil && j.Finished.After(t)
 }
 
@@ -301,7 +302,7 @@ func (m *Manager) sleptSince(t time.Time) bool {
 // nothing keeps it awake until someone is known to want it (see wakeWanted).
 func (m *Manager) onWake(gap time.Duration) {
 	m.mu.Lock()
-	m.idleSince = time.Now()
+	m.machineIdleSince = time.Now()
 	m.wakeHold = time.Time{}     // a hold from before it slept doesn't count any more
 	m.net.publicAt = time.Time{} // the address may have changed
 	m.mu.Unlock()
@@ -371,7 +372,7 @@ func (m *Manager) holdAwake() {
 func (m *Manager) wokenOnPurpose() {
 	m.holdAwake()
 	m.mu.Lock()
-	resume := m.resumeOnWake && m.settings.StartAfterWake && m.run == nil
+	resume := m.resumeOnWake && m.settings.StartAfterWake && m.legacy().run == nil
 	m.resumeOnWake = false
 	m.mu.Unlock()
 	m.addActivity("wake", "", fmt.Sprintf("The computer woke up. It stays awake for at least %d minutes, so friends have time to join.", int(wakeGrace.Minutes())))
@@ -390,11 +391,33 @@ func (m *Manager) wokenOnPurpose() {
 }
 
 // wantAwakeLocked reports whether Windows should be kept from sleeping:
-// while the server runs, for a while after waking up, and while a job
-// (other than resting) is in progress, such as starting the server.
+// while a server runs (also one this version only watches, foreign.go),
+// for a while after waking up, and while a job (other than resting) is in
+// progress, such as starting a server.
 func (m *Manager) wantAwakeLocked(now time.Time) bool {
-	job := m.job != nil && m.job.Finished == nil && m.job.Kind != "hibernate"
-	return m.run != nil || now.Before(m.wakeHold) || job
+	return m.anyRunLocked() || len(m.foreign) > 0 || now.Before(m.wakeHold) || m.workingLocked()
+}
+
+// workingLocked reports whether a job other than resting is in progress
+// in any slot.
+func (m *Manager) workingLocked() bool {
+	busy := running(m.appJob) && m.appJob.Kind != "hibernate"
+	m.eachInstance(func(i *instance) { busy = busy || running(i.job) && i.job.Kind != "hibernate" })
+	return busy
+}
+
+// anyRunLocked reports whether any instance's server runs.
+func (m *Manager) anyRunLocked() bool {
+	on := false
+	m.eachInstance(func(i *instance) { on = on || i.run != nil })
+	return on
+}
+
+// playingLocked reports whether anyone is on any instance's server.
+func (m *Manager) someonePlayingLocked() bool {
+	on := false
+	m.eachInstance(func(i *instance) { on = on || i.run != nil && i.run.state().Count > 0 })
+	return on
 }
 
 // updateAwake asks Windows to stay awake, or stops asking, as needed. It
@@ -421,13 +444,13 @@ func (m *Manager) idleDeadlineLocked() time.Time {
 	if !m.checks.at.IsZero() && !can { // it would never happen
 		return time.Time{}
 	}
-	if m.run != nil && m.run.tracker.Count() > 0 {
-		return time.Time{}
+	if m.someonePlayingLocked() || len(m.foreign) > 0 {
+		return time.Time{} // a foreign server's players can't be seen: it may be in use
 	}
-	if m.job != nil && m.job.Finished == nil && m.job.Kind != "hibernate" {
+	if m.workingLocked() {
 		return time.Time{} // it waits for the job to end
 	}
-	at := m.idleSince.Add(time.Duration(m.settings.IdleMinutes) * time.Minute)
+	at := m.machineIdleSince.Add(time.Duration(m.settings.IdleMinutes) * time.Minute)
 	if m.keepAwakeUntil.After(at) {
 		at = m.keepAwakeUntil
 	}
@@ -436,12 +459,12 @@ func (m *Manager) idleDeadlineLocked() time.Time {
 
 func (m *Manager) checkIdle(now time.Time) {
 	m.mu.Lock()
-	if !m.settings.IdleHibernate || (m.run != nil && m.run.tracker.Count() > 0) {
-		m.idleSince = now
+	if !m.settings.IdleHibernate || m.someonePlayingLocked() || len(m.foreign) > 0 {
+		m.machineIdleSince = now
 		m.mu.Unlock()
 		return
 	}
-	busy := m.job != nil && m.job.Finished == nil
+	busy := m.anyJobLocked()
 	deadline := m.idleDeadlineLocked()
 	minutes := m.settings.IdleMinutes
 	sleep := m.settings.RestMode == config.RestSleep
@@ -453,8 +476,8 @@ func (m *Manager) checkIdle(now time.Time) {
 	// their last input instead, so the panel shows when it really will.
 	if idle, ok := idleTime(); ok && idle < time.Duration(minutes)*time.Minute {
 		m.mu.Lock()
-		if used := now.Add(-idle); used.After(m.idleSince) {
-			m.idleSince = used
+		if used := now.Add(-idle); used.After(m.machineIdleSince) {
+			m.machineIdleSince = used
 		}
 		m.mu.Unlock()
 		return

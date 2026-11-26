@@ -76,13 +76,13 @@ func TestAppUpdates(t *testing.T) {
 
 	// Not in the middle of something.
 	m.mu.Lock()
-	m.uploads["u1"] = &worlds.Upload{Created: time.Now()}
+	m.legacy().uploads["u1"] = &worlds.Upload{Created: time.Now()}
 	m.mu.Unlock()
 	if err := m.CheckForUpdate(true); !errors.Is(err, errUpdateBusy) {
 		t.Fatalf("busy: %v", err)
 	}
 	m.mu.Lock()
-	m.uploads["u1"].Created = time.Now().Add(-3 * time.Hour) // forgotten about
+	m.legacy().uploads["u1"].Created = time.Now().Add(-3 * time.Hour) // forgotten about
 	m.mu.Unlock()
 
 	if err := m.CheckForUpdate(true); err != nil {

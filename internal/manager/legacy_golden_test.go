@@ -30,6 +30,8 @@ import (
 	"time"
 
 	"valheim-easy-server/internal/config"
+	"valheim-easy-server/internal/game"
+	"valheim-easy-server/internal/games/valheim"
 	"valheim-easy-server/internal/records"
 	"valheim-easy-server/internal/stats"
 )
@@ -81,14 +83,15 @@ var legacyAllowed = map[string][]string{
 // legacyAt is when everything in the sample files happened.
 var legacyAt = time.Date(2026, 11, 20, 18, 30, 0, 0, time.UTC)
 
-func legacyRunInfo() runInfo {
-	return runInfo{PID: 4242, Started: legacyAt, Launched: legacyAt.Add(time.Second),
+func legacyRunInfo() game.Record {
+	return game.Record{PID: 4242, Started: legacyAt, Launched: legacyAt.Add(time.Second),
 		LogPath: "/data/logs/server-2026-11-20_18-30-00.log", World: "Midgard", ArgsKey: "0123456789abcdef",
 		Exe: "/data/server/valheim_server.x86_64", Announced: "604510", Posted: legacyAt.Add(time.Minute),
-		PostError:   "Couldn't reach Discord.",
-		Played:      played{Game: "1.0.21", Mods: map[string]string{"riverheim": "1.2.3"}, Password: hashPassword("raven-fjord-4821")},
-		NoCrossplay: true, Server: "Viking Night", Port: 2456, Password: "raven-fjord-4821",
-		ModsCode: "019a3b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b", CodeMods: []string{"riverheim"}}
+		PostError: "Couldn't reach Discord.",
+		Played:    played{Game: "1.0.21", Mods: map[string]string{"riverheim": "1.2.3"}, Password: hashPassword("raven-fjord-4821")},
+		Server:    "Viking Night", Port: 2456, Password: "raven-fjord-4821",
+		// Valheim's own fields, which runtime.json keeps at its top level.
+		Extra: valheim.RecordExtra(true, "019a3b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b", []string{"riverheim"})}
 }
 
 func legacySettings() config.Settings {
@@ -148,9 +151,9 @@ func writeLegacyFiles(t *testing.T, dir string) {
 	saveRuntime(m.dataFile("runtime.json"), legacyRunInfo())
 
 	m.mu.Lock()
-	m.known = map[string]*KnownPlayer{"Astrid": {Name: "Astrid", PlatformID: "Steam_76561198000000001",
+	m.legacy().known = map[string]*KnownPlayer{"Astrid": {Name: "Astrid", PlatformID: "Steam_76561198000000001",
 		FirstSeen: legacyAt, LastSeen: legacyAt.Add(2 * time.Hour), PlaySeconds: 7200, Sessions: 3}}
-	m.recs = legacyRecords()
+	m.legacy().recs = legacyRecords()
 	m.lastPlayed = &played{Game: "1.0.21", Mods: map[string]string{"riverheim": "1.2.3"}, Password: hashPassword("raven-fjord-4821")}
 	m.wk.file = legacyWaker()
 	m.mu.Unlock()
@@ -227,12 +230,12 @@ func TestLegacyFilesRead(t *testing.T) {
 	if got, err := loadRuntime(m.dataFile("runtime.json")); err != nil || !reflect.DeepEqual(got, legacyRunInfo()) {
 		t.Errorf("runtime.json reads as %+v (%v)\nwant %+v", got, err, legacyRunInfo())
 	}
-	if p := m.known["Astrid"]; p == nil || p.PlatformID != "Steam_76561198000000001" || !p.FirstSeen.Equal(legacyAt) ||
+	if p := m.legacy().known["Astrid"]; p == nil || p.PlatformID != "Steam_76561198000000001" || !p.FirstSeen.Equal(legacyAt) ||
 		!p.LastSeen.Equal(legacyAt.Add(2*time.Hour)) || p.PlaySeconds != 7200 || p.Sessions != 3 {
 		t.Errorf("players.json reads as %+v", p)
 	}
-	if !reflect.DeepEqual(m.recs, legacyRecords()) {
-		t.Errorf("records.json reads as %+v", m.recs)
+	if !reflect.DeepEqual(m.legacy().recs, legacyRecords()) {
+		t.Errorf("records.json reads as %+v", m.legacy().recs)
 	}
 	if want := (played{Game: "1.0.21", Mods: map[string]string{"riverheim": "1.2.3"}, Password: hashPassword("raven-fjord-4821")}); m.lastPlayed == nil || !reflect.DeepEqual(*m.lastPlayed, want) {
 		t.Errorf("lastplayed.json reads as %+v", m.lastPlayed)
@@ -333,7 +336,7 @@ func TestRuntimeJSONCompat(t *testing.T) {
 	os.WriteFile(path, []byte(`{"pid": 4242, "started": "2026-11-20T18:30:00Z", "launched": "2026-11-20T18:30:01Z",
   "logPath": "/data/logs/server-2026-11-20_18-30-00.log", "world": "Midgard", "argsKey": "0123456789abcdef",
   "exe": "/data/server/valheim_server.x86_64"}`), 0o600)
-	want := runInfo{PID: 4242, Started: legacyAt, Launched: legacyAt.Add(time.Second),
+	want := game.Record{PID: 4242, Started: legacyAt, Launched: legacyAt.Add(time.Second),
 		LogPath: "/data/logs/server-2026-11-20_18-30-00.log", World: "Midgard", ArgsKey: "0123456789abcdef",
 		Exe: "/data/server/valheim_server.x86_64"}
 	if got, err := loadRuntime(path); err != nil || !reflect.DeepEqual(got, want) {

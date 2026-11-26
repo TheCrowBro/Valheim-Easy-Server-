@@ -186,7 +186,7 @@ func TestIdleDeadlineFollowsInput(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.mu.Lock()
-	m.idleSince = time.Now().Add(-11 * time.Minute) // nobody has played for a while
+	m.machineIdleSince = time.Now().Add(-11 * time.Minute) // nobody has played for a while
 	m.mu.Unlock()
 	waitFor(t, "the deadline to follow the input", 5*time.Second, func() bool {
 		idle := m.Status().Idle
@@ -201,7 +201,7 @@ func TestIdleDeadlineFollowsInput(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.mu.Lock()
-	m.idleSince = time.Now().Add(-11 * time.Minute)
+	m.machineIdleSince = time.Now().Add(-11 * time.Minute)
 	m.mu.Unlock()
 	idle := m.Status().Idle
 	close(release)

@@ -19,6 +19,7 @@ import (
 
 	"valheim-easy-server/internal/config"
 	"valheim-easy-server/internal/discord"
+	"valheim-easy-server/internal/game"
 	"valheim-easy-server/internal/logparse"
 	"valheim-easy-server/internal/records"
 )
@@ -31,38 +32,41 @@ type recordsData struct {
 	Posted string                     `json:"posted"` // the last day summed up in Discord (2006-01-02)
 }
 
-func (m *Manager) loadRecords() {
-	m.recs = recordsData{Runs: map[string][]records.Event{}}
-	path := m.dataFile(recordsFile)
+func (m *Manager) loadRecords(inst *instance) {
+	inst.recs = recordsData{Runs: map[string][]records.Event{}}
+	path := m.instFile(inst, recordsFile)
 	b, err := os.ReadFile(path)
 	if err == nil {
-		if json.Unmarshal(b, &m.recs) == nil {
-			if m.recs.Runs == nil {
-				m.recs.Runs = map[string][]records.Event{}
+		if json.Unmarshal(b, &inst.recs) == nil {
+			if inst.recs.Runs == nil {
+				inst.recs.Runs = map[string][]records.Event{}
 			}
 			return
 		}
 		// Damaged: keep it for a look and start again from the logs.
-		m.recs = recordsData{Runs: map[string][]records.Event{}}
+		inst.recs = recordsData{Runs: map[string][]records.Event{}}
 		broken := path + ".damaged-" + time.Now().Format("20060102-150405")
 		os.Rename(path, broken)
 		m.log.Printf("records were damaged; saved as %s", broken)
 	}
 	// The first time: the daily Discord post starts tonight, not with
 	// yesterday's.
-	m.recs.Posted = records.Midnight(time.Now()).AddDate(0, 0, -1).Format("2006-01-02")
+	inst.recs.Posted = records.Midnight(time.Now()).AddDate(0, 0, -1).Format("2006-01-02")
 }
 
-func (m *Manager) saveRecords() {
+// saveRecords saves the legacy game's records.
+func (m *Manager) saveRecords() { m.saveRecordsFor(m.legacy()) }
+
+func (m *Manager) saveRecordsFor(inst *instance) {
 	m.mu.Lock()
-	b, err := json.Marshal(m.recs)
+	b, err := json.Marshal(inst.recs)
 	m.mu.Unlock()
 	if err == nil {
-		config.WriteFileAtomic(m.dataFile(recordsFile), b, 0o644)
+		config.WriteFileAtomic(m.instFile(inst, recordsFile), b, 0o644)
 	}
 }
 
-// recordKind is the records event for a feed activity, or "".
+// recordKind is the records event for a game event, or "".
 func recordKind(activity string) string {
 	switch activity {
 	case "join":
@@ -77,8 +81,8 @@ func recordKind(activity string) string {
 
 // noteEventsLocked keeps the joins, leaves and deaths of a run, including
 // those read again after the app restarted (they're a fresh run's).
-func noteEventsLocked(run *serverRun, acts []logparse.Activity) {
-	for _, a := range acts {
+func noteEventsLocked(run *serverRun, evs []game.Event) {
+	for _, a := range evs {
 		if k := recordKind(a.Kind); k != "" && a.Name != "" && !a.Time.IsZero() {
 			run.events = append(run.events, records.Event{T: a.Time.Unix(), Kind: k, Name: a.Name})
 		}
@@ -88,27 +92,32 @@ func noteEventsLocked(run *serverRun, acts []logparse.Activity) {
 // archiveRunLocked keeps a finished run's events; it reports whether
 // there's something to save.
 func (m *Manager) archiveRunLocked(run *serverRun) bool {
-	name := filepath.Base(run.info.LogPath)
-	if run.info.LogPath == "" || len(run.events) == 0 {
+	name := filepath.Base(run.rec.LogPath)
+	if run.rec.LogPath == "" || len(run.events) == 0 {
 		return false
 	}
-	m.recs.Runs[name] = run.events
+	run.inst.recs.Runs[name] = run.events
 	return true
 }
 
 // backfillRecords reads the logs of runs that aren't in records.json yet:
 // those from before records existed, or that ended while the app was closed.
-func (m *Manager) backfillRecords() {
+func (m *Manager) backfillRecords() { m.eachInstance(m.backfillRecordsFor) }
+
+func (m *Manager) backfillRecordsFor(inst *instance) {
 	m.mu.Lock()
-	dir := m.paths.Logs
+	dir := inst.dirs.Logs
 	// The account each name last played from, to tell apart friends who
 	// connected at the same time.
-	accounts := make(map[string]string, len(m.known))
-	for name, p := range m.known {
+	accounts := make(map[string]string, len(inst.known))
+	for name, p := range inst.known {
 		accounts[name] = p.PlatformID
 	}
 	m.mu.Unlock()
-	logs, _ := filepath.Glob(filepath.Join(dir, "server-*.log"))
+	newMon := func() game.Monitor {
+		return inst.srv.Watch(game.Record{}, func(name string) string { return accounts[name] })
+	}
+	logs, _ := filepath.Glob(filepath.Join(dir, logPrefix(inst)+"*.log"))
 	changed := false
 	for _, path := range logs {
 		if m.ctx.Err() != nil {
@@ -116,42 +125,46 @@ func (m *Manager) backfillRecords() {
 		}
 		name := filepath.Base(path)
 		m.mu.Lock()
-		_, known := m.recs.Runs[name]
-		current := m.run != nil && filepath.Base(m.run.info.LogPath) == name
+		_, known := inst.recs.Runs[name]
+		current := inst.run != nil && filepath.Base(inst.run.rec.LogPath) == name
 		m.mu.Unlock()
 		if known || current {
 			continue
 		}
-		events, err := eventsFromLog(path, accounts)
+		events, err := readLogEvents(newMon, path)
 		if err != nil {
 			m.log.Printf("records: reading %s: %v", name, err)
 			continue
 		}
 		m.mu.Lock()
-		if m.run == nil || filepath.Base(m.run.info.LogPath) != name { // it may have started meanwhile
-			m.recs.Runs[name], changed = events, true
+		if inst.run == nil || filepath.Base(inst.run.rec.LogPath) != name { // it may have started meanwhile
+			inst.recs.Runs[name], changed = events, true
 		}
 		m.mu.Unlock()
 	}
 	if changed {
-		m.saveRecords()
+		m.saveRecordsFor(inst)
 	}
 }
 
-// eventsFromLog reads who joined, left and died from a server log. accounts
-// gives the account each name last played from.
-func eventsFromLog(path string, accounts map[string]string) ([]records.Event, error) {
+// readLogEvents reads who joined, left and died from a finished run's
+// log, with a fresh Monitor from newMon (which knows the account each name
+// last played from). A Monitor that can read a log by its own clock
+// (Valheim's) does so: each line counts at the newest time the log gave.
+func readLogEvents(newMon func() game.Monitor, path string) ([]records.Event, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	var tracker logparse.Tracker
-	tracker.KnownPlatformID = func(name string) string { return accounts[name] }
+	mon := newMon()
+	if r, ok := mon.(fromLogReader); ok {
+		r.FromLog()
+	}
 	events := []records.Event{}
 	var last time.Time
-	add := func(acts []logparse.Activity) {
-		for _, a := range acts {
+	add := func(evs []game.Event) {
+		for _, a := range evs {
 			if k := recordKind(a.Kind); k != "" && a.Name != "" && !a.Time.IsZero() {
 				events = append(events, records.Event{T: a.Time.Unix(), Kind: k, Name: a.Name})
 			}
@@ -160,44 +173,40 @@ func eventsFromLog(path string, accounts map[string]string) ([]records.Event, er
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 64<<10), 1<<20)
 	for sc.Scan() {
-		if logparse.IsNoise(sc.Text()) {
-			continue
+		l := mon.Line(sc.Text(), time.Now())
+		if !l.Time.IsZero() {
+			last = l.Time
 		}
-		ev := logparse.Parse(sc.Text())
-		if !ev.Time.IsZero() {
-			last = ev.Time
-		}
-		if !last.IsZero() {
-			add(tracker.Apply(ev, last))
-		}
+		add(l.Events)
 	}
 	// Whoever is still listed left when the log ends.
-	add(tracker.Reset(last))
+	add(mon.End(last))
 	if err := sc.Err(); err != nil && !errors.Is(err, bufio.ErrTooLong) {
 		return events, err
 	}
 	return events, nil
 }
 
-// Records works out the records for "today", "week" or "all".
+// Records works out the legacy game's records for "today", "week" or
+// "all".
 func (m *Manager) Records(period string) (records.Summary, error) {
 	now := time.Now()
 	from, to, ok := records.Period(period, now)
 	if !ok {
 		return records.Summary{}, fmt.Errorf("unknown period %q", period)
 	}
-	return m.recordsBetween(from, to, now), nil
+	return m.recordsBetween(m.legacy(), from, to, now), nil
 }
 
-func (m *Manager) recordsBetween(from, to, now time.Time) records.Summary {
+func (m *Manager) recordsBetween(inst *instance, from, to, now time.Time) records.Summary {
 	m.mu.Lock()
 	var events []records.Event
 	current := ""
-	if m.run != nil {
-		current = filepath.Base(m.run.info.LogPath)
-		events = append(events, m.run.events...)
+	if inst.run != nil {
+		current = filepath.Base(inst.run.rec.LogPath)
+		events = append(events, inst.run.events...)
 	}
-	for name, run := range m.recs.Runs {
+	for name, run := range inst.recs.Runs {
 		if name != current { // the running server's own events are the ones above
 			events = append(events, run...)
 		}
@@ -229,23 +238,24 @@ func (m *Manager) checkDaily(now time.Time) {
 		day, when = records.Midnight(now), "today"
 	}
 	key := day.Format("2006-01-02")
+	inst := m.legacy()
 	m.mu.Lock()
-	if m.recs.Posted >= key {
+	if inst.recs.Posted >= key {
 		m.mu.Unlock()
 		return
 	}
-	m.recs.Posted = key
+	inst.recs.Posted = key
 	s := m.settings
 	m.mu.Unlock()
-	m.saveRecords()
+	m.saveRecordsFor(inst)
 	if !s.Discord || !s.DiscordDaily {
 		return
 	}
-	sum := m.recordsBetween(day, day.AddDate(0, 0, 1), now)
+	sum := m.recordsBetween(inst, day, day.AddDate(0, 0, 1), now)
 	if len(sum.Players) == 0 {
 		return // nobody played
 	}
-	text := dailyText(sum, when)
+	text := dailyTextFor(inst.srv.Texts(), sum, when)
 	m.queueDiscord(discordPost{
 		link: s.DiscordWebhook,
 		text: func() string { return text },
@@ -259,8 +269,9 @@ func (m *Manager) checkDaily(now time.Time) {
 	})
 }
 
-// dailyText says who died the most on a day ("today" or "yesterday").
-func dailyText(sum records.Summary, when string) string {
+// dailyTextFor says who died the most on a day ("today" or "yesterday"),
+// in the game's words for its players ("vikings").
+func dailyTextFor(tx game.Texts, sum records.Summary, when string) string {
 	var top records.Record
 	var longest records.Record
 	for _, r := range sum.Records {
@@ -283,11 +294,11 @@ func dailyText(sum records.Summary, when string) string {
 	}
 	var b strings.Builder
 	if top.ID == "" {
-		vikings := "vikings"
+		players := tx.Players
 		if len(sum.Players) == 1 {
-			vikings = "viking"
+			players = tx.Player
 		}
-		fmt.Fprintf(&b, "🛡️ **Nobody died %s!** %d %s played.", when, len(sum.Players), vikings)
+		fmt.Fprintf(&b, "🛡️ **Nobody died %s!** %d %s played.", when, len(sum.Players), players)
 	} else {
 		times := map[int]string{1: "once", 2: "twice"}[int(top.Value)]
 		if times == "" {
