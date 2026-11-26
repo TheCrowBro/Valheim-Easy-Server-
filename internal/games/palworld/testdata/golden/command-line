@@ -1,0 +1,8 @@
+exe: server/Pal/Binaries/Win64/PalServer-Win64-Shipping-Cmd(.exe on Windows)
+arg: Pal
+arg: -port=8215
+arg: -players=8
+dir: server/Pal/Binaries/Win64
+output: capture (true), console: false
+ready wait: 5m0s
+record: server "Our Palworld, (friends)", port 8215, password "hunter 2", ports map[game:8215 rest:8216], secrets 1 (rest)
