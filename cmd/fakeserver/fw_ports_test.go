@@ -122,6 +122,28 @@ func TestStolenPortRetried(t *testing.T) {
 	}
 }
 
+// TestStolenGamePort: the same race on the game port, the one the ready
+// line names. After the retry, the line waitLine returns and r.port are
+// both the new run's, which is why TestDemo checks the port in the line it
+// got rather than waiting for a line with the first port in it.
+func TestStolenGamePort(t *testing.T) {
+	r := newDemoRun(t, startDemoDir(t, `{"speed":60}`))
+	stolen := r.ports["game"]
+	l, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(stolen))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	r.launch()
+	ready := r.waitLine(`Server ready: players can join "Test" on port `)
+	if r.tries != 2 || r.port == stolen || r.port != r.ports["game"] {
+		t.Errorf("after %d tries the game port is %d (r.ports says %d); the stolen one was %d", r.tries, r.port, r.ports["game"], stolen)
+	}
+	if want := "on port " + strconv.Itoa(r.port); !strings.HasSuffix(ready, want) {
+		t.Errorf("the ready line %q doesn't end with %q", ready, want)
+	}
+}
+
 // TestStolenPortGivesUp: a port taken on every try fails the test after
 // the retries, with the stand-in's own words.
 func TestStolenPortGivesUp(t *testing.T) {

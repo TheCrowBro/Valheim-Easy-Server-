@@ -364,7 +364,14 @@ func (r *demoRun) world() demoWorld {
 // TestDemo: a whole run with a script, the console and a stop.
 func TestDemo(t *testing.T) {
 	r := startDemo(t, `{"script":"join:Alex@0.2,death:Alex@0.3,deny:Bob@0.4,count@0.5,dance:Alex@0.6,leave:Alex@0.7,save@0.8","speed":60,"version":"9.9"}`)
-	r.waitLine("Demo Server version 9.9", `Creating world "Test World"`, "Server ready: players can join \"Test\" on port "+strconv.Itoa(r.port))
+	// The port is checked after the wait, not put in the text waited for:
+	// if another program took it first, waitLine starts the stand-in
+	// again on a new port, and r.port is only that new port once it
+	// returns.
+	ready := r.waitLine("Demo Server version 9.9", `Creating world "Test World"`, "Server ready: players can join \"Test\" on port ")
+	if want := "on port " + strconv.Itoa(r.port); !strings.HasSuffix(ready, want) {
+		t.Errorf("the ready line %q doesn't end with %q", ready, want)
+	}
 	if !portTaken("tcp", r.port) || !portTaken("udp", r.port) {
 		t.Error("the game port isn't in use while the stand-in runs")
 	}
