@@ -241,16 +241,49 @@ func (s *Server) Players() []string {
 }
 
 // Exit ends the server with code, after its last log lines reach the disk.
-// Responders and listeners close with the program.
+// It closes the ports first, as a real server does on its way out, but
+// waits for that only briefly (closeAll): ending the program releases them
+// anyway, and waiting longer could hang for good. Closing the RCON server
+// or the A2S responder waits for a command or query in progress, and a
+// probe that arrived while the server was saving on its way out is one:
+// it is waiting for the server's goroutine (s.Do), which is the one in
+// Exit. Each would wait for the other forever, and not even Ctrl+C could
+// end it, as nothing runs the server's callbacks any more. Instead the
+// probe simply loses its connection when the program ends, as it would
+// with a real server.
 func (s *Server) Exit(code int) {
+	s.closeAll(closeWait)
+	s.syncLog()
+	os.Exit(code)
+}
+
+// closeWait is how long Exit waits for the ports to close. Closing them
+// takes a moment at most, unless a responder is waiting for a probe that
+// will never be answered (see Exit).
+const closeWait = 250 * time.Millisecond
+
+// closeAll closes every listener and responder at once and waits for them
+// to finish closing, but for no longer than wait. One that is still busy
+// after that is left to the end of the program.
+func (s *Server) closeAll(wait time.Duration) {
 	s.mu.Lock()
 	closers := s.closers
 	s.mu.Unlock()
+	done := make(chan struct{}, len(closers))
 	for _, c := range closers {
-		c.Close()
+		go func() {
+			c.Close()
+			done <- struct{}{}
+		}()
 	}
-	s.syncLog()
-	os.Exit(code)
+	deadline := time.After(wait)
+	for range closers {
+		select {
+		case <-done:
+		case <-deadline:
+			return
+		}
+	}
 }
 
 // interrupted handles Ctrl+C.

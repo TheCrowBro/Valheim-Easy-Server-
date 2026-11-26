@@ -80,7 +80,11 @@ func (s *Server) ListenUDP(port int) error {
 
 // RCON answers the Source RCON protocol on a TCP port with password, as
 // Minecraft and Project Zomboid do. handle gets each command and returns
-// the reply; it runs on the server's goroutine.
+// the reply; it runs on the server's goroutine. A command that stops the
+// server should answer and queue the stop for after (s.post, as the
+// demo's "stop" does): stopping inside handle ends the program before the
+// reply goes out, and Exit then waits its short while (closeWait) for this
+// command to finish, which it never will.
 func (s *Server) RCON(port int, password string, handle func(cmd string) string) error {
 	srv, err := rcon.NewTestServer(s.addr(port), password, func(cmd string) string {
 		var reply string

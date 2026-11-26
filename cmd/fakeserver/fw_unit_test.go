@@ -268,3 +268,45 @@ func TestPlayers(t *testing.T) {
 		t.Errorf("Players = %q", p)
 	}
 }
+
+// TestCloseAllDoesNotHang: closing the ports in Exit can't hang a server
+// on its way out. Here a responder's Close waits for a probe in progress,
+// as RCON's and A2S's do, and the probe waits for the server's goroutine,
+// which is the one closing: what a probe that arrives while a stopping
+// server saves would do to it. closeAll gives up on that responder after
+// its wait, and the other ports are closed by then.
+func TestCloseAllDoesNotHang(t *testing.T) {
+	s := startLoop(t, Config{})
+	port := freePort(t)
+	if err := s.ListenTCP(port); err != nil {
+		t.Fatal(err)
+	}
+	probed := make(chan struct{})
+	s.closeOnExit(closerFunc(func() error { <-probed; return nil }))
+	took := make(chan time.Duration, 1)
+	s.post(func() { // queued first, so the probe below waits for it
+		start := time.Now()
+		s.closeAll(100 * time.Millisecond)
+		took <- time.Since(start)
+	})
+	go func() {
+		s.Do(func() {})
+		close(probed)
+	}()
+	select {
+	case d := <-took:
+		if d < 100*time.Millisecond {
+			t.Errorf("closeAll returned after %v, before the probe could finish: the test didn't test the hang", d)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("closing the ports hung")
+	}
+	if portTaken("tcp", port) {
+		t.Error("the game port is still open after closeAll")
+	}
+	select {
+	case <-probed:
+	case <-time.After(5 * time.Second):
+		t.Error("the probe never finished after closeAll returned")
+	}
+}

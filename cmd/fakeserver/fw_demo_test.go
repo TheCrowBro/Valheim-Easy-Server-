@@ -384,17 +384,7 @@ func TestDemoAPI(t *testing.T) {
 // Until internal/rcon and internal/a2s are written they only say
 // ErrUnsupported, and this skips; once they land it runs with no change.
 func TestDemoRCONAndA2S(t *testing.T) {
-	rconReady, a2sReady := true, true
-	if s, err := rcon.NewTestServer("127.0.0.1:0", "x", func(string) string { return "" }); err != nil {
-		rconReady = false
-	} else {
-		s.Close()
-	}
-	if r, err := a2s.NewTestResponder("127.0.0.1:0", false, func() a2s.Info { return a2s.Info{} }); err != nil {
-		a2sReady = false
-	} else {
-		r.Close()
-	}
+	rconReady, a2sReady := rconWritten(), a2sWritten()
 	if !rconReady && !a2sReady {
 		t.Skip("internal/rcon and internal/a2s aren't written yet (stream RC)")
 	}
@@ -431,6 +421,98 @@ func TestDemoRCONAndA2S(t *testing.T) {
 		rcon.Exec(ctx, "127.0.0.1:"+strconv.Itoa(rp), "pw", "stop")
 		r.waitLine("Server stopped")
 	}
+}
+
+// rconWritten and a2sWritten say whether stream RC has written
+// internal/rcon's test server and internal/a2s's responder yet (until then
+// they only say ErrUnsupported).
+func rconWritten() bool {
+	s, err := rcon.NewTestServer("127.0.0.1:0", "x", func(string) string { return "" })
+	if err != nil {
+		return false
+	}
+	s.Close()
+	return true
+}
+
+func a2sWritten() bool {
+	r, err := a2s.NewTestResponder("127.0.0.1:0", false, func() a2s.Info { return a2s.Info{} })
+	if err != nil {
+		return false
+	}
+	r.Close()
+	return true
+}
+
+// TestDemoProbeDuringStop: a probe that arrives while the server saves on
+// its way out (the app probes every 30 seconds, gametest every 2) doesn't
+// keep it from exiting. The probe waits for the server's goroutine, which
+// is busy saving and then exits; Exit closes the responders, and their
+// Close waits for the probe in progress, so an Exit that waited for that
+// would hang for good. Speed 1, so the save takes half a second and the
+// probe surely lands in it. Each part skips until stream RC lands.
+func TestDemoProbeDuringStop(t *testing.T) {
+	// stopped checks the stand-in finished its stop and exited cleanly.
+	stopped := func(t *testing.T, r *demoRun) {
+		t.Helper()
+		select {
+		case <-r.done:
+		case <-time.After(10 * time.Second):
+			r.mu.Lock()
+			lines := strings.Join(r.lines, "\n")
+			r.mu.Unlock()
+			t.Fatalf("the stand-in hung on its way out; it wrote:\n%s", lines)
+		}
+		if r.code != 0 {
+			t.Errorf("exit code %d, want 0", r.code)
+		}
+		r.waitLine("World saved", "Server stopped")
+	}
+
+	t.Run("RCON during an RCON stop", func(t *testing.T) {
+		if !rconWritten() {
+			t.Skip("internal/rcon isn't written yet (stream RC)")
+		}
+		rp := freePort(t)
+		addr := "127.0.0.1:" + strconv.Itoa(rp)
+		r := startDemo(t, `{"speed":1}`, "-rcon", strconv.Itoa(rp), "-rconpassword", "pw")
+		r.waitLine("Server ready")
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if out, err := rcon.Exec(ctx, addr, "pw", "stop"); err != nil || out != "Stopping the server" {
+			t.Fatalf("rcon stop = %q, %v", out, err)
+		}
+		r.waitLine("Saving the world...")
+		probed := make(chan struct{})
+		go func() {
+			defer close(probed)
+			pctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			rcon.Exec(pctx, addr, "pw", "list") // the server going away is a fine answer
+		}()
+		stopped(t, r)
+		<-probed
+	})
+
+	t.Run("A2S during a console stop", func(t *testing.T) {
+		if !a2sWritten() {
+			t.Skip("internal/a2s isn't written yet (stream RC)")
+		}
+		qp := freePort(t)
+		r := startDemo(t, `{"speed":1}`, "-query", strconv.Itoa(qp))
+		r.waitLine("Server ready")
+		r.send("stop")
+		r.waitLine("Saving the world...")
+		probed := make(chan struct{})
+		go func() {
+			defer close(probed)
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			a2s.Query(ctx, "127.0.0.1:"+strconv.Itoa(qp)) // no answer is fine
+		}()
+		stopped(t, r)
+		<-probed
+	})
 }
 
 // TestUnknownCommandLine: a program name no personality knows, without a
