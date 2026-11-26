@@ -27,7 +27,7 @@ var (
 	// line before they get in. Player names are letters, digits, "_" and
 	// "-" (the server's own rule, FACTS.md), so they have no spaces.
 	reIdent = regexp.MustCompile(`^Client (\d+) uid (\S+) attempting identification\. Name: (\S+)$`)
-	// "Keelaesh [::ffff:5.187.212.60]:64570 joins.": the name, then the
+	// "Sigrun [::ffff:198.51.100.30]:64570 joins.": the name, then the
 	// address the player came from.
 	reJoin    = regexp.MustCompile(`^(\S+) (\S+) joins\.$`)
 	reLeft    = regexp.MustCompile(`^Player (\S+) left\.$`)

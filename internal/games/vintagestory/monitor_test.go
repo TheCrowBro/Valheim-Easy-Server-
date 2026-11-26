@@ -162,11 +162,11 @@ func TestMonitorPlayers(t *testing.T) {
 	// A 1.20.12 server's own log (server-main.log, "[Event]" without
 	// "Server "): four players join, one leaves.
 	r := play(t, "issues/7431-v1.20.12-server-main.log")
-	want := []string{"join:D4K0T4", "join:Keelaesh", "leave:Keelaesh", "join:vfctffu", "join:Sozuke"}
+	want := []string{"join:Brynja", "join:Sigrun", "leave:Sigrun", "join:vfctffu", "join:Leif"}
 	if got := r.kinds(); !slices.Equal(got, want) {
 		t.Fatalf("events = %q, want %q", got, want)
 	}
-	accounts := map[string]string{"D4K0T4": "MadeUpUid1AAAAAAAAAAAAAA", "Keelaesh": "MadeUpUid3AAAAAAAAAAAAAA", "vfctffu": "MadeUpUid4AAAAAAAAAAAAAA", "Sozuke": "MadeUpUid2AAAAAAAAAAAAA+"}
+	accounts := map[string]string{"Brynja": "MadeUpUid1AAAAAAAAAAAAAA", "Sigrun": "MadeUpUid3AAAAAAAAAAAAAA", "vfctffu": "MadeUpUid4AAAAAAAAAAAAAA", "Leif": "MadeUpUid2AAAAAAAAAAAAA+"}
 	for _, e := range r.events {
 		if e.Account != accounts[e.Name] {
 			t.Errorf("%s %s has account %q, want %q", e.Kind, e.Name, e.Account, accounts[e.Name])
@@ -176,10 +176,10 @@ func TestMonitorPlayers(t *testing.T) {
 	for _, p := range r.state.Players {
 		on = append(on, p.Name)
 	}
-	if !slices.Equal(on, []string{"D4K0T4", "vfctffu", "Sozuke"}) || r.state.Count != 3 {
+	if !slices.Equal(on, []string{"Brynja", "vfctffu", "Leif"}) || r.state.Count != 3 {
 		t.Errorf("players on = %q (count %d)", on, r.state.Count)
 	}
-	if e := r.events[2]; e.Text != "Keelaesh left the game." {
+	if e := r.events[2]; e.Text != "Sigrun left the game." {
 		t.Errorf("leave text %q", e.Text)
 	}
 	if want := time.Date(2025, 10, 29, 16, 59, 52, 0, time.Local); !r.events[0].Time.Equal(want) {
@@ -189,13 +189,13 @@ func TestMonitorPlayers(t *testing.T) {
 	// A 1.22.3 console: a player whose game crashed is removed, which
 	// counts as leaving.
 	r = play(t, "issues/9655-v1.22.3-console.log")
-	if got := r.kinds(); !slices.Equal(got, []string{"join:Teskey", "leave:Teskey"}) {
+	if got := r.kinds(); !slices.Equal(got, []string{"join:Halvard", "leave:Halvard"}) {
 		t.Fatalf("events = %q", got)
 	}
 	if r.events[0].Account != "MadeUp/Uid6AAAAAAAAAAA+A" {
 		t.Errorf("account %q", r.events[0].Account)
 	}
-	if r.events[1].Text != "Teskey left the game (The Players client crashed)." {
+	if r.events[1].Text != "Halvard left the game (The Players client crashed)." {
 		t.Errorf("removed text %q", r.events[1].Text)
 	}
 	if len(r.state.Players) != 0 {

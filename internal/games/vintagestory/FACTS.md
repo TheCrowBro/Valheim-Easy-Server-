@@ -163,17 +163,17 @@ under "Only the Windows CI cell can confirm" at the end, and
   2.1 GHz. It always says so, so the Monitor needs no Tick fallback.
 - **Join** (spec's "verify which part is the name" settled): `{0} {1} joins.`,
   where `{0}` is the player's name and `{1}` the address they came from:
-  "Keelaesh [::ffff:198.51.100.30]:64570 joins." (a 1.20.12 server's
+  "Sigrun [::ffff:198.51.100.30]:64570 joins." (a 1.20.12 server's
   server-main.log in issue
   [anegostudios/VintageStory-Issues#7431](https://github.com/anegostudios/VintageStory-Issues/issues/7431),
-  29.10.2025) and "Teskey [::ffff:192.0.2.60]:54896 joins." (a 1.22.3
+  29.10.2025) and "Halvard [::ffff:192.0.2.60]:54896 joins." (a 1.22.3
   console in [#9655](https://github.com/anegostudios/VintageStory-Issues/issues/9655),
   4.6.2026). The line before names the account: "Client 56 uid
-  MadeUpUid3AAAAAAAAAAAAAA attempting identification. Name: Keelaesh". Names
+  MadeUpUid3AAAAAAAAAAAAAA attempting identification. Name: Sigrun". Names
   match `^(\w|-){1,16}$` (the server's own rule, in its dll, with "{0} can't
   join (invalid Playername: {1})."), so they have no spaces.
-- **Leave:** "Player Keelaesh left." (#7431), or, when the server removes
-  someone, "Player Teskey got removed. Reason: The Players client crashed"
+- **Leave:** "Player Sigrun left." (#7431), or, when the server removes
+  someone, "Player Halvard got removed. Reason: The Players client crashed"
   (#9655) and "Player … got removed. Reason: Threw an exception at the server"
   ([#9914](https://github.com/anegostudios/VintageStory-Issues/issues/9914),
   1.22.6, names hidden by the reporter). Both count as leaving.
