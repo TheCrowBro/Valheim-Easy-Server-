@@ -1,0 +1,14 @@
+26.11.2026 21:55:39 [Server Notification] Server logger started.
+26.11.2026 21:55:39 [Server Notification] Game Version: v1.22.7 (Stable)
+26.11.2026 21:55:40 [Server Notification] C# Framework: .net 10.0.15
+26.11.2026 21:55:40 [Server Notification] Zstd Version: 1.5.5
+26.11.2026 21:55:40 [Server Notification] Operating System: Linux (Ubuntu 24.04.5 LTS) [Kernel 6.18.44.880]
+26.11.2026 21:55:40 [Server Notification] CPU Cores: 4
+26.11.2026 21:55:40 [Server Notification] CPU: Intel(R) Xeon(R) Processor @ 2.10GHz
+26.11.2026 21:55:40 [Server Notification] Available RAM: 16087 MB
+26.11.2026 21:55:40 [Server Event] Launching server...
+26.11.2026 21:55:40 [Server Event] Server v1.22.7, network v1.22.6, api v1.22.0
+26.11.2026 21:55:40 [Server Notification] Entering runphase Initialization
+26.11.2026 21:55:40 [Server Event] Loading configuration...
+26.11.2026 21:55:40 [Server Notification] Entering runphase Configuration
+26.11.2026 21:55:40 [Server Fatal] You have configured a default group code suplayer but no such group exists! Killing server

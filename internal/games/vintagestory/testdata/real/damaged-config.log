@@ -1,0 +1,38 @@
+26.11.2026 21:53:21 [Server Notification] Server logger started.
+26.11.2026 21:53:21 [Server Notification] Game Version: v1.22.7 (Stable)
+26.11.2026 21:53:22 [Server Notification] C# Framework: .net 10.0.15
+26.11.2026 21:53:22 [Server Notification] Zstd Version: 1.5.5
+26.11.2026 21:53:22 [Server Notification] Operating System: Linux (Ubuntu 24.04.5 LTS) [Kernel 6.18.44.880]
+26.11.2026 21:53:22 [Server Notification] CPU Cores: 4
+26.11.2026 21:53:22 [Server Notification] CPU: Intel(R) Xeon(R) Processor @ 2.10GHz
+26.11.2026 21:53:22 [Server Notification] Available RAM: 16087 MB
+26.11.2026 21:53:22 [Server Event] Launching server...
+26.11.2026 21:53:22 [Server Event] Server v1.22.7, network v1.22.6, api v1.22.0
+26.11.2026 21:53:22 [Server Notification] Entering runphase Initialization
+26.11.2026 21:53:22 [Server Event] Loading configuration...
+26.11.2026 21:53:22 [Server Notification] Entering runphase Configuration
+26.11.2026 21:53:22 [Server Error] Failed to read serverconfig.json
+26.11.2026 21:53:22 [Server Error] Exception: Invalid property identifier character: ,. Path 'Port', line 3, position 16.
+   at Newtonsoft.Json.JsonTextReader.ParseProperty()
+   at Newtonsoft.Json.JsonTextReader.ParseObject()
+   at Newtonsoft.Json.JsonTextReader.Read()
+   at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.PopulateObject(Object newObject, JsonReader reader, JsonObjectContract contract, JsonProperty member, String id)
+   at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.CreateObject(JsonReader reader, Type objectType, JsonContract contract, JsonProperty member, JsonContainerContract containerContract, JsonProperty containerMember, Object existingValue)
+   at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.CreateValueInternal(JsonReader reader, Type objectType, JsonContract contract, JsonProperty member, JsonContainerContract containerContract, JsonProperty containerMember, Object existingValue)
+   at Newtonsoft.Json.Serialization.JsonSerializerInternalReader.Deserialize(JsonReader reader, Type objectType, Boolean checkAdditionalContent)
+   at Newtonsoft.Json.JsonSerializer.DeserializeInternal(JsonReader reader, Type objectType)
+   at Newtonsoft.Json.JsonSerializer.Deserialize(JsonReader reader, Type objectType)
+   at Newtonsoft.Json.JsonConvert.DeserializeObject(String value, Type type, JsonSerializerSettings settings)
+   at Newtonsoft.Json.JsonConvert.DeserializeObject[T](String value, JsonSerializerSettings settings)
+   at Newtonsoft.Json.JsonConvert.DeserializeObject[T](String value)
+   at Vintagestory.Server.ServerSystemLoadConfig.LoadConfig(ServerMain server) in VintagestoryLib\Server\Systems\Configuration\LoadConfig.cs:line 143
+26.11.2026 21:53:22 [Server Notification] Server stop requested, begin shutdown sequence. Stop reason: serverconfig.json read error
+26.11.2026 21:53:22 [Server Notification] Entering runphase Shutdown
+26.11.2026 21:53:22 [Server Event] Shutting down 7 server threads... 
+26.11.2026 21:53:22 [Server Event] Killed console thread
+26.11.2026 21:53:22 [Server Event] All threads gracefully shut down
+26.11.2026 21:53:22 [Server Event] Stopped the server!
+26.11.2026 21:53:22 [Server Notification] Loading savegame
+26.11.2026 21:53:22 [Server Notification] Create new save game data. Playstyle: surviveandbuild
+26.11.2026 21:53:22 [Server Notification] Savegame /srv/vs/data4/Saves/default.vcdbs loaded
+26.11.2026 21:53:22 [Server Notification] World size = 1024000 256 1024000

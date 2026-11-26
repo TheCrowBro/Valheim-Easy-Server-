@@ -1,0 +1,10 @@
+exe: <root>/runtime/dotnet/dotnet
+arg: <root>/server/1.22.7/VintagestoryServer.dll
+arg: --dataPath
+arg: <root>/saves
+dir: <root>/server/1.22.7
+output: 0
+console: true
+saveLine: /autosavenow
+readyWait: 10m0s
+record: server="Friends' Vintage Story" port=42433 password="s3cret&<word>"

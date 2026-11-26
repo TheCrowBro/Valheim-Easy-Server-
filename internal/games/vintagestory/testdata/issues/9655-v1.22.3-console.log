@@ -1,0 +1,19 @@
+4.6.2026 11:26:42 [Server Notification] Offthread save of 0 generating chunks done.
+4.6.2026 11:26:42 [Server Event] Offthread save of 0 map chunks done.
+4.6.2026 11:26:42 [Server Event] Offthread save of savegame done.
+4.6.2026 11:27:52 [Server Notification] A Client attempts connecting via TCP on [::ffff:10.42.2.229]:54896, assigning client id 1
+4.6.2026 11:27:52 [Server Debug] UDP: Client 1 connected via: [::ffff:10.42.2.229]:63218
+4.6.2026 11:27:52 [Server Notification] Client 1 uid FX/HnQer9ara+/ggPPMJwE5R attempting identification. Name: Teskey
+4.6.2026 11:27:52 [Server Debug] Client uid FX/HnQer9ara+/ggPPMJwE5R, mp token ZG7k6PnD8MqO7W+XRPih8I9pX1bCgkXqhifkKyduY3E=: Verifying with auth server
+4.6.2026 11:27:53 [Server Debug] Response from auth server: {"playername":"Teskey","entitlements":null,"valid":1}
+4.6.2026 11:27:53 [Server Debug] UDP: Client 1 did send UDP
+4.6.2026 11:27:53 [Server Notification] Delayed join, attempt random spawn position.
+4.6.2026 11:27:53 [Server Notification] Sending server identification. Server control privilege is False
+4.6.2026 11:27:53 [Server Event] Searching for chunk column suitable for player spawn
+4.6.2026 11:27:53 [Server Notification] Placing Teskey at 511994.5 112 512021.5
+4.6.2026 11:28:07 [Server Event] Teskey [::ffff:10.42.2.229]:54896 joins.
+4.6.2026 11:28:07 [Server Warning] Couldn't add entity 1, type game:armorstand-aged to list of loaded entities (duplicate entityid)! Will remove from chunk, sorry!
+4.6.2026 11:28:09 [Server Notification] Client 1 disconnected:
+4.6.2026 11:28:09 [Server Notification] Last player disconnected, compacting large object heap...
+4.6.2026 11:28:10 [Server Debug] Despawn player entity Teskey.
+4.6.2026 11:28:10 [Server Event] Player Teskey got removed. Reason: The Players client crashed

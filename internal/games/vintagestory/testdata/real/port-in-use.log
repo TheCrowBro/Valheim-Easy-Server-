@@ -1,0 +1,34 @@
+26.11.2026 21:39:02 [Server Notification] Server logger started.
+26.11.2026 21:39:02 [Server Notification] Game Version: v1.22.7 (Stable)
+26.11.2026 21:39:02 [Server Notification] C# Framework: .net 10.0.15
+26.11.2026 21:39:02 [Server Notification] Zstd Version: 1.5.5
+26.11.2026 21:39:02 [Server Notification] Operating System: Linux (Ubuntu 24.04.5 LTS) [Kernel 6.18.44.880]
+26.11.2026 21:39:02 [Server Notification] CPU Cores: 4
+26.11.2026 21:39:03 [Server Notification] CPU: Intel(R) Xeon(R) Processor @ 2.10GHz
+26.11.2026 21:39:03 [Server Notification] Available RAM: 16087 MB
+26.11.2026 21:39:03 [Server Event] Launching server...
+26.11.2026 21:39:03 [Server Event] Server v1.22.7, network v1.22.6, api v1.22.0
+26.11.2026 21:39:03 [Server Notification] Entering runphase Initialization
+26.11.2026 21:39:03 [Server Event] Loading configuration...
+26.11.2026 21:39:03 [Server Notification] Entering runphase Configuration
+26.11.2026 21:39:03 [Server Notification] Using world seed: 12345
+26.11.2026 21:39:03 [Server Notification] Loading savegame
+26.11.2026 21:39:03 [Server Notification] Create new save game data. Playstyle: surviveandbuild
+26.11.2026 21:39:03 [Server Notification] Savegame /srv/vs/data3/Saves/Busy.vcdbs loaded
+26.11.2026 21:39:03 [Server Notification] World size = 1024000 256 1024000
+Game Version: v1.22.7 (Stable)
+11/26/2026 21:39:03: Critical error occurred
+Loaded Mods: 
+System.Net.Sockets.SocketException (98): Address already in use
+   at System.Net.Sockets.Socket.UpdateStatusAfterSocketErrorAndThrowException(SocketError error, Boolean disconnectOnFailure, String callerName)
+   at System.Net.Sockets.Socket.DoBind(EndPoint endPointSnapshot, SocketAddress socketAddress)
+   at System.Net.Sockets.Socket.Bind(EndPoint localEP)
+   at Vintagestory.Server.Network.ServerNetManager.StartServer(Int32 port, String ipAddress) in VintagestoryLib\Server\Network\ServerNetManager.cs:line 58
+   at Vintagestory.Server.TcpNetServer.Start() in VintagestoryLib\Server\Network\TcpNetServer.cs:line 31
+   at Vintagestory.Server.ServerMain.startSockets() in VintagestoryLib\Server\ServerMain.cs:line 795
+   at Vintagestory.Server.ServerMain.AfterConfigLoaded() in VintagestoryLib\Server\ServerMain.cs:line 705
+   at Vintagestory.Server.ServerMain.Launch() in VintagestoryLib\Server\ServerMain.cs:line 562
+   at Vintagestory.Server.ServerProgram.Main() in VintagestoryLib\Server\ServerProgram.cs:line 151
+   at Vintagestory.ClientNative.CrashReporter.Start(ThreadStart start) in VintagestoryLib\Client\ClientPlatform\ClientNative\CrashReporter.cs:line 95
+Crash written to file at "/srv/vs/data3/Logs/server-crash.log"
+

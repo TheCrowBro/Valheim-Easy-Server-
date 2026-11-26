@@ -1,0 +1,15 @@
+You must install or update .NET to run this application.
+
+App: /srv/vs/hosttest/VintagestoryServer.dll
+Architecture: x64
+Framework: 'Microsoft.NETCore.App', version '99.0.0' (x64)
+.NET location: /srv/vs/dotnet/
+
+The following frameworks were found:
+  10.0.15 at [/srv/vs/dotnet/shared/Microsoft.NETCore.App]
+
+Learn more:
+https://aka.ms/dotnet/app-launch-failed
+
+To install missing framework, download:
+https://aka.ms/dotnet-core-applaunch?framework=Microsoft.NETCore.App&framework_version=99.0.0&arch=x64&rid=linux-x64&os=ubuntu.24.04
