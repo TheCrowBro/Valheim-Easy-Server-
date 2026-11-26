@@ -11,6 +11,33 @@ import (
 	"time"
 )
 
+// Names that copies of the app already installed depend on. An update
+// replaces only the program, and the program it replaces may come back
+// after a rollback, so a renamed lock would let two copies run on one data
+// folder, and a renamed login item or script would leave the old one
+// behind. They never change, even when the name people see does
+// (platform_identity_test.go checks them, with the firewall rule names in
+// winparse.go). They're here rather than in each system's own file so the
+// check runs on every system.
+const (
+	// instanceLockFile is the single-instance lock in the data folder
+	// (macOS and Linux).
+	instanceLockFile = ".instance.lock"
+	// instanceLockPrefix starts the names of the single-instance locks
+	// named by id: Windows' named lock (Local\ValheimEasyServer-<id>) and
+	// the lock file in the temp folder (ValheimEasyServer-<id>.lock), used
+	// on macOS and Linux when the data folder can't be locked.
+	instanceLockPrefix = "ValheimEasyServer-"
+	// runValue names the app's entry in Windows' Run key, which starts it
+	// when the user signs in.
+	runValue = "ValheimEasyServer"
+	// launchLabel names the app's login item for launchd (macOS).
+	launchLabel = "com.thecrowbro.valheimeasyserver"
+	// adminScripts names the PowerShell scripts Windows runs with admin
+	// rights for the app (* is a random part), in the temp folder.
+	adminScripts = "ValheimEasyServer-admin-*.ps1"
+)
+
 // ProcInfo describes a running process found on the system.
 type ProcInfo struct {
 	PID     int

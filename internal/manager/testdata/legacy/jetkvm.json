@@ -1,0 +1,13 @@
+{
+  "hostKey": "c3NoLWhvc3Qta2V5",
+  "appId": "app1",
+  "bot": "Valheim Bot",
+  "setup": {
+    "version": "build-7",
+    "mac": "3C:07:54:5A:21:9F",
+    "query": "192.168.1.20:2457",
+    "name": "Viking Night",
+    "guild": "112233"
+  },
+  "at": "2026-11-20T18:30:00Z"
+}

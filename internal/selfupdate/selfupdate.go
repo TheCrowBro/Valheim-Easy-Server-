@@ -33,9 +33,18 @@ const (
 	maxExe     = 200 << 20
 )
 
+// The release files the program is updated from. Installed copies look
+// for these names in every release, so they never change
+// (selfupdate_identity_test.go checks them).
+const (
+	windowsExe = "ValheimEasyServer.exe" // the Windows program
+	macExe     = "ValheimEasyServer-mac" // the program inside the Mac app
+	sumSuffix  = ".sha256"               // a program's checksum file is its name plus this
+)
+
 // ExeName is the release file that copies of the app on this system update
 // from: the Windows program, or the program inside the Mac app.
-var ExeName = map[bool]string{false: "ValheimEasyServer.exe", true: "ValheimEasyServer-mac"}[runtime.GOOS == "darwin"]
+var ExeName = map[bool]string{false: windowsExe, true: macExe}[runtime.GOOS == "darwin"]
 
 // ProgramHeader is how a program for this system starts: "MZ" on Windows,
 // and a Mach-O header (here a universal one, for Intel and Apple silicon)
@@ -133,7 +142,7 @@ func (u *Updater) Latest(ctx context.Context) (rel Release, ok bool, err error) 
 			switch a.Name {
 			case ExeName:
 				c.exeURL = a.URL
-			case ExeName + ".sha256":
+			case ExeName + sumSuffix:
 				c.sumURL = a.URL
 			}
 		}

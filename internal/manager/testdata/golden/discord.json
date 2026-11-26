@@ -1,0 +1,492 @@
+{
+  "online": [
+    {
+      "name": "join code",
+      "server": "Viking Night",
+      "world": "Midgard",
+      "code": "604510",
+      "text": "🟢 **Viking Night** is online\nWorld: Midgard\nJoin code: **604510**\n-# In Valheim, go to Join Game and join by code."
+    },
+    {
+      "name": "address, without crossplay",
+      "server": "Viking Night",
+      "world": "Midgard",
+      "address": "203.0.113.4:2456",
+      "text": "🟢 **Viking Night** is online\nWorld: Midgard\nAddress: **203.0.113.4:2456**\n-# In Valheim, go to Join Game and add the server by its address."
+    },
+    {
+      "name": "no address known",
+      "server": "Viking Night",
+      "world": "Midgard",
+      "text": "🟢 **Viking Night** is online\nWorld: Midgard\n-# In Valheim, go to Join Game and add the server by its address."
+    },
+    {
+      "name": "with the password",
+      "server": "Viking Night",
+      "world": "Midgard",
+      "code": "604510",
+      "password": "raven-fjord-4821",
+      "text": "🟢 **Viking Night** is online\nWorld: Midgard\nJoin code: **604510**\nPassword: ||raven-fjord-4821||\n-# In Valheim, go to Join Game and join by code."
+    },
+    {
+      "name": "names Discord would format",
+      "server": "*Bold* _Vikings_ ~~of~~ `the` |north| > #1",
+      "world": "W_orld*",
+      "address": "203.0.113.4:2456",
+      "password": "pa||ss_*",
+      "text": "🟢 **\\*Bold\\* \\_Vikings\\_ \\~\\~of\\~\\~ \\`the\\` \\|north\\| > #1** is online\nWorld: W\\_orld\\*\nAddress: **203.0.113.4:2456**\nPassword: ||pa\\|\\|ss\\_\\*||\n-# In Valheim, go to Join Game and add the server by its address."
+    },
+    {
+      "name": "a mod, with the mods code",
+      "server": "Viking Night",
+      "world": "Midgard",
+      "code": "604510",
+      "mods": [
+        {
+          "id": "riverheim",
+          "version": "1.2.3"
+        }
+      ],
+      "modsCode": "019a3b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b",
+      "text": "🟢 **Viking Night** is online\nWorld: Midgard\nJoin code: **604510**\nMods: [Riverheim](https://thunderstore.io/c/valheim/p/Gurebu/Riverheim/) 1.2.3\n📦 Mods code: `019a3b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b`\n-# In Valheim, go to Join Game and join by code. Install the mod first: in the r2modman or Gale mod manager, import the mods code as a new profile."
+    },
+    {
+      "name": "mods, no mods code, one version unknown",
+      "server": "Viking Night",
+      "world": "Midgard",
+      "code": "604510",
+      "mods": [
+        {
+          "id": "riverheim",
+          "version": "1.2.3"
+        },
+        {
+          "id": "planteverything"
+        }
+      ],
+      "text": "🟢 **Viking Night** is online\nWorld: Midgard\nJoin code: **604510**\nMods: [Riverheim](https://thunderstore.io/c/valheim/p/Gurebu/Riverheim/) 1.2.3, [Plant Everything](https://thunderstore.io/c/valheim/p/Advize/PlantEverything/)\n-# In Valheim, go to Join Game and join by code. Install the mods first with the Gale or r2modman mod manager."
+    },
+    {
+      "name": "only optional mods, with the mods code",
+      "server": "Viking Night",
+      "world": "Midgard",
+      "code": "604510",
+      "optional": [
+        {
+          "id": "farlands"
+        }
+      ],
+      "modsCode": "019a3b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b",
+      "text": "🟢 **Viking Night** is online\nWorld: Midgard\nJoin code: **604510**\nOptional, just for your own game: [FarLands](https://thunderstore.io/c/valheim/p/Ivvty/FarLands/)\n📦 Mods code: `019a3b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b`\n-# In Valheim, go to Join Game and join by code. For the optional mods, import the mods code as a new profile in r2modman or Gale."
+    },
+    {
+      "name": "mods and optional mods, by address",
+      "server": "Viking Night",
+      "world": "Midgard",
+      "address": "203.0.113.4:2456",
+      "mods": [
+        {
+          "id": "advancedportals",
+          "version": "2.0.1"
+        }
+      ],
+      "optional": [
+        {
+          "id": "farlands"
+        }
+      ],
+      "text": "🟢 **Viking Night** is online\nWorld: Midgard\nAddress: **203.0.113.4:2456**\nMods: [Advanced Portals](https://thunderstore.io/c/valheim/p/RandyKnapp/AdvancedPortals/) 2.0.1\nOptional, just for your own game: [FarLands](https://thunderstore.io/c/valheim/p/Ivvty/FarLands/)\n-# In Valheim, go to Join Game and add the server by its address. Install the mod first with the Gale or r2modman mod manager."
+    },
+    {
+      "name": "a reminder",
+      "server": "Viking Night",
+      "world": "Midgard",
+      "code": "604510",
+      "reminder": [
+        "update Valheim to 1.0.21",
+        "install Riverheim",
+        "use the new password"
+      ],
+      "text": "🟢 **Viking Night** is online\nWorld: Midgard\nJoin code: **604510**\n📢 **Before you join:** update Valheim to 1.0.21, install Riverheim, use the new password.\n-# In Valheim, go to Join Game and join by code."
+    }
+  ],
+  "stopped": [
+    {
+      "server": "Viking Night",
+      "reason": "stopped",
+      "code": true,
+      "text": "🔴 **Viking Night** has stopped. The new join code will be posted here when it's back online."
+    },
+    {
+      "server": "Viking Night",
+      "reason": "stopped",
+      "code": false,
+      "text": "🔴 **Viking Night** has stopped. A message will be posted here when it's back online."
+    },
+    {
+      "server": "Viking Night",
+      "reason": "restart",
+      "code": true,
+      "text": "🔄 **Viking Night** is restarting. The new join code will be posted here in a minute or two."
+    },
+    {
+      "server": "Viking Night",
+      "reason": "restart",
+      "code": false,
+      "text": "🔄 **Viking Night** is restarting. It will be back in a minute or two."
+    },
+    {
+      "server": "Viking Night",
+      "reason": "rest",
+      "code": true,
+      "text": "🌙 **Viking Night** has stopped and the computer is going to rest. The new join code will be posted here when it's back online."
+    },
+    {
+      "server": "Viking Night",
+      "reason": "rest",
+      "code": false,
+      "text": "🌙 **Viking Night** has stopped and the computer is going to rest. A message will be posted here when it's back online."
+    },
+    {
+      "server": "Viking Night",
+      "reason": "crash",
+      "code": true,
+      "text": "⚠️ **Viking Night** stopped unexpectedly. Someone needs to start it again from the control panel."
+    },
+    {
+      "server": "Viking Night",
+      "reason": "crash",
+      "code": false,
+      "text": "⚠️ **Viking Night** stopped unexpectedly. Someone needs to start it again from the control panel."
+    },
+    {
+      "server": "Viking Night",
+      "reason": "crash-restart",
+      "code": true,
+      "text": "⚠️ **Viking Night** stopped unexpectedly and is starting again. The new join code will be posted here when it's back online."
+    },
+    {
+      "server": "Viking Night",
+      "reason": "crash-restart",
+      "code": false,
+      "text": "⚠️ **Viking Night** stopped unexpectedly and is starting again. A message will be posted here when it's back online."
+    },
+    {
+      "server": "*Odd* _name_",
+      "reason": "stopped",
+      "code": true,
+      "text": "🔴 **\\*Odd\\* \\_name\\_** has stopped. The new join code will be posted here when it's back online."
+    },
+    {
+      "server": "*Odd* _name_",
+      "reason": "stopped",
+      "code": false,
+      "text": "🔴 **\\*Odd\\* \\_name\\_** has stopped. A message will be posted here when it's back online."
+    },
+    {
+      "server": "*Odd* _name_",
+      "reason": "restart",
+      "code": true,
+      "text": "🔄 **\\*Odd\\* \\_name\\_** is restarting. The new join code will be posted here in a minute or two."
+    },
+    {
+      "server": "*Odd* _name_",
+      "reason": "restart",
+      "code": false,
+      "text": "🔄 **\\*Odd\\* \\_name\\_** is restarting. It will be back in a minute or two."
+    },
+    {
+      "server": "*Odd* _name_",
+      "reason": "rest",
+      "code": true,
+      "text": "🌙 **\\*Odd\\* \\_name\\_** has stopped and the computer is going to rest. The new join code will be posted here when it's back online."
+    },
+    {
+      "server": "*Odd* _name_",
+      "reason": "rest",
+      "code": false,
+      "text": "🌙 **\\*Odd\\* \\_name\\_** has stopped and the computer is going to rest. A message will be posted here when it's back online."
+    },
+    {
+      "server": "*Odd* _name_",
+      "reason": "crash",
+      "code": true,
+      "text": "⚠️ **\\*Odd\\* \\_name\\_** stopped unexpectedly. Someone needs to start it again from the control panel."
+    },
+    {
+      "server": "*Odd* _name_",
+      "reason": "crash",
+      "code": false,
+      "text": "⚠️ **\\*Odd\\* \\_name\\_** stopped unexpectedly. Someone needs to start it again from the control panel."
+    },
+    {
+      "server": "*Odd* _name_",
+      "reason": "crash-restart",
+      "code": true,
+      "text": "⚠️ **\\*Odd\\* \\_name\\_** stopped unexpectedly and is starting again. The new join code will be posted here when it's back online."
+    },
+    {
+      "server": "*Odd* _name_",
+      "reason": "crash-restart",
+      "code": false,
+      "text": "⚠️ **\\*Odd\\* \\_name\\_** stopped unexpectedly and is starting again. A message will be posted here when it's back online."
+    }
+  ],
+  "daily": [
+    {
+      "name": "nobody died, one viking",
+      "day": "2026-11-20",
+      "when": "yesterday",
+      "now": "2026-11-21 08:00:00",
+      "events": [
+        {
+          "at": "2026-11-20 18:00:00",
+          "kind": "join",
+          "name": "Astrid"
+        },
+        {
+          "at": "2026-11-20 20:00:00",
+          "kind": "leave",
+          "name": "Astrid"
+        }
+      ],
+      "text": "🛡️ **Nobody died yesterday!** 1 viking played.\n-# Longest life: Astrid, 2 h"
+    },
+    {
+      "name": "nobody died, several",
+      "day": "2026-11-20",
+      "when": "yesterday",
+      "now": "2026-11-21 08:00:00",
+      "events": [
+        {
+          "at": "2026-11-20 18:00:00",
+          "kind": "join",
+          "name": "Astrid"
+        },
+        {
+          "at": "2026-11-20 18:05:00",
+          "kind": "join",
+          "name": "Bjorn"
+        },
+        {
+          "at": "2026-11-20 20:00:00",
+          "kind": "leave",
+          "name": "Astrid"
+        },
+        {
+          "at": "2026-11-20 21:00:00",
+          "kind": "leave",
+          "name": "Bjorn"
+        }
+      ],
+      "text": "🛡️ **Nobody died yesterday!** 2 vikings played.\n-# Longest life: Bjorn, 2 h 55 min"
+    },
+    {
+      "name": "one died once",
+      "day": "2026-11-20",
+      "when": "yesterday",
+      "now": "2026-11-21 08:00:00",
+      "events": [
+        {
+          "at": "2026-11-20 18:00:00",
+          "kind": "join",
+          "name": "Astrid"
+        },
+        {
+          "at": "2026-11-20 18:05:00",
+          "kind": "join",
+          "name": "Bjorn"
+        },
+        {
+          "at": "2026-11-20 19:00:00",
+          "kind": "death",
+          "name": "Bjorn"
+        },
+        {
+          "at": "2026-11-20 20:00:00",
+          "kind": "leave",
+          "name": "Astrid"
+        },
+        {
+          "at": "2026-11-20 21:00:00",
+          "kind": "leave",
+          "name": "Bjorn"
+        }
+      ],
+      "text": "💀 **Bjorn** died the most yesterday: once\n-# Longest life: Astrid and Bjorn, 2 h"
+    },
+    {
+      "name": "twice, and others died too",
+      "day": "2026-11-20",
+      "when": "yesterday",
+      "now": "2026-11-21 08:00:00",
+      "events": [
+        {
+          "at": "2026-11-20 18:00:00",
+          "kind": "join",
+          "name": "Astrid"
+        },
+        {
+          "at": "2026-11-20 18:05:00",
+          "kind": "join",
+          "name": "Bjorn"
+        },
+        {
+          "at": "2026-11-20 18:06:00",
+          "kind": "join",
+          "name": "_Sigrid_"
+        },
+        {
+          "at": "2026-11-20 19:00:00",
+          "kind": "death",
+          "name": "Bjorn"
+        },
+        {
+          "at": "2026-11-20 19:30:00",
+          "kind": "death",
+          "name": "Bjorn"
+        },
+        {
+          "at": "2026-11-20 19:40:00",
+          "kind": "death",
+          "name": "_Sigrid_"
+        },
+        {
+          "at": "2026-11-20 20:00:00",
+          "kind": "leave",
+          "name": "Astrid"
+        },
+        {
+          "at": "2026-11-20 21:00:00",
+          "kind": "leave",
+          "name": "Bjorn"
+        },
+        {
+          "at": "2026-11-20 21:30:00",
+          "kind": "leave",
+          "name": "_Sigrid_"
+        }
+      ],
+      "text": "💀 **Bjorn** died the most yesterday: twice\n-# Also died: \\_Sigrid\\_ 1 · Longest life: Astrid, 2 h"
+    },
+    {
+      "name": "three times each, a tie",
+      "day": "2026-11-20",
+      "when": "yesterday",
+      "now": "2026-11-21 08:00:00",
+      "events": [
+        {
+          "at": "2026-11-20 18:00:00",
+          "kind": "join",
+          "name": "Astrid"
+        },
+        {
+          "at": "2026-11-20 18:05:00",
+          "kind": "join",
+          "name": "Bjorn"
+        },
+        {
+          "at": "2026-11-20 18:30:00",
+          "kind": "death",
+          "name": "Astrid"
+        },
+        {
+          "at": "2026-11-20 18:40:00",
+          "kind": "death",
+          "name": "Astrid"
+        },
+        {
+          "at": "2026-11-20 18:50:00",
+          "kind": "death",
+          "name": "Astrid"
+        },
+        {
+          "at": "2026-11-20 19:00:00",
+          "kind": "death",
+          "name": "Bjorn"
+        },
+        {
+          "at": "2026-11-20 19:10:00",
+          "kind": "death",
+          "name": "Bjorn"
+        },
+        {
+          "at": "2026-11-20 19:20:00",
+          "kind": "death",
+          "name": "Bjorn"
+        },
+        {
+          "at": "2026-11-20 22:00:00",
+          "kind": "leave",
+          "name": "Astrid"
+        },
+        {
+          "at": "2026-11-20 22:00:00",
+          "kind": "leave",
+          "name": "Bjorn"
+        }
+      ],
+      "text": "💀 **Astrid** and **Bjorn** died the most yesterday: 3 times each\n-# Longest life: Astrid, 3 h 10 min"
+    },
+    {
+      "name": "today at 23:59, someone still on",
+      "day": "2026-11-20",
+      "when": "today",
+      "now": "2026-11-20 23:59:00",
+      "events": [
+        {
+          "at": "2026-11-20 21:00:00",
+          "kind": "join",
+          "name": "Astrid"
+        },
+        {
+          "at": "2026-11-20 22:00:00",
+          "kind": "death",
+          "name": "Astrid"
+        }
+      ],
+      "text": "💀 **Astrid** died the most today: once\n-# Longest life: Astrid, 1 h 59 min"
+    },
+    {
+      "name": "nobody played that day",
+      "day": "2026-11-20",
+      "when": "yesterday",
+      "now": "2026-11-21 08:00:00",
+      "events": [
+        {
+          "at": "2026-11-19 18:00:00",
+          "kind": "join",
+          "name": "Astrid"
+        },
+        {
+          "at": "2026-11-19 19:00:00",
+          "kind": "leave",
+          "name": "Astrid"
+        }
+      ],
+      "text": ""
+    }
+  ],
+  "test": [
+    {
+      "server": "Viking Night",
+      "crossplay": true,
+      "text": "✅ **Viking Night** can post here. Each time the server starts, its join code will appear in this channel."
+    },
+    {
+      "server": "Viking Night",
+      "crossplay": false,
+      "text": "✅ **Viking Night** can post here. Each time the server starts, how to join will appear in this channel."
+    },
+    {
+      "server": "*Odd* _name_",
+      "crossplay": true,
+      "text": "✅ **\\*Odd\\* \\_name\\_** can post here. Each time the server starts, its join code will appear in this channel."
+    },
+    {
+      "server": "*Odd* _name_",
+      "crossplay": false,
+      "text": "✅ **\\*Odd\\* \\_name\\_** can post here. Each time the server starts, how to join will appear in this channel."
+    }
+  ]
+}

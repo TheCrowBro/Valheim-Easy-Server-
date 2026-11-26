@@ -1,0 +1,22 @@
+11/20/2026 19:00:00: Valheim version: l-0.218.21 (network version 32)
+11/20/2026 19:00:00: Using savedir: /data/saves
+(Filename: ./Runtime/Export/Debug/Debug.bindings.h Line: 35)
+
+11/20/2026 19:00:02: Game server connected
+11/20/2026 19:00:30: Opened Steam server
+11/20/2026 19:01:00: Got connection SteamID 76561198000000001
+11/20/2026 19:01:01: Got handshake from client 76561198000000001
+11/20/2026 19:01:02: Got connection SteamID 76561198000000002
+11/20/2026 19:01:03: Got handshake from client 76561198000000002
+11/20/2026 19:01:09: Got character ZDOID from Astrid : -111:1
+11/20/2026 19:01:12: Got character ZDOID from Bjorn : -222:1
+11/20/2026 19:10:00: Connections 2 ZDOS:130509  sent:1 recv:1
+11/20/2026 19:20:00: Got character ZDOID from Bjorn : 0:0
+11/20/2026 19:20:40: Got character ZDOID from Bjorn : -222:9
+11/20/2026 19:30:00: World saved ( 152.000ms )
+11/20/2026 19:30:01: World save (5/5) done
+11/20/2026 20:01:09: Closing socket 76561198000000001
+11/20/2026 20:15:00: Closing socket 76561198000000002
+11/20/2026 20:30:00: OnApplicationQuit
+11/20/2026 20:30:01: Net scene destroyed
+11/20/2026 20:30:02: World saved ( 98,5ms )
