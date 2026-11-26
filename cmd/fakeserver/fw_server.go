@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"os"
 	"os/signal"
@@ -254,6 +255,18 @@ func (s *Server) Players() []string {
 func (s *Server) Exit(code int) {
 	s.closeAll(closeWait)
 	s.syncLog()
+	exitNow(code)
+}
+
+// exitNow ends the program with code. Its last words, "fakeserver:
+// exiting now (code N)" on standard error, say it got this far: the app
+// (and gametest) capture standard error with the game's output, so when a
+// test finds a stand-in still running after this line, it is stuck in the
+// system's own exit, not anywhere in the stand-in. It is the stand-in's
+// own note, like Warnf's: Demo Game's Monitor hides lines starting
+// "fakeserver: ", and no real game's log line looks like it.
+func exitNow(code int) {
+	fmt.Fprintf(os.Stderr, "fakeserver: exiting now (code %d)\n", code)
 	os.Exit(code)
 }
 
@@ -310,7 +323,7 @@ func (s *Server) crash() {
 		s.Log("The stand-in server crashed, as its fakeserver.json asked.")
 	}
 	s.syncLog()
-	os.Exit(3)
+	exitNow(3)
 }
 
 // hold keeps n bytes of memory in use, touching every page so the system

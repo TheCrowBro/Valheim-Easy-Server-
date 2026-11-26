@@ -82,6 +82,31 @@ type Session struct {
 type stepResult struct {
 	Kind string
 	Err  error // what sending it gave (game.ErrNoConsole after a takeover)
+
+	// SendTook is how long sending the step took. On Windows a Ctrl+C
+	// takes about a second, because platform's Interrupt waits a second
+	// after sending it before it returns.
+	SendTook time.Duration
+	// Ended says the server's process ended during this step, and
+	// EndedAfter how long after the step was sent: the moment gametest's
+	// wait for the process returned, which nothing in the stop chain holds
+	// up (not even Interrupt's second). It is below zero when the process
+	// had already ended before the step was sent.
+	Ended      bool
+	EndedAfter time.Duration
+	ExitCode   int
+}
+
+// note is the test log's line for a step that ended the server, so a slow
+// stop shows where its time went: when the process really ended, and how
+// long sending the step took (on Windows, about a second for a Ctrl+C even
+// when the server ended in tens of milliseconds).
+func (r stepResult) note() string {
+	took := r.SendTook.Round(time.Millisecond)
+	if r.EndedAfter < 0 {
+		return fmt.Sprintf("the server had ended %v before the %q step was sent (exit code %d); sending it took %v", (-r.EndedAfter).Round(time.Millisecond), r.Kind, r.ExitCode, took)
+	}
+	return fmt.Sprintf("the server ended %v after the %q step was sent (exit code %d); sending it took %v", r.EndedAfter.Round(time.Millisecond), r.Kind, r.ExitCode, took)
 }
 
 // Start installs the game (the stand-in unless o.Real), plans a start and
@@ -487,28 +512,53 @@ func (s *Session) Stop() (saved time.Time) {
 	}
 	stopped := false
 	for _, st := range steps {
+		sent := time.Now()
 		err := s.send(a, st)
+		r := stepResult{Kind: st.Kind, Err: err, SendTook: time.Since(sent)}
 		s.mu.Lock()
-		s.stopLog = append(s.stopLog, stepResult{Kind: st.Kind, Err: err})
+		s.stopLog = append(s.stopLog, r)
+		i := len(s.stopLog) - 1
 		s.mu.Unlock()
 		if err != nil {
 			s.tlog.Printf("stop step %q: %v; the next step runs at once", st.Kind, err)
 			continue
 		}
 		if stopped = a.waitExit(st.Wait, st.Resend, func() { s.send(a, st) }); stopped {
+			// endedAt and waitCode are written before ended is closed,
+			// and waitExit has seen it closed.
+			r.Ended, r.EndedAfter, r.ExitCode = true, a.endedAt.Sub(sent), a.waitCode
+			s.mu.Lock()
+			s.stopLog[i] = r
+			s.mu.Unlock()
+			// In the test's log, which go test shows with -v or when the
+			// test fails.
+			s.tlog.Printf("%s", r.note())
 			break
 		}
 	}
-	if !stopped && !a.proc.Exited() {
-		a.proc.Kill()
-		<-a.exited
-		s.t.Fatalf("gametest: %s's stop chain (%s) ended with the server still running; it was killed\n%s", s.info.ID, kinds(steps), a.tail())
+	if !stopped && !a.hasEnded() {
+		// What each way of looking at the process says, taken before the
+		// kill, so the message tells a server stuck on its way out (its
+		// log ends "fakeserver: exiting now") from gametest losing track
+		// of one that had ended.
+		report := a.exitReport()
+		a.kill()
+		killed := "it was killed"
+		select {
+		case <-a.exited:
+		case <-time.After(killWait):
+			killed = fmt.Sprintf("it was killed, but gametest's wait for it still hadn't returned %v later", killWait)
+		}
+		s.t.Fatalf("gametest: %s's stop chain (%s) ended with the server still running; %s\n%s\n%s", s.info.ID, kinds(steps), killed, report, a.tail())
 	}
 	<-a.exited
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return a.mon.State().LastSave
 }
+
+// killWait is how long gametest waits for a server it killed to be gone.
+const killWait = 15 * time.Second
 
 func kinds(steps []game.StopStep) string {
 	var k []string
@@ -542,7 +592,7 @@ func (s *Session) send(a *attachment, st game.StopStep) error {
 		return st.Call(ctx)
 	case "interrupt":
 		quietCtrlC()
-		return a.proc.Interrupt()
+		return a.interrupt()
 	}
 	s.t.Errorf("gametest: %s's Stop has a step of unknown kind %q", s.info.ID, st.Kind)
 	return fmt.Errorf("unknown kind %q", st.Kind)
@@ -633,10 +683,10 @@ func (s *Session) cleanup() {
 	s.mu.Unlock()
 	if a != nil {
 		if !a.isExited() {
-			a.proc.Kill()
+			a.kill()
 			select {
 			case <-a.exited:
-			case <-time.After(15 * time.Second):
+			case <-time.After(killWait):
 			}
 		}
 		a.detach()

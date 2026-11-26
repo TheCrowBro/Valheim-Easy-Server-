@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -20,13 +21,27 @@ type attachment struct {
 	s     *Session
 	mon   game.Monitor
 	rec   game.Record
-	proc  *platform.Proc
+	proc  procHandle
 	stdin *os.File // the console pipe's write end; nil without one (after a takeover)
 	try   int      // which try of a start this run is (1 unless retryOnNewPorts started it again); 0 after a takeover
 
 	cancel context.CancelFunc
 	loops  sync.WaitGroup
-	exited chan struct{} // closed once the process ended and End was folded in
+	// ended is closed as soon as gametest's wait for the process returns:
+	// the process is gone. exited comes later, once its last log lines
+	// were read and End folded in. waitCode, waitErr and endedAt are
+	// written before ended is closed and read only after.
+	ended    chan struct{}
+	waitCode int
+	waitErr  error
+	endedAt  time.Time
+	exited   chan struct{} // closed once the process ended and End was folded in
+
+	// procMu guards the handle: the reaper releases it (proc.Close) under
+	// procMu, and everything else uses it only through useProc, which
+	// holds procMu and refuses once it is released.
+	procMu       sync.Mutex
+	procReleased bool
 
 	// Under s.mu:
 	events   []game.Event
@@ -36,6 +51,28 @@ type attachment struct {
 	exitCode int
 	detached bool
 }
+
+// procHandle is what gametest uses of a *platform.Proc, so a test can
+// stand in for one that behaves as Windows' does (handle_test.go).
+//
+// After Close, a Proc must not be used. On Windows that isn't only good
+// manners: Close releases the handle, after which Exited says false and
+// Kill fails, whether or not the process is still there (on Linux and
+// macOS Close does nothing and Exited goes on saying true). So gametest
+// asks "has it ended?" of its own wait (attachment.ended), never of a
+// handle that may have been released, and touches the handle only through
+// useProc.
+type procHandle interface {
+	PID() int
+	StartTime() time.Time
+	Wait() (int, error)
+	Exited() bool
+	Interrupt() error
+	Kill() error
+	Close()
+}
+
+var _ procHandle = (*platform.Proc)(nil)
 
 // probeEvery is how often the probe runs while the server starts and once
 // it's ready (the manager probes every 5 s, then every 30 s; tests want
@@ -47,10 +84,10 @@ const (
 
 // attach starts watching proc: following its log from the start, the
 // Monitor's ticks, the probe and the exit.
-func (s *Session) attach(proc *platform.Proc, rec game.Record, stdin *os.File, mon game.Monitor, try int) {
+func (s *Session) attach(proc procHandle, rec game.Record, stdin *os.File, mon game.Monitor, try int) {
 	ctx, cancel := context.WithCancel(context.Background())
 	a := &attachment{s: s, mon: mon, rec: rec, proc: proc, stdin: stdin, try: try, cancel: cancel,
-		exited: make(chan struct{}), changed: make(chan struct{})}
+		ended: make(chan struct{}), exited: make(chan struct{}), changed: make(chan struct{})}
 	s.mu.Lock()
 	s.run = a
 	srv := s.srv
@@ -84,7 +121,9 @@ func (s *Session) attach(proc *platform.Proc, rec game.Record, stdin *os.File, m
 		}()
 	}
 	go func() {
-		code, _ := proc.Wait()
+		code, err := proc.Wait()
+		a.waitCode, a.waitErr, a.endedAt = code, err, time.Now()
+		close(a.ended)                     // the stop chain's wait sees this at once
 		time.Sleep(700 * time.Millisecond) // let the log reader catch the last lines, as the manager does
 		cancel()
 		a.loops.Wait()
@@ -96,8 +135,86 @@ func (s *Session) attach(proc *platform.Proc, rec game.Record, stdin *os.File, m
 		close(a.exited)
 		a.notifyLocked()
 		s.mu.Unlock()
+		// Release the handle only now, and under procMu, so it is never
+		// closed under a Ctrl+C or a kill in progress, and nothing uses it
+		// afterwards (see procHandle).
+		a.procMu.Lock()
+		a.procReleased = true
 		proc.Close()
+		a.procMu.Unlock()
 	}()
+}
+
+// errEnded is what useProc gives once the process has ended and its
+// handle was released.
+var errEnded = errors.New("the server's process has already ended")
+
+// useProc runs f with the process's handle, unless the process has ended
+// and the handle was released: then it gives errEnded without calling f.
+func (a *attachment) useProc(f func(p procHandle) error) error {
+	a.procMu.Lock()
+	defer a.procMu.Unlock()
+	if a.procReleased {
+		return errEnded
+	}
+	return f(a.proc)
+}
+
+// interrupt sends the process Ctrl+C (SIGINT on Unix).
+func (a *attachment) interrupt() error {
+	return a.useProc(func(p procHandle) error { return p.Interrupt() })
+}
+
+// kill ends the process at once, unless it has already ended.
+func (a *attachment) kill() {
+	a.useProc(func(p procHandle) error { return p.Kill() })
+}
+
+// hasEnded says whether the process has ended: gametest's wait for it
+// returned. Unlike isExited it doesn't wait for the last log lines.
+func (a *attachment) hasEnded() bool {
+	select {
+	case <-a.ended:
+		return true
+	default:
+		return false
+	}
+}
+
+// exitReport says, for a failure message, what each way of looking at the
+// process says about whether it is still running: gametest's own wait for
+// it, the handle's own check (Proc.Exited), and a fresh look-up by its PID
+// that shares nothing with that handle (pidState; on Windows it also gives
+// the exit code of a process that has ended). If they disagree, gametest
+// lost track of a process that ended; if they all say it runs while the
+// stand-in's log says "fakeserver: exiting now", the program is stuck on
+// its way out.
+func (a *attachment) exitReport() string {
+	pid := a.proc.PID()
+	var b strings.Builder
+	fmt.Fprintf(&b, "what the server's process (PID %d) looked like: ", pid)
+	select {
+	case <-a.ended:
+		if a.waitErr != nil {
+			fmt.Fprintf(&b, "gametest's wait for it failed (%v) %s ago", a.waitErr, time.Since(a.endedAt).Round(time.Millisecond))
+		} else {
+			fmt.Fprintf(&b, "gametest's wait for it returned (exit code %d) %s ago", a.waitCode, time.Since(a.endedAt).Round(time.Millisecond))
+		}
+	default:
+		b.WriteString("gametest's wait for it hasn't returned")
+	}
+	a.procMu.Lock()
+	switch {
+	case a.procReleased:
+		b.WriteString("; its handle has been released")
+	case a.proc.Exited():
+		b.WriteString("; its handle says it has ended")
+	default:
+		b.WriteString("; its handle says it is still running")
+	}
+	a.procMu.Unlock()
+	fmt.Fprintf(&b, "; looked up afresh by its PID, %s", pidState(pid, a.proc.StartTime()))
+	return b.String()
 }
 
 // line feeds one log line to the Monitor.
@@ -218,21 +335,30 @@ func (a *attachment) typeLine(line string) error {
 
 // waitExit waits up to wait for the process to exit, calling again every
 // resend (when it isn't 0). It says whether the process exited.
+//
+// It asks gametest's own wait for the process (ended), never the handle:
+// on Windows, Interrupt returns a second after sending Ctrl+C, by which
+// time a stand-in that saves quickly has exited and the reaper may have
+// released the handle, which then says "still running" for good. That
+// made every Ctrl+C stop fail on Windows after its whole wait.
 func (a *attachment) waitExit(wait, resend time.Duration, again func()) bool {
-	deadline := time.Now().Add(wait)
-	sent := time.Now()
+	deadline := time.NewTimer(wait)
+	defer deadline.Stop()
+	var resends <-chan time.Time
+	if resend > 0 {
+		t := time.NewTicker(resend)
+		defer t.Stop()
+		resends = t.C
+	}
 	for {
-		if a.proc.Exited() {
+		select {
+		case <-a.ended:
 			return true
-		}
-		if time.Now().After(deadline) {
-			return false
-		}
-		if resend > 0 && time.Since(sent) >= resend {
+		case <-deadline.C:
+			return a.hasEnded()
+		case <-resends:
 			again()
-			sent = time.Now()
 		}
-		time.Sleep(100 * time.Millisecond)
 	}
 }
 
