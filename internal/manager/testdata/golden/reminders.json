@@ -1,0 +1,231 @@
+[
+  {
+    "name": "nobody has played yet",
+    "last": null,
+    "now": {
+      "game": "1.0.20",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.3"
+      },
+      "password": "c876de2de4744f10"
+    },
+    "reminder": []
+  },
+  {
+    "name": "nothing changed",
+    "last": {
+      "game": "1.0.20",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.3"
+      },
+      "password": "c876de2de4744f10"
+    },
+    "now": {
+      "game": "1.0.20",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.3"
+      },
+      "password": "c876de2de4744f10"
+    },
+    "reminder": []
+  },
+  {
+    "name": "Valheim updated",
+    "last": {
+      "game": "1.0.20",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.3"
+      },
+      "password": "c876de2de4744f10"
+    },
+    "now": {
+      "game": "1.0.21",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.3"
+      },
+      "password": "c876de2de4744f10"
+    },
+    "reminder": [
+      "update Valheim to 1.0.21"
+    ]
+  },
+  {
+    "name": "Valheim's version not known yet",
+    "last": {
+      "game": "1.0.20",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.3"
+      },
+      "password": "c876de2de4744f10"
+    },
+    "now": {
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.3"
+      },
+      "password": "c876de2de4744f10"
+    },
+    "reminder": []
+  },
+  {
+    "name": "a mod added",
+    "last": {
+      "game": "1.0.20",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.3"
+      },
+      "password": "c876de2de4744f10"
+    },
+    "now": {
+      "game": "1.0.20",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.3",
+        "seasonality": "3.5.0"
+      },
+      "password": "c876de2de4744f10"
+    },
+    "reminder": [
+      "install Seasonality"
+    ]
+  },
+  {
+    "name": "a mod turned off",
+    "last": {
+      "game": "1.0.20",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.3"
+      },
+      "password": "c876de2de4744f10"
+    },
+    "now": {
+      "game": "1.0.20",
+      "mods": {
+        "riverheim": "1.2.3"
+      },
+      "password": "c876de2de4744f10"
+    },
+    "reminder": [
+      "turn off Plant Everything"
+    ]
+  },
+  {
+    "name": "a mod updated",
+    "last": {
+      "game": "1.0.20",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.3"
+      },
+      "password": "c876de2de4744f10"
+    },
+    "now": {
+      "game": "1.0.20",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.4"
+      },
+      "password": "c876de2de4744f10"
+    },
+    "reminder": [
+      "update Riverheim to 1.2.4"
+    ]
+  },
+  {
+    "name": "a mod's version not known",
+    "last": {
+      "game": "1.0.20",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.3"
+      },
+      "password": "c876de2de4744f10"
+    },
+    "now": {
+      "game": "1.0.20",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": ""
+      },
+      "password": "c876de2de4744f10"
+    },
+    "reminder": []
+  },
+  {
+    "name": "a new password",
+    "last": {
+      "game": "1.0.20",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.3"
+      },
+      "password": "c876de2de4744f10"
+    },
+    "now": {
+      "game": "1.0.20",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.3"
+      },
+      "password": "3abe8ea9f438212a"
+    },
+    "reminder": [
+      "use the new password"
+    ]
+  },
+  {
+    "name": "a password from an older copy that didn't note it",
+    "last": {
+      "game": "1.0.20",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.3"
+      }
+    },
+    "now": {
+      "game": "1.0.20",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.3"
+      },
+      "password": "3abe8ea9f438212a"
+    },
+    "reminder": []
+  },
+  {
+    "name": "everything at once, in the mods' order",
+    "last": {
+      "game": "1.0.20",
+      "mods": {
+        "planteverything": "1.18.0",
+        "riverheim": "1.2.3"
+      },
+      "password": "c876de2de4744f10"
+    },
+    "now": {
+      "game": "1.0.21",
+      "mods": {
+        "farlands": "1.0.0",
+        "riverheim": "1.3.0",
+        "seasonality": "3.5.0"
+      },
+      "password": "3abe8ea9f438212a"
+    },
+    "reminder": [
+      "update Valheim to 1.0.21",
+      "update Riverheim to 1.3.0",
+      "turn off Plant Everything",
+      "install Seasonality",
+      "install FarLands",
+      "use the new password"
+    ]
+  }
+]

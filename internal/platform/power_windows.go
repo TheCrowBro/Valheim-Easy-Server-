@@ -115,13 +115,13 @@ func runElevatedPowerShell(script string) error {
 // clearing out ones left from earlier: Windows runs them after this
 // returns, once someone allows it, so they can't be removed straight away.
 func writeAdminScript(b []byte) (string, error) {
-	old, _ := filepath.Glob(filepath.Join(os.TempDir(), "ValheimEasyServer-admin-*.ps1"))
+	old, _ := filepath.Glob(filepath.Join(os.TempDir(), adminScripts))
 	for _, f := range old {
 		if fi, err := os.Stat(f); err == nil && time.Since(fi.ModTime()) > time.Hour {
 			os.Remove(f)
 		}
 	}
-	f, err := os.CreateTemp("", "ValheimEasyServer-admin-*.ps1")
+	f, err := os.CreateTemp("", adminScripts)
 	if err != nil {
 		return "", err
 	}

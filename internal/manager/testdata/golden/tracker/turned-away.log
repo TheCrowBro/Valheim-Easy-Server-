@@ -1,0 +1,12 @@
+11/20/2026 19:00:00: Valheim version: l-0.219.16 (network version 34)
+11/20/2026 19:00:30: Opened Steam server
+11/20/2026 19:01:00: Got connection SteamID 76561198000000005
+11/20/2026 19:01:01: Peer 76561198000000005 has wrong password
+11/20/2026 19:02:00: Got connection SteamID 76561198000000006
+11/20/2026 19:02:01: Peer 76561198000000006 has incompatible version, mine:0.219.16 (network version 34)   remote 0.218.21 (network version 32)
+11/20/2026 19:03:00: Got connection SteamID 76561198000000008
+11/20/2026 19:03:01: VERSION check their:0.217.46  mine:0.219.16
+11/20/2026 19:03:02: Closing socket 76561198000000008
+11/20/2026 19:04:00: Got connection SteamID 76561198000000007
+11/20/2026 19:04:09: Got character ZDOID from Sigrid : 7:1
+11/20/2026 19:05:00: Peer 76561198000000009 has incompatible version
