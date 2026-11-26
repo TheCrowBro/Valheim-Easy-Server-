@@ -295,3 +295,88 @@ Review findings (fixed in the follow-up unless it says otherwise):
 After review:
 
 Nothing blocking, and nothing outside this stream's files was needed. When you add F-win's entry to docs/dev/multigame/stream-notes.md (your file), use the corrected timing expectation from the summary, not the "~1.0 s" line from my first handoff. Nothing was pushed or tagged, and no other branch was touched.
+
+## G-vintagestory (mg/g-vintagestory)
+
+1. **Registration:** add internal/games/all/vintagestory.go after the R2 cut, and change TestOneGameRegistered in internal/manager at the same time.
+2. **Spec 5.5 corrections:**
+   - The server writes serverconfig.json when its start finishes and after /serverconfig commands, not at shutdown.
+   - A file with only the app's keys kills the server, so the Plan runs `--genconfig` first.
+   - The password can't contain spaces (the server's own rule).
+   - Ctrl+C saves (5.5 had it as "verify").
+   - The download is about 64 MB plus 37 MB of .NET.
+   - A world is three files (.vcdbs, -wal, -shm).
+3. **Firewall and .NET:** Program() is runtime/dotnet-<version>/dotnet.exe, a path from install.DotNet that includes the version. I keep the installed .NET until a new server needs another channel or the owner clicks Repair. A repair can move Program(), and the firewall fix (stream A) must follow. Please confirm this trade-off (security patches for .NET only arrive with Repair or a channel change).
+4. **Event kinds:** the adapter uses `wrong_password` and `load_failed`. Its RunState.Extra is empty.
+5. **Order:** 40, following the (n-1)*10 scheme from the Terraria notes.
+6. **No cmd/fakeserver/vintagestory_test.go:** I don't own that file. The stand-in is tested through the adapter's Conformance and plan tests.
+7. **Same gap as the other streams:** Plan can't add an activity-feed entry, so a failed update-on-start only shows as a job step and in the log. Also: only one Vintage Story instance can exist this round, so update-on-start takes no lock.
+8. **realserver.json** lists windows-latest only, with a 60 min timeout and no setup script. The test also runs on Linux.
+9. **Scratch files:** I removed the downloads and the Linux runs' data folders from the scratchpad; logs remain in /tmp/claude-0/-home-user/41f121b4-97ec-5588-a00f-1184231def86/scratchpad/gvs. Nothing was pushed or tagged.
+
+After review:
+
+- The third parties' addresses, uids and mp token are still in the earlier commit a655814 on this branch. I was told not to rewrite history, so only you can remove them: squash the branch when merging, or rewrite that commit, if they must not reach the default branch at all. The new commit only removes them from the tree.
+- No spec gaps or contract questions. I only changed files this stream owns: internal/games/vintagestory/* and cmd/fakeserver/vintagestory.go.
+
+Review findings (fixed in the follow-up unless it says otherwise):
+- should-fix: Exit hint promises to replace a settings file that the adapter keeps using
+- should-fix: Issue-tracker testdata copies third parties' IP addresses, player ids and an auth token
+
+## G-zomboid (mg/g-zomboid)
+
+1. **Registration:** add internal/games/all/zomboid.go after the R2 cut, and change TestOneGameRegistered at the same time.
+2. **Spec 5.6 and 2.5 corrections:**
+   - B42's .bat has `-Djava.library.path=natives/`; the `natives/;natives/win64/;.` form in 5.6 is Build 41's.
+   - Project Zomboid CAN bind RCON to loopback with -Drconlo. Spec 2.5 says it can't; the adapter uses it, and the role stays private.
+   - The download is about 1.9 GB compressed and 7.1 GB installed. I set DownloadMB 1950 and DiskMB 10000; the spec says "download ~7.1 GB".
+   - Order 50 follows Terraria's (n-1)*10 scheme.
+   - Short is "Project Zomboid".
+3. **A stable admin password** is created on the first Plan and kept in State["adminPassword"] in servers.json. The server re-applies it at every start. Nothing shows it yet: the UI could, so the owner can log in as "admin" in game.
+4. **New event kinds** for the manager: "admin_prompt" (a warning) and "rcon_failed" (Minecraft uses the same kind).
+5. **Presence comes from the 30-second RCON probe only.** The B42 console has no join lines, so a join or leave shows within 30 s. The 2.6 rule counts presence as proven once a probe answers.
+6. **The real check downloads the server twice** (two gametest sessions). If that is too slow, drop the "facts" subtest, or give gametest (stream F) a way to reuse an install.
+7. **Necesse's TestStandInMatch** runs a Zomboid-like command line. After both are merged, that line starts this stand-in, which asks for an admin password, ends with exit 1 because stdin is empty, and writes only under that test's temp folder (./Zomboid). It should stay green.
+8. **Server defaults I left alone, for you to decide:** BackupsOnStart=true (the server keeps up to 5 startup zips of its own, using disk) and SaveWorldEveryMinutes=0 (no timed full saves; the server saves on quit and Ctrl+C).
+9. **Unverified wording:** the Join steps ("choose Join and add a server") follow the wiki, not a real B42 client screen. The owner's first real session should check them.
+10. **Linux:** the SteamCMD ANSI-prefix bug the Necesse stream reported (stream I) would also break a Linux run of this check. The Windows cell isn't affected.
+11. **Third-party testdata:** testdata/real holds console logs and settings files copied from a third-party GitHub repo (pepenotti/zomboid-server), with the source in FACTS.md. They are the game's own output, but tell me if you'd rather keep only excerpts.
+
+After review:
+
+1. forLead 2 from the first round is still open: you need to pick one convention for Info.DownloadMB across all adapters, either the depot (installed) size or the compressed bytes Steam sends. I followed the spec and the other SteamCMD adapters (depot size, 7100). If you choose compressed sizes instead, Project Zomboid's figure is 1950 and FACTS.md has the exact bytes.
+2. Spec 5.6 names only the install message. Showing that same sentence when the update before a start fails to read the launch files is my reading of the plain-English rule. Tell me if you want different wording there.
+3. Necesse's TestStandInMatch relies on the Zomboid stand-in using ./Zomboid when it gets no -cachedir. That behaviour is now tested on this branch.
+
+Review findings (fixed in the follow-up unless it says otherwise):
+- should-fix: Install failure message adds technical detail to the spec's exact text
+- should-fix: DownloadMB uses Steam's compressed size, unlike spec 5.6 and the other SteamCMD adapters
+- should-fix: TestStandInMatch's home-folder check can never fail
+
+## G-enshrouded (mg/g-enshrouded)
+
+1. Registration: add internal/games/all/enshrouded.go after the R2 cut, and change TestOneGameRegistered at the same time. I didn't create the file.
+2. Departures from spec 5.7, for the spec text (FACTS.md section 14):
+   - Output is GameLog on <logs>/game/enshrouded_server.log, not Capture. mbround18's code says "the server writes nothing to its own stdout", and every hosting tool reads the log file. M3's GameLog tail must reopen the file after rotation, use OpenShared, and copy lines into the run's own log, as spec 2.4 says.
+   - Presence is ByName, not count. Real logs show "Player 'X' logged in with Permissions:" and "Remove Entity for Player 'X'". The A2S count is the cross-check.
+   - Join: friends can search Enshrouded's list by address (press T, type IP:port). The spec says they can't.
+   - The top-level password key is removed rather than left empty.
+   - The Friends group gets canEditWorld true (new in 1.0; the server refuses canEditBase without it).
+   - New settings: a world-scope difficulty, and textChat and voiceChat.
+   - The stop chain stays as specified: interrupt, wait 4 minutes, resend every 90 seconds.
+3. New event kinds the manager should show or ignore: server_full, save_failed, load_failed, port_in_use, no_steam, bad_config. A2S answers emit count events with Hold.
+4. Monitor Line.Time and event times come from Record.Started plus the time in each line, so the manager must pass the real Started in the record given to Watch.
+5. Real-server cell: one install of about 8.1 GB plus temporary files on windows-latest, 90-minute timeout. Please check the runner's free disk space the first time you dispatch it. After it runs, copy its FACTS: lines into FACTS.md section 13. If stdout turns out to carry the log, GameLog could go back to Capture; GameLog keeps working either way.
+6. Not done: the UI module (out of scope, as the brief said).
+7. In my scratchpad I downloaded the server with my own SteamCMD copy, then deleted its 8 GB of data files. Nothing outside my files was changed.
+
+After review:
+
+Files outside this stream that need a decision:
+1. internal/game/gametest/demo/demo.go (the Demo Game adapter) has the same empty-world bug. Its Validate calls s.worlds.NameProblem(world) and reads sv.Worlds[world], and args/Fingerprint use world exactly as given. So Validate(sv, "") returns "Give the world a name.", and Fingerprint(sv, "") differs from the plan's. If the manager ever drives the demo through startGame or Status, it hits this. The fix is the same: treat "" as sv.World.
+2. The contract doesn't say that "" means the selected world. The Validate and Fingerprint comments in internal/game/contract.go (spec section 2, around lines 278 and 286) should say so.
+3. gametest.Conformance never passes an empty world, so it can't catch this. I suggest Conformance also check that Validate(sv, "") returns no errors when a world is selected, and that Fingerprint(sv, "") equals plan.Fingerprint after a start. That would cover every adapter.
+
+Review findings (fixed in the follow-up unless it says otherwise):
+- must-fix: Validate and Fingerprint treat world "" as a world named "", so the app refuses every Enshrouded start and always says "restart to apply"
+- should-fix: "SaveDataIssue" and "Shutdown" are messages the server sends players, not shutdown reasons it logs; the real save-failure shutdown gets no exit hint
