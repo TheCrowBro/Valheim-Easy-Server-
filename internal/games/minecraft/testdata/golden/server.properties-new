@@ -1,0 +1,19 @@
+#Minecraft server properties
+server-port=25565
+motd=Crow's\: Minecraft \= fun \#1 \u00E4
+max-players=10
+difficulty=normal
+gamemode=survival
+view-distance=10
+white-list=true
+enforce-whitelist=true
+enable-rcon=true
+rcon.port=25575
+rcon.password=RCONPASSWORD0123456789ABCD
+online-mode=true
+enable-query=false
+level-name=Forest
+log-ips=true
+level-seed=12345
+level-type=minecraft\:large_biomes
+hardcore=false

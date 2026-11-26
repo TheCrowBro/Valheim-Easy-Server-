@@ -1,0 +1,53 @@
+[19:30:49] [Server thread/INFO]: Alex[/127.0.0.1:60568] logged in with entity id 8 at (102.5, 144.0, -33.5)
+[19:30:49] [Server thread/INFO]: System chat: Alex joined the game
+[19:30:52] [Server thread/INFO]: [Not Secure] <Alex> Alex fell from a high place
+[19:30:55] [RCON Listener #1/INFO]: Thread RCON Client /127.0.0.1 started
+[19:30:55] [Server thread/INFO]: System chat: Alex hit the ground too hard
+[19:30:55] [Server thread/INFO]: System chat: [Rcon: Applied 1000.0 damage to Alex]
+[19:30:55] [RCON Client /127.0.0.1 #7/INFO]: Thread RCON Client /127.0.0.1 shutting down
+[19:30:58] [RCON Listener #1/INFO]: Thread RCON Client /127.0.0.1 started
+[19:30:58] [RCON Client /127.0.0.1 #8/INFO]: Thread RCON Client /127.0.0.1 shutting down
+[19:31:01] [RCON Listener #1/INFO]: Thread RCON Client /127.0.0.1 started
+[19:31:01] [Server thread/INFO]: System chat: [Rcon: Killed Alex]
+[19:31:01] [RCON Client /127.0.0.1 #9/INFO]: Thread RCON Client /127.0.0.1 shutting down
+[19:31:04] [RCON Listener #1/INFO]: Thread RCON Client /127.0.0.1 started
+[19:31:04] [Server thread/INFO]: System chat: [Rcon: Summoned new Zombie]
+[19:31:04] [Server thread/INFO]: System chat: Alex was slain by Zombie
+[19:31:04] [Server thread/INFO]: System chat: [Rcon: Applied 1000.0 damage to Alex]
+[19:31:04] [Server thread/INFO]: [Not Secure] [Rcon] hello from the console
+[19:31:04] [Server thread/INFO]: System chat: Alex has made the advancement [Stone Age]
+[19:31:04] [Server thread/INFO]: System chat: [Rcon: Granted the advancement [Stone Age] to Alex]
+[19:31:04] [RCON Client /127.0.0.1 #10/INFO]: Thread RCON Client /127.0.0.1 shutting down
+[19:31:19] [Server thread/INFO]: Alex lost connection: Disconnected
+[19:31:19] [Server thread/INFO]: System chat: Alex left the game
+[19:31:54] [Server thread/INFO]: Alex[/127.0.0.1:32776] logged in with entity id 939 at (93.5, 141.0, -33.5)
+[19:31:54] [Server thread/INFO]: System chat: Alex joined the game
+[19:31:59] [RCON Listener #1/INFO]: Thread RCON Client /127.0.0.1 started
+[19:31:59] [Server thread/INFO]: System chat: Alex was killed
+[19:31:59] [Server thread/INFO]: System chat: [Rcon: Killed Alex]
+[19:31:59] [RCON Client /127.0.0.1 #11/INFO]: Thread RCON Client /127.0.0.1 shutting down
+[19:32:02] [RCON Listener #1/INFO]: Thread RCON Client /127.0.0.1 started
+[19:32:02] [RCON Client /127.0.0.1 #12/INFO]: Thread RCON Client /127.0.0.1 shutting down
+[19:32:05] [RCON Listener #1/INFO]: Thread RCON Client /127.0.0.1 started
+[19:32:05] [Server thread/INFO]: System chat: Alex drowned
+[19:32:05] [Server thread/INFO]: System chat: [Rcon: Applied 1000.0 damage to Alex]
+[19:32:05] [RCON Client /127.0.0.1 #13/INFO]: Thread RCON Client /127.0.0.1 shutting down
+[19:32:08] [RCON Listener #1/INFO]: Thread RCON Client /127.0.0.1 started
+[19:32:08] [RCON Client /127.0.0.1 #14/INFO]: Thread RCON Client /127.0.0.1 shutting down
+[19:32:11] [RCON Listener #1/INFO]: Thread RCON Client /127.0.0.1 started
+[19:32:11] [Server thread/INFO]: System chat: Alex blew up
+[19:32:11] [Server thread/INFO]: System chat: [Rcon: Applied 1000.0 damage to Alex]
+[19:32:11] [RCON Client /127.0.0.1 #15/INFO]: Thread RCON Client /127.0.0.1 shutting down
+[19:32:14] [RCON Listener #1/INFO]: Thread RCON Client /127.0.0.1 started
+[19:32:14] [RCON Client /127.0.0.1 #16/INFO]: Thread RCON Client /127.0.0.1 shutting down
+[19:32:17] [RCON Listener #1/INFO]: Thread RCON Client /127.0.0.1 started
+[19:32:17] [Server thread/INFO]: System chat: Alex fell out of the world
+[19:32:17] [Server thread/INFO]: System chat: [Rcon: Applied 1000.0 damage to Alex]
+[19:32:17] [RCON Client /127.0.0.1 #17/INFO]: Thread RCON Client /127.0.0.1 shutting down
+[19:32:20] [RCON Listener #1/INFO]: Thread RCON Client /127.0.0.1 started
+[19:32:20] [RCON Client /127.0.0.1 #18/INFO]: Thread RCON Client /127.0.0.1 shutting down
+[19:32:23] [RCON Listener #1/INFO]: Thread RCON Client /127.0.0.1 started
+[19:32:23] [Server thread/INFO]: System chat: Alex died
+[19:32:23] [Server thread/INFO]: System chat: [Rcon: Applied 1000.0 damage to Alex]
+[19:32:35] [Server thread/INFO]: Alex lost connection: Disconnected
+[19:32:35] [Server thread/INFO]: System chat: Alex left the game

@@ -1,0 +1,7 @@
+[19:38:03] [Server thread/INFO]: Done (5.470s)! For help, type "help"
+[19:38:03] [Server thread/INFO]: Starting remote control listener
+[19:38:03] [Server thread/WARN]: Unable to initialise RCON on 0.0.0.0:25575
+java.net.BindException: Address already in use
+	at java.base/sun.nio.ch.Net.bind0(Native Method)
+	at java.base/sun.nio.ch.Net.bind(Unknown Source)
+	at java.base/sun.nio.ch.Net.bind(Unknown Source)
