@@ -21,6 +21,12 @@ var (
 	_ func(context.Context, Prereq, func(game.Progress)) error                   = EnsurePrereq
 	_ func(string, game.Build) error                                             = WriteBuild
 	_ func(string) (game.Build, bool)                                            = ReadBuild
+
+	// Added by stream I: a start's update that never waits (spec 2.3), and
+	// the runtime a game installed, found without going online.
+	_ func(context.Context) context.Context = SkipIfBusy
+	_ func(string) (string, bool)           = FindJava
+	_ func(string) (string, bool)           = FindDotNet
 )
 
 func TestSignatures(t *testing.T) {

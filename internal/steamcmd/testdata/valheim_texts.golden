@@ -1,0 +1,30 @@
+== ParseProgress ==
+" Update state (0x3) reconfiguring, progress: 0.00 (0 / 0)"	true	Configuring…	0
+" Update state (0x11) preallocating, progress: 10.00 (100 / 1000)"	true	Making room on the disk…	10
+" Update state (0x61) downloading, progress: 12.34 (123456789 / 1000000000)"	true	Downloading the Valheim server…	12.34
+" Update state (0x81) verifying update, progress: 50.00 (500 / 1000)"	true	Checking the server files…	50
+" Update state (0x5) verifying install, progress: 3.00 (3 / 100)"	true	Checking the server files…	3
+" Update state (0x101) committing, progress: 99.00 (990 / 1000)"	true	Finishing the install…	99
+" Update state (0x401) stopping, progress: 1.00 (1 / 100)"	true	Working…	1
+"[  0%] Checking for available updates..."	true	Updating SteamCMD…	0
+"[ 45%] Downloading update (12,345 of 27,000 KB)..."	true	Updating SteamCMD…	45
+"[100%] Download complete."	true	Updating SteamCMD…	100
+"[----] Extracting package..."	false		0
+"Connecting anonymously to Steam Public...OK"	true	Connecting to Steam…	-1
+"Logging in user 'anonymous' to Steam Public...OK"	true	Connecting to Steam…	-1
+"Waiting for user info...OK"	true	Talking to Steam…	-1
+"Waiting for client config...OK"	true	Talking to Steam…	-1
+"Loading Steam API...OK"	false		0
+"Success! App '896660' fully installed."	false		0
+== FriendlyError ==
+"Failed to install app '896660' (Disk space)"	There isn't enough free disk space for the Valheim server (it needs about 2 GB).
+"App '896660' state is 0x202 after update job."	There isn't enough free disk space for the Valheim server (it needs about 2 GB).
+"Failed to install app '896660' (Disk write failure)"	SteamCMD couldn't write the server files. Make sure the disk isn't full and the server isn't running.
+"App '896660' state is 0x602 after update job."	SteamCMD couldn't write the server files. Make sure the disk isn't full and the server isn't running.
+"Timeout downloading item"	SteamCMD couldn't reach Steam. Check the internet connection and try again.
+"Failed to install app '896660' (No connection)"	SteamCMD couldn't reach Steam. Check the internet connection and try again.
+"Failed to connect"	SteamCMD couldn't reach Steam. Check the internet connection and try again.
+"steamcmd: Bad CPU type in executable"	SteamCMD needs Rosetta on a Mac with Apple silicon. Open Terminal, run: softwareupdate --install-rosetta, then try again.
+"App '896660' state is 0x6 after update job."	SteamCMD hit an error while updating (App '896660' state is 0x6 after update job.). Try again, or use Repair.
+"Failed to install app '896660' (Invalid platform)"	SteamCMD reported an error: Failed to install app '896660' (Invalid platform)
+"something nobody has seen"	SteamCMD reported an error: something nobody has seen

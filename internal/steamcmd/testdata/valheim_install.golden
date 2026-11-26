@@ -1,0 +1,91 @@
+== first install ==
+progress	Connecting to Steam…	-1
+output	Redirecting stderr to '/home/user/Steam/logs/stderr.txt'
+output	[  0%] Checking for available updates...
+progress	Updating SteamCMD…	0
+output	[----] Verifying installation...
+output	[  0%] Downloading update...
+progress	Updating SteamCMD…	0
+output	[ 45%] Downloading update (12,345 of 27,000 KB)...
+progress	Updating SteamCMD…	45
+output	[100%] Download complete.
+progress	Updating SteamCMD…	100
+output	[----] Extracting package...
+output	[----] Installing update...
+output	[----] Update complete, launching Steamcmd...
+output	Steam Console Client (c) Valve Corporation - version 1716584580
+output	-- type 'quit' to exit --
+output	Loading Steam API...OK
+output	Connecting anonymously to Steam Public...OK
+progress	Connecting to Steam…	-1
+output	Waiting for client config...OK
+progress	Talking to Steam…	-1
+output	Waiting for user info...OK
+progress	Talking to Steam…	-1
+output	Update state (0x3) reconfiguring, progress: 0.00 (0 / 0)
+progress	Configuring…	0
+output	Update state (0x11) preallocating, progress: 10.00 (100 / 1000)
+progress	Making room on the disk…	10
+output	Update state (0x61) downloading, progress: 12.34 (123456789 / 1000000000)
+progress	Downloading the Valheim server…	12.34
+output	Update state (0x61) downloading, progress: 87.50 (875000000 / 1000000000)
+progress	Downloading the Valheim server…	87.5
+output	Update state (0x81) verifying update, progress: 50.00 (500 / 1000)
+progress	Checking the server files…	50
+output	Update state (0x101) committing, progress: 99.00 (990 / 1000)
+progress	Finishing the install…	99
+output	Success! App '896660' fully installed.
+progress	Server files are up to date.	100
+ok
+== unconfirmed ==
+progress	Connecting to Steam…	-1
+output	Loading Steam API...OK
+output	Waiting for user info...OK
+progress	Talking to Steam…	-1
+output	SteamCMD attempt 1 failed: SteamCMD finished without confirming the install. Last message: Waiting for user info...OK
+progress	Connecting to Steam…	-1
+output	Loading Steam API...OK
+output	Unloading Steam API...OK
+output	SteamCMD attempt 2 failed: SteamCMD finished without confirming the install. Last message: Unloading Steam API...OK
+error	SteamCMD finished without confirming the install. Last message: Unloading Steam API...OK
+== crashed ==
+progress	Connecting to Steam…	-1
+output	Loading Steam API...OK
+output	SteamCMD attempt 1 failed: SteamCMD stopped unexpectedly (exit status 5). Last message: Loading Steam API...OK
+progress	Connecting to Steam…	-1
+output	Connecting anonymously to Steam Public...OK
+progress	Connecting to Steam…	-1
+output	SteamCMD attempt 2 failed: SteamCMD stopped unexpectedly (exit status 6). Last message: Connecting anonymously to Steam Public...OK
+error	SteamCMD stopped unexpectedly (exit status 6). Last message: Connecting anonymously to Steam Public...OK
+== disk full ==
+progress	Connecting to Steam…	-1
+output	ERROR! Failed to install app '896660' (Disk space)
+output	SteamCMD attempt 1 failed: There isn't enough free disk space for the Valheim server (it needs about 2 GB).
+progress	Connecting to Steam…	-1
+output	Error! App '896660' state is 0x202 after update job.
+output	SteamCMD attempt 2 failed: There isn't enough free disk space for the Valheim server (it needs about 2 GB).
+error	There isn't enough free disk space for the Valheim server (it needs about 2 GB).
+== no connection ==
+progress	Connecting to Steam…	-1
+output	ERROR! Timeout downloading item
+output	SteamCMD attempt 1 failed: SteamCMD couldn't reach Steam. Check the internet connection and try again.
+progress	Connecting to Steam…	-1
+output	Success! App '896660' fully installed.
+progress	Server files are up to date.	100
+ok
+== bad cpu ==
+progress	Connecting to Steam…	-1
+output	steamcmd.sh: line 37: steamcmd: Bad CPU type in executable
+output	SteamCMD attempt 1 failed: SteamCMD needs Rosetta on a Mac with Apple silicon. Open Terminal, run: softwareupdate --install-rosetta, then try again.
+progress	Connecting to Steam…	-1
+output	steamcmd.sh: line 37: steamcmd: Bad CPU type in executable
+output	SteamCMD attempt 2 failed: SteamCMD needs Rosetta on a Mac with Apple silicon. Open Terminal, run: softwareupdate --install-rosetta, then try again.
+error	SteamCMD needs Rosetta on a Mac with Apple silicon. Open Terminal, run: softwareupdate --install-rosetta, then try again.
+== another app's success ==
+progress	Connecting to Steam…	-1
+output	Success! App '1169370' fully installed.
+output	SteamCMD attempt 1 failed: SteamCMD finished without confirming the install. Last message: Success! App '1169370' fully installed.
+progress	Connecting to Steam…	-1
+output	Success! App '1169370' fully installed.
+output	SteamCMD attempt 2 failed: SteamCMD finished without confirming the install. Last message: Success! App '1169370' fully installed.
+error	SteamCMD finished without confirming the install. Last message: Success! App '1169370' fully installed.

@@ -1,0 +1,48 @@
+[
+    {
+        "binary": {
+            "architecture": "x64",
+            "download_count": 154826,
+            "heap_size": "normal",
+            "image_type": "jre",
+            "installer": {
+                "checksum": "914d00e351269a6f252cc12d938a7c1ce57352e856f7170f13a60145f5914fc6",
+                "checksum_link": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5.1%2B2/OpenJDK25U-jre_x64_windows_hotspot_25.0.5.1_2.msi.sha256.txt",
+                "download_count": 22154,
+                "link": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5.1%2B2/OpenJDK25U-jre_x64_windows_hotspot_25.0.5.1_2.msi",
+                "metadata_link": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5.1%2B2/OpenJDK25U-jre_x64_windows_hotspot_25.0.5.1_2.msi.json",
+                "name": "OpenJDK25U-jre_x64_windows_hotspot_25.0.5.1_2.msi",
+                "signature_link": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5.1%2B2/OpenJDK25U-jre_x64_windows_hotspot_25.0.5.1_2.msi.sig",
+                "size": 42803200
+            },
+            "jvm_impl": "hotspot",
+            "os": "windows",
+            "package": {
+                "checksum": "3260a1b9899f30ac80d737daafc053042c525249f52d066101fbf81d78d73f25",
+                "checksum_link": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5.1%2B2/OpenJDK25U-jre_x64_windows_hotspot_25.0.5.1_2.zip.sha256.txt",
+                "download_count": 132672,
+                "link": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5.1%2B2/OpenJDK25U-jre_x64_windows_hotspot_25.0.5.1_2.zip",
+                "metadata_link": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5.1%2B2/OpenJDK25U-jre_x64_windows_hotspot_25.0.5.1_2.zip.json",
+                "name": "OpenJDK25U-jre_x64_windows_hotspot_25.0.5.1_2.zip",
+                "signature_link": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5.1%2B2/OpenJDK25U-jre_x64_windows_hotspot_25.0.5.1_2.zip.sig",
+                "size": 58599439
+            },
+            "project": "jdk",
+            "scm_ref": "jdk-25.0.5.1+2_adopt",
+            "updated_at": "2026-11-20T09:48:09Z"
+        },
+        "release_link": "https://github.com/adoptium/temurin25-binaries/releases/tag/jdk-25.0.5.1%2B2",
+        "release_name": "jdk-25.0.5.1+2",
+        "vendor": "eclipse",
+        "version": {
+            "build": 2,
+            "major": 25,
+            "minor": 0,
+            "openjdk_version": "25.0.5.1+2-LTS",
+            "optional": "LTS",
+            "patch": 1,
+            "security": 5,
+            "semver": "25.0.5+100000002.0.LTS"
+        }
+    }
+]
