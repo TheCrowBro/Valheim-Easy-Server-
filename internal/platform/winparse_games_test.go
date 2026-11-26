@@ -49,9 +49,9 @@ $g2 = 'C:\Valheim Server\games\terraria\server\TerrariaServer.exe'
 netsh $fw delete rule name=all "program=$g2"
 $g3 = 'C:\Valheim Server\games\corekeeper\server\CoreKeeperServer.exe'
 netsh $fw delete rule name=all "program=$g3"
-netsh $fw add rule "name=Easy Game Server - minecraft TCP (3e58b859)" dir=in action=allow "program=$g1" protocol=TCP localport=25565
-netsh $fw add rule "name=Easy Game Server - minecraft UDP (5b5291c1)" dir=in action=allow "program=$g1" protocol=UDP localport=24454
-netsh $fw add rule "name=Easy Game Server - terraria TCP (33b2b087)" dir=in action=allow "program=$g2" protocol=TCP localport=7777,7778
+netsh $fw add rule "name=Easy Game Server - minecraft TCP (3e58b859)" dir=in action=allow "program=$g1" protocol=TCP "localport=25565"
+netsh $fw add rule "name=Easy Game Server - minecraft UDP (5b5291c1)" dir=in action=allow "program=$g1" protocol=UDP "localport=24454"
+netsh $fw add rule "name=Easy Game Server - terraria TCP (33b2b087)" dir=in action=allow "program=$g2" protocol=TCP "localport=7777,7778"
 netsh $fw add rule "name=Easy Game Server - corekeeper (2e5527cc)" dir=in action=allow "program=$g3"`
 	if got != want {
 		t.Errorf("FixFirewallAll's script changed:\n%s\nwant:\n%s", got, want)
@@ -112,9 +112,9 @@ func TestGamesFirewallScriptSharedPrograms(t *testing.T) {
 	want := `Remove-NetFirewallRule -DisplayName 'Easy Game Server - *' -ErrorAction SilentlyContinue
 $g1 = 'C:\Valheim Server\games\minecraft\runtime\bin\java.exe'
 netsh $fw delete rule name=all "program=$g1"
-netsh $fw add rule "name=` + gameRules(GameRule{Instance: "a", Program: goldenServer, UDP: []int{2456}})[0].name + `" dir=in action=allow "program=$server" protocol=UDP localport=2456
-netsh $fw add rule "name=` + gameRules(GameRule{Instance: "b", Program: goldenJava, TCP: []int{25565}})[0].name + `" dir=in action=allow "program=$g1" protocol=TCP localport=25565
-netsh $fw add rule "name=` + gameRules(GameRule{Instance: "c", Program: goldenJava, TCP: []int{25575}})[0].name + `" dir=in action=allow "program=$g1" protocol=TCP localport=25575`
+netsh $fw add rule "name=` + gameRules(GameRule{Instance: "a", Program: goldenServer, UDP: []int{2456}})[0].name + `" dir=in action=allow "program=$server" protocol=UDP "localport=2456"
+netsh $fw add rule "name=` + gameRules(GameRule{Instance: "b", Program: goldenJava, TCP: []int{25565}})[0].name + `" dir=in action=allow "program=$g1" protocol=TCP "localport=25565"
+netsh $fw add rule "name=` + gameRules(GameRule{Instance: "c", Program: goldenJava, TCP: []int{25575}})[0].name + `" dir=in action=allow "program=$g1" protocol=TCP "localport=25575"`
 	if got != want {
 		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
