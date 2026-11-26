@@ -3,6 +3,7 @@
 package platform
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,9 +20,7 @@ import (
 // app's own fix, it first removes every "Valheim Easy Server - *" and
 // "Easy Game Server - *" rule. Never run it on the owner's computer.
 func TestFixFirewallAllReal(t *testing.T) {
-	if os.Getenv("EGS_CI_ADMIN") != "1" {
-		t.Skip("set EGS_CI_ADMIN=1 on a CI runner with admin rights (this replaces the app's firewall rules)")
-	}
+	needCIAdmin(t, `FixFirewallAll makes Valheim's and the games' firewall rules for real (it first removes every "Valheim Easy Server - *" and "Easy Game Server - *" rule)`)
 	dir := filepath.Join(t.TempDir(), "Easy Game Server CI")
 	server := filepath.Join(dir, "server", "valheim_server.exe")
 	app := filepath.Join(dir, "ValheimEasyServer.exe")
@@ -93,6 +92,31 @@ func TestFixFirewallAllReal(t *testing.T) {
 	if GameFirewallReady(moved) {
 		t.Error("a rule for the game's old port counts for its new one")
 	}
+}
+
+// needCIAdmin skips a test that runs something as admin for real, unless
+// EGS_CI_ADMIN=1 says this computer gives admin rights without a prompt.
+// Only the Windows CI runner should set it, and only on the step that
+// runs this package's tests with -v, so the "All tests" step doesn't run
+// these twice. why says what the test does, for the skip message.
+//
+// On GitHub Actions the skip also puts a warning on the run's summary
+// page. Without it a run that never checked the real firewall looks just
+// as green as one that did, and spec 9.3 accepts this package's additions
+// only once TestFixFirewallAllReal has passed on the Windows runner.
+func needCIAdmin(t *testing.T, why string) {
+	t.Helper()
+	if os.Getenv("EGS_CI_ADMIN") == "1" {
+		return
+	}
+	if os.Getenv("GITHUB_ACTIONS") == "true" {
+		// "::warning ...::" is a GitHub Actions command, read from the
+		// start of a line of the step's output; t.Log indents its lines,
+		// so this prints directly. go test shows it only with -v (or when
+		// the package fails), so the "All tests" step stays quiet.
+		fmt.Printf("\n::warning title=%s did not run::EGS_CI_ADMIN is not 1 on this step, so this run did not check that %s\n", t.Name(), why)
+	}
+	t.Skipf("set EGS_CI_ADMIN=1 only on a computer where admin rights need no prompt (the CI runner): %s", why)
 }
 
 // firewallRules reads the named rules back as "program|protocol|ports".

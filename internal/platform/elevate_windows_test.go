@@ -29,9 +29,7 @@ func TestShellExecuteInfoSize(t *testing.T) {
 // program as admin without a prompt, waits for it and gives its exit code,
 // with arguments that need quoting arriving whole.
 func TestRunElevatedWaitReal(t *testing.T) {
-	if os.Getenv("EGS_CI_ADMIN") != "1" {
-		t.Skip("set EGS_CI_ADMIN=1 on a computer where admin rights need no prompt (the CI runner)")
-	}
+	needCIAdmin(t, "RunElevatedWait runs programs as admin and gives their exit codes")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	code, err := RunElevatedWait(ctx, system32("cmd.exe"), []string{"/c", "exit 7"})
