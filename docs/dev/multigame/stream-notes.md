@@ -380,3 +380,86 @@ Files outside this stream that need a decision:
 Review findings (fixed in the follow-up unless it says otherwise):
 - must-fix: Validate and Fingerprint treat world "" as a world named "", so the app refuses every Enshrouded start and always says "restart to apply"
 - should-fix: "SaveDataIssue" and "Shutdown" are messages the server sends players, not shutdown reasons it logs; the real save-failure shutdown gets no exit hint
+
+## G-corekeeper (mg/g-corekeeper)
+
+1. **Registration:** add internal/games/all/corekeeper.go after the R2 cut, and change TestOneGameRegistered at the same time. Order is 70, following the (section−1)×10 scheme Terraria proposed. Necesse still uses 4, so all the game streams should be told the scheme.
+2. **Contract gap (same as Minecraft and Necesse):** worldstore's Detect and Place, and anything an adapter writes that names worlds.Candidate, are impossible because adapters can't import internal/worlds. So Import is false. With a `type Candidate = worlds.Candidate` alias (in worldstore or game), Core Keeper could offer the owner's own single-player worlds (`LocalLow\Pugstorm\Core Keeper\Steam\<id>\worlds\<slot>.world.gzip`).
+3. **Spec 5.8 needs updating** to match the departures:
+   - per-world data folders, always slot 0;
+   - the app makes the Game ID and passes `-gameid`, kept in State["gameId"];
+   - `-worldname` is the server name;
+   - "online" is the first "timescale" line after the session line;
+   - the Windows stop is a call step running `taskkill /pid`;
+   - the world settings `mode` (normal/hard/casual/creative) and `seed` are asked only for a new world;
+   - DownloadMB is 490.
+4. **For M3:** a "call" stop step must get a working ctx (taskkill finishes quickly). New warning event kinds: server_full, save_failed, bad_graphics, no_steam, relay_failed. Core Keeper exits with code 0 after a quit request.
+5. **For stream I (internal/steamcmd):** SteamCMD's coloured "Success!" line on Linux still isn't recognised, so the real-server check's own install can't succeed on Linux. That is why the test has the `EGS_CK_INSTALLED` escape hatch. Windows is not affected.
+6. **Risk for the owner's PC:** the server's Unity player settings use the same name as the owner's own Core Keeper (company Pugstorm, product Core Keeper). On Linux it wrote window-size prefs into the game's folder. On Windows those go in `HKCU\Software\Pugstorm\Core Keeper`, which could reset the owner's own Core Keeper window size or fullscreen setting. Pugstorm's own launcher does the same. Worth a look on the owner's PC.
+7. **Test data from a real player:** the GitHub join/leave log keeps that player's public Steam ID and name, as Necesse's forum logs do. Say if you'd rather they were swapped for placeholders.
+8. **Nothing outside my files was edited.** Scratch downloads and logs are under /tmp/claude-0/-home-user/41f121b4-97ec-5588-a00f-1184231def86/scratchpad/ck/ and /tmp/claude-0/-home-user/41f121b4-97ec-5588-a00f-1184231def86/scratchpad/ck-research/ (about 1.1 GB, can be deleted). No server or Xvfb process is left running.
+
+After review:
+
+- For M3: decide New with Worlds().Exists(world), as gametest does. Also keep a pending new world's chosen values (mode, seed) until Exists says yes, not only until its first start. If the manager drops them after the first start, a retry after a failed first start has no values to send, and the server falls back to its defaults (Normal, random seed).
+- Adapters may not import internal/worlds (spec 2.1), so this adapter can't override List or Get. That means a folder holding only the mod loader's files is listed as saved, not "Not generated yet", and the manager's start message says "Loading the world…" instead of "Making the new world…" for it. This is only wording. If that should change, the shared store would need a hook such as an optional Format.Made(name) used for NeverSaved; that belongs to the worldstore owner.
+- No files outside internal/games/corekeeper were changed.
+
+Review findings (fixed in the follow-up unless it says otherwise):
+- should-fix: A new world's chosen mode and seed are lost if its first start fails before the server writes anything
+
+## G-palworld (mg/g-palworld)
+
+1. **Registration:** add internal/games/all/palworld.go after the R2 cut, and change or drop TestOneGameRegistered at the same time.
+2. **Dispatching the real check:** run real-server.yml for this cell on mg/g-palworld. The install is about 4.7 GB downloaded and 5.75 GB on disk under go test's temp folder, so check free space on windows-latest's TEMP drive. To exercise the VC++ install for real, set EGS_CI_ADMIN=1 on this cell only; without it the Repair step is skipped with a log line. Copy the FACTS: lines into the last section of FACTS.md.
+3. **Spec 5.9 edits:**
+   - New worlds: the app picks the id and writes DedicatedServerName, instead of leaving it empty. State keys are `world.<id>` = name and `planned` = id.
+   - The VC++ permalink is now https://aka.ms/vc14/vc_redist.x64.exe. Its key is under WOW6432Node, and the adapter requires 14.40 or newer.
+   - Ctrl+C has no Resend (an Unreal program may take a second one as "quit now").
+   - Plan.ReadyWait is 5 minutes. RCONEnabled=False and LogFormatType=Text are written too.
+4. **Contract gaps:**
+   - The same worlds.Candidate import gap other streams reported: I can't override Scan, Local or Import. With Info.Import false, worldstore's generic import would put a folder named after the world rather than an id; harmless while the panel offers no import.
+   - ProbeResult has no account or world id, so players joined from the probe get Account from `known` only.
+5. **No-tunnel rule:** the only 1.0 sample of the "connected/joined … Player id" lines comes from a hosting guide whose domain contains a word TestNoTunnel forbids. FACTS.md cites it without its address and says why.
+6. **Security:** the VC++ runtime download has no fixed checksum, because Microsoft's permalink changes with every release. It is HTTPS from Microsoft only and runs as admin; checking its signature would need a new install feature.
+7. **Version matching:** friends need the exact server version. The adapter relies on updateOnStart (default on, the help text says to leave it on); when the update is skipped, the start warns that friends with a newer game can't join. A separate build-id comparison against Steam isn't done; that would be the checks loop's job if wanted.
+8. **Firewall:** the REST port is private, so it gets no rule. Whether Windows raises its firewall pop-up for the program's TCP listen when an allow rule exists only for the UDP port is worth watching in stream A's firewall work.
+
+After review:
+
+Nothing is blocked. One optional idea for whoever owns internal/install: the Name field comment in prereq.go (the "XNA Framework 4.0" example) could say that the name must be a capitalised noun with no article, because the messages start sentences with it and add their own "The". I did not edit that file because this stream doesn't own it.
+
+Review findings (fixed in the follow-up unless it says otherwise):
+- should-fix: The Visual C++ prerequisite's Name starts with "the", so several messages the owner sees read wrongly ("The the … installer failed", sentences starting in lower case)
+
+## G-satisfactory (mg/g-satisfactory)
+
+1. **Registration.** Add internal/games/all/satisfactory.go after the R2 cut. TestOneGameRegistered has to change at the same time, as with the other games. I used Order 90, from the (n-1)*10 scheme the other streams use.
+2. **gametest never calls Afterer.After** (stream F's file), although the manager does. So the probe also starts the setup when nothing has for this run of the server; that is what makes Conformance and the real check work. Consider making gametest run After right after launch, as the manager does.
+3. **Spec 5.10 corrections.**
+   - The download is 3.6 GB and the install is 15.5 GB (Steam's app info), so I set DownloadMB 3700 and DiskMB 17000. The spec's "~15.5 GB download" is the installed size.
+   - The reliable port is its own role with no tie.
+   - Max players can be 1 to 16; the default is 4.
+4. **Changes beyond the spec, please confirm.**
+   - I added an Advanced "adminPassword" setting. It shows the password the app makes, so the owner can manage the server from the game, and it is the way out when the owner claimed the server by hand before.
+   - Remove renames ServerSettings.<port>.sav aside; the spec said "nothing to unclaim". The reason: the admin password goes away with the game's settings, and a server still claimed with it could never be set up by the app again.
+   - Import copies the .sav file into the server's saves folder instead of calling UploadSaveGame, which needs the server running. The world is then listed under the session name inside the save, and the selected world follows that name at the first start.
+5. **Contract gap (same as Minecraft and Necesse).** worldstore's Detect and Place need worlds.Candidate, which adapters may not import. So import candidates are named by their file name, not their session, and can't be marked as not renamable.
+6. **For M3.**
+   - Output is GameLog, and the log is the server's own FactoryGame.log in its install folder. The manager must copy its lines into Dirs.Logs (spec 2.4).
+   - There is a new warning event kind, "port_moved", with its text in Event.Text.
+   - State keys: claimed, claimPort, admin, cert, certPort, name, password (a hash of the friends' password).
+   - Record keys: Secrets["admin"], Extra["newWorld"], Extra["setUp"].
+   - The admin password is kept in servers.json, which must stay 0600 (I9).
+7. **For CR.** realserver.json says windows-latest, onDemand true, 120 minutes. The install takes about 15.5 GB in the temp folder, and the check prints the free space it found. The check writes into the runner's %LocalAppData%\FactoryGame and removes its own world and settings file at the end.
+8. **Before the stage can go to ready (spec 8.2).** Someone has to join and leave the owner's server once, and that run's FactoryGame.log excerpt goes into testdata. Then copy the real check's FACTS: lines into FACTS.md.
+9. **For stream T.** The new visible texts don't contain the app's name.
+
+After review:
+
+1. gametest (not my file): the conformance check compares the plan's fingerprint only with srv.Fingerprint(req.Saved, world). The manager compares with Fingerprint(saved, "") (internal/manager/status.go:239), so the reviewer's bug got past conformance. Suggest also checking srv.Fingerprint(req.Saved, "") == plan.Fingerprint when the world is the selected one, so other adapters are checked too.
+2. Manager (not my file), not raised by the reviewer: for an imported save started under its file name, the manager's run record keeps that name (rec.World = "My upload"), while the Worlds page and now the selection show the world inside it ("Home Base"). The manager's busy-world check compares against rec.World (worldBusyLocked in internal/manager/settings.go, and the same comparison in worldio.go). So a backup, restore or delete of "Home Base" may not be refused with "stop the server first" while that save is running. The adapter cannot change rec.World. The manager could take the running world's name from the adapter, or the import could store the save under its world's name. Your call on the R3 world operations.
+
+Review findings (fixed in the follow-up unless it says otherwise):
+- must-fix: After the server is claimed again, the friends' password and the server name are never set on it
+- should-fix: Fingerprint(saved, "") never equals the plan's fingerprint, so a running Satisfactory would always say "restart to apply"
