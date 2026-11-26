@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"valheim-easy-server/internal/config"
+	"valheim-easy-server/internal/game"
+	"valheim-easy-server/internal/games/valheim"
 	"valheim-easy-server/internal/mods"
 	"valheim-easy-server/internal/mods/modstest"
 	"valheim-easy-server/internal/platform"
@@ -418,9 +420,9 @@ func TestSaysWhenMakingANewWorld(t *testing.T) {
 // Valheim update had worded that line differently, counts as online after a
 // while instead of starting forever.
 func TestOnlineWhenOpeningIsNeverSaid(t *testing.T) {
-	old := readyWait
-	readyWait = 3 * time.Second
-	t.Cleanup(func() { readyWait = old })
+	old := valheim.ReadyWait
+	valheim.ReadyWait = 3 * time.Second
+	t.Cleanup(func() { valheim.ReadyWait = old })
 	t.Setenv("FAKE_VALHEIM_OPEN", "quiet")
 	env := setup(t)
 	m := env.m
@@ -540,7 +542,7 @@ func TestForceStopThatFails(t *testing.T) {
 	proc.Wait()
 	run := &serverRun{proc: proc, done: make(chan struct{}), readyCh: make(chan struct{}), ready: true}
 	m.mu.Lock()
-	m.run = run
+	m.legacy().run = run
 	m.mu.Unlock()
 	check := func(wantStopping bool) {
 		t.Helper()
@@ -567,7 +569,7 @@ func TestForceStopThatFails(t *testing.T) {
 	m.mu.Unlock()
 	check(true)
 	m.mu.Lock()
-	m.run = nil
+	m.legacy().run = nil
 	m.mu.Unlock()
 }
 
@@ -626,7 +628,7 @@ func TestRuntimeFileIsPrivate(t *testing.T) {
 	if err := os.Chmod(path, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	saveRuntime(path, runInfo{PID: 42, Password: "secret123"})
+	saveRuntime(path, game.Record{PID: 42, Password: "secret123"})
 	fi, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
@@ -653,7 +655,7 @@ func TestJobNumbersDontRepeat(t *testing.T) {
 		waitFor(t, "the job", 5*time.Second, func() bool {
 			m.mu.Lock()
 			defer m.mu.Unlock()
-			return m.job.Finished != nil
+			return m.legacy().job.Finished != nil
 		})
 		return id
 	}
@@ -676,9 +678,9 @@ func TestFriendsConnectingTogether(t *testing.T) {
 	waitFor(t, "server online", 20*time.Second, func() bool { return m.Status().State == StateOnline })
 	const astrid, bjorn = "Steam_76561198000000001", "Steam_76561198000000002"
 	m.mu.Lock()
-	m.known["Astrid"] = &KnownPlayer{Name: "Astrid", PlatformID: astrid}
-	m.known["Bjorn"] = &KnownPlayer{Name: "Bjorn", PlatformID: bjorn}
-	run := m.run
+	m.legacy().known["Astrid"] = &KnownPlayer{Name: "Astrid", PlatformID: astrid}
+	m.legacy().known["Bjorn"] = &KnownPlayer{Name: "Bjorn", PlatformID: bjorn}
+	run := m.legacy().run
 	m.mu.Unlock()
 	for _, line := range []string{
 		"Got connection SteamID 76561198000000001",
@@ -732,8 +734,8 @@ func TestServerCountKeepsAwake(t *testing.T) {
 		return time.Until(m.idleDeadlineLocked())
 	}
 	m.mu.Lock()
-	run := m.run
-	m.idleSince, m.keepAwakeUntil = time.Now().Add(-8*time.Minute), time.Time{}
+	run := m.legacy().run
+	m.machineIdleSince, m.keepAwakeUntil = time.Now().Add(-8*time.Minute), time.Time{}
 	m.mu.Unlock()
 
 	// Nobody connected, or a session line without the server's address:
@@ -750,7 +752,7 @@ func TestServerCountKeepsAwake(t *testing.T) {
 	}
 
 	m.mu.Lock()
-	m.idleSince, m.keepAwakeUntil = time.Now().Add(-8*time.Minute), time.Time{}
+	m.machineIdleSince, m.keepAwakeUntil = time.Now().Add(-8*time.Minute), time.Time{}
 	m.mu.Unlock()
 	m.handleLine(run, `Session "`+s.ServerName+`" with join code 123456 and IP 203.0.113.7:2456 is active with 1 player(s)`)
 	if d := deadline(); d < 14*time.Minute {
@@ -767,7 +769,7 @@ func TestTakesOverRunningServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, "server online", 20*time.Second, func() bool { return m.Status().State == StateOnline })
-	pid := m.run.proc.PID()
+	pid := m.legacy().run.proc.PID()
 	m.Close()                   // the app closes; the server keeps running
 	time.Sleep(3 * time.Second) // Gunnar joins while the app is closed
 
@@ -776,7 +778,7 @@ func TestTakesOverRunningServer(t *testing.T) {
 	env.m = m2
 	waitFor(t, "takeover", 10*time.Second, func() bool {
 		st := m2.Status()
-		return st.State == StateOnline && m2.run != nil && m2.run.proc.PID() == pid
+		return st.State == StateOnline && m2.legacy().run != nil && m2.legacy().run.proc.PID() == pid
 	})
 	if !hasActivity(m2, "info", "") {
 		t.Fatal("no activity about taking over")
@@ -860,11 +862,11 @@ func TestWakeKeepsAwake(t *testing.T) {
 	}
 	// A job in progress keeps it awake too, unless it's going to rest.
 	m.mu.Lock()
-	m.job = &Job{Kind: "install"}
+	m.legacy().job = &Job{Kind: "install"}
 	busy := m.wantAwakeLocked(now.Add(wakeGrace + time.Minute))
-	m.job.Kind = "hibernate"
+	m.legacy().job.Kind = "hibernate"
 	resting := m.wantAwakeLocked(now.Add(wakeGrace + time.Minute))
-	m.job = nil
+	m.legacy().job = nil
 	m.mu.Unlock()
 	if !busy || resting {
 		t.Fatalf("awake for a job %v, while resting %v", busy, resting)
@@ -1069,7 +1071,7 @@ func TestReplayedCountsUseTheirOwnTimes(t *testing.T) {
 	}
 	waitFor(t, "server online", 20*time.Second, func() bool { return m.Status().State == StateOnline })
 	m.mu.Lock()
-	run := m.run
+	run := m.legacy().run
 	run.replaying = true
 	m.mu.Unlock()
 	at := func(d time.Duration) string {
@@ -1084,7 +1086,7 @@ func TestReplayedCountsUseTheirOwnTimes(t *testing.T) {
 		m.handleLine(run, line)
 	}
 	m.mu.Lock()
-	n := run.tracker.Count()
+	n := run.mon.(*valheim.Monitor).Count()
 	run.replaying = false
 	m.mu.Unlock()
 	if n != 0 {

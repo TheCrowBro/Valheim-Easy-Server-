@@ -239,7 +239,7 @@ func TestDailyDiscordPost(t *testing.T) {
 		return records.Event{T: t.Unix(), Kind: kind, Name: name}
 	}
 	m.mu.Lock()
-	m.recs.Runs["server-2099-03-10_17-55-00.log"] = []records.Event{
+	m.legacy().recs.Runs["server-2099-03-10_17-55-00.log"] = []records.Event{
 		ev(day(0, 18, 0), records.Join, "Astrid"),
 		ev(day(0, 18, 0), records.Join, "Bjorn"),
 		ev(day(0, 18, 5), records.Death, "Bjorn"),
@@ -255,7 +255,7 @@ func TestDailyDiscordPost(t *testing.T) {
 		ev(day(3, 12, 0), records.Join, "Sigrid"),
 		ev(day(3, 12, 1), records.Death, "Sigrid"),
 	}
-	m.recs.Posted = day(-1, 0, 0).Format("2006-01-02")
+	m.legacy().recs.Posted = day(-1, 0, 0).Format("2006-01-02")
 	m.mu.Unlock()
 	posted := func() []string {
 		t.Helper()
@@ -333,8 +333,8 @@ func TestDamagedRecords(t *testing.T) {
 	os.WriteFile(filepath.Join(data, recordsFile), []byte(`{"runs": {"server-1.log": [{"t": 1`), 0o644)
 	env := &testEnv{data: data}
 	m := newTestManager(t, data, env)
-	if len(m.recs.Runs) != 0 || m.recs.Posted == "" {
-		t.Fatalf("records = %+v", m.recs)
+	if len(m.legacy().recs.Runs) != 0 || m.legacy().recs.Posted == "" {
+		t.Fatalf("records = %+v", m.legacy().recs)
 	}
 	if kept, _ := filepath.Glob(filepath.Join(data, recordsFile+".damaged-*")); len(kept) != 1 {
 		t.Fatalf("the damaged file wasn't kept: %v", kept)

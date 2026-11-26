@@ -6,15 +6,12 @@ import (
 	"net"
 	"net/http"
 	"runtime"
-	"slices"
-	"strconv"
 	"strings"
 	"time"
 
 	"valheim-easy-server/internal/config"
-	"valheim-easy-server/internal/mods"
+	"valheim-easy-server/internal/game"
 	"valheim-easy-server/internal/platform"
-	"valheim-easy-server/internal/steamcmd"
 )
 
 // Status is everything the dashboard shows. It is polled every few seconds.
@@ -52,6 +49,38 @@ type Status struct {
 	Activity     []Activity            `json:"activity"`
 	Machine      platform.MachineInfo  `json:"machine"`
 	Now          time.Time             `json:"now"`
+
+	// New in R2 (spec 4.9); the old panel ignores them.
+	Games []GameStatus `json:"games"` // every game this build runs (Valheim only in R2)
+	Jobs  []Job        `json:"jobs"`  // every unfinished job and each slot's last finished one
+}
+
+// GameStatus is one game's instance, for the new panel (spec 4.9). R2 has
+// only the legacy game; R3 adds the rest of 4.9's fields.
+type GameStatus struct {
+	ID           string        `json:"id"`
+	Game         string        `json:"game"`
+	Name         string        `json:"name"`
+	Short        string        `json:"short"`
+	Letter       string        `json:"letter"`
+	Color        string        `json:"color"`
+	Stage        game.Stage    `json:"stage"`
+	ServerName   string        `json:"serverName"`
+	Foreign      string        `json:"foreign"`
+	State        State         `json:"state"`
+	Installed    bool          `json:"installed"`
+	Build        *game.Build   `json:"build,omitempty"`
+	World        string        `json:"world"`
+	RunningWorld string        `json:"runningWorld"`
+	Players      []game.Player `json:"players"`
+	Count        int           `json:"count"`
+	MaxPlayers   int           `json:"maxPlayers"`
+	Presence     game.Presence `json:"presence"`
+	Join         game.Join     `json:"join"`
+	Job          *Job          `json:"job"`
+	LastExit     *ExitInfo     `json:"lastExit"`
+	NeedsRestart bool          `json:"needsRestart"`
+	NeedMB       int           `json:"needMB"`
 }
 
 // PlayerView is a player in the dashboard list.
@@ -75,10 +104,6 @@ type JoinInfo struct {
 	// was ready.
 	Problem string `json:"problem,omitempty"`
 }
-
-// codeWait is how long the server normally takes to get its join code once
-// it's ready, with time to spare.
-var codeWait = 3 * time.Minute
 
 // IdleInfo describes upcoming automatic hibernation.
 type IdleInfo struct {
@@ -125,22 +150,24 @@ type checkCache struct {
 	freeDiskOK    bool
 }
 
-// Status returns a snapshot for the dashboard.
+// Status returns a snapshot for the dashboard. It holds m.mu only for
+// what is in memory (spec 4.8), apart from the legacy game's quick look at
+// its program and build, as it always did.
 func (m *Manager) Status() Status {
 	acts := m.activity.last(40)
+	lan := lanIPs()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s := m.settings
+	inst := m.legacy()
 	st := Status{
 		Platform:     runtime.GOOS,
 		CanHibernate: config.CanHibernate(),
-		State:        m.stateLocked(),
-		Installed:    m.installedLocked(),
-		ServerName:   s.ServerName,
-		World:        s.World,
+		State:        m.instStateLocked(inst),
+		Installed:    m.installedLocked(inst),
 		Players:      []PlayerView{},
 		Live:         m.live,
-		LastExit:     m.lastExit,
+		LastExit:     inst.lastExit,
 		Hibernate:    m.checks.hibernate,
 		Sleep:        m.checks.sleep,
 		RestMode:     s.RestMode,
@@ -150,48 +177,58 @@ func (m *Manager) Status() Status {
 		Now:          time.Now(),
 		Warnings:     []string{},
 		App:          m.appInfoLocked(),
+		Jobs:         m.jobsLocked(),
 	}
-	if m.job != nil {
-		j := *m.job
-		st.Job = &j
+	if j := m.legacyJobLocked(); j != nil {
+		c := *j
+		st.Job = &c
 	}
-	if build, date, ok := steamcmd.InstalledBuild(m.paths.Server); ok {
-		st.Build = build
-		if !date.IsZero() {
+	saved := inst.saved()
+	st.ServerName, st.World = saved.Server["serverName"], saved.World
+	build, hasBuild := inst.srv.Build()
+	if hasBuild {
+		st.Build = build.Build
+		if !build.Date.IsZero() {
+			date := build.Date
 			st.BuildDate = &date
 		}
 	}
-	js := m.joinSettingsLocked(m.run) // what friends join with, not changes waiting for a restart
-	st.Join = JoinInfo{Crossplay: js.Crossplay, Port: js.Port, Password: js.Password, Public: s.Public, LANAddrs: lanAddrs(js.Port)}
-	world := s.World // the mods players need: the running world's, or the next one's
-	if m.run != nil {
-		world = m.run.info.World
+	r := inst.run
+	var runState *game.RunState
+	var rec *game.Record
+	if r != nil {
+		rs := r.state()
+		runState, rec = &rs, &r.rec
 	}
-	st.Mods = m.playerModsLocked(world, m.run)
-	if r := m.run; r != nil {
-		st.RunningWorld = r.info.World
-		launched := r.info.Launched
+	// What friends join with: the running server's name, port, password
+	// and crossplay, not changes waiting for a restart.
+	j := inst.srv.Join(game.JoinInput{Rec: rec, State: runState, Saved: saved, PublicIP: m.net.public, LAN: lan})
+	st.Join = JoinInfo{Crossplay: j.Crossplay, Code: j.Code, PublicAddr: j.Address, LANAddrs: j.LAN, Port: j.Port,
+		Password: j.Password, Public: j.Public, Problem: j.Problem}
+	world := saved.World // the mods players need: the running world's, or the next one's
+	if r != nil {
+		world = r.rec.World
+	}
+	ml, hasMods := inst.srv.(game.ModLister)
+	if hasMods {
+		st.Mods = ml.PlayerMods(world, rec)
+	}
+	if r != nil {
+		st.RunningWorld = r.rec.World
+		launched := r.rec.Launched
 		st.StartedAt = &launched
-		for _, p := range r.tracker.Players() {
-			st.Players = append(st.Players, PlayerView{Name: p.Name, PlatformID: p.PlatformID, Since: p.Since})
+		for _, p := range runState.Players {
+			st.Players = append(st.Players, PlayerView{Name: p.Name, PlatformID: p.Account, Since: p.Since})
 		}
-		st.Version = r.tracker.Version
-		if !r.tracker.LastSave.IsZero() {
-			ls := r.tracker.LastSave
+		st.Version = runState.Version
+		if !runState.LastSave.IsZero() {
+			ls := runState.LastSave
 			st.LastSave = &ls
 		}
-		st.Join.Code = r.tracker.JoinCode
-		st.ModsCode = m.modsCodeLocked(r)
-		st.Join.PublicAddr = r.tracker.PublicAddr
-		if r.ready && !r.info.NoCrossplay && r.tracker.JoinCode == "" {
-			switch {
-			case r.tracker.CrossplayFailed:
-				st.Join.Problem = "crossplay"
-			case time.Since(r.readyAt) > codeWait:
-				st.Join.Problem = "late"
-			}
+		if hasMods {
+			st.ModsCode = ml.ModsCode(rec)
 		}
-		st.Reminder = m.reminderLocked(r)
+		st.Reminder = m.reminderLocked(inst, r)
 		if s.Discord {
 			st.Discord = &DiscordInfo{Error: r.discordErr}
 			if !r.discordAt.IsZero() {
@@ -199,7 +236,7 @@ func (m *Manager) Status() Status {
 				st.Discord.Posted = &at
 			}
 		}
-		st.NeedsRestart = r.info.ArgsKey != "" && r.info.ArgsKey != argsKey(s, m.paths.Save)
+		st.NeedsRestart = r.rec.ArgsKey != "" && r.rec.ArgsKey != inst.srv.Fingerprint(saved, "")
 		if r.replaying {
 			st.Warnings = append(st.Warnings, "Catching up with the server log…")
 		}
@@ -209,9 +246,6 @@ func (m *Manager) Status() Status {
 	}
 	if st.Discord != nil {
 		st.Discord.Daily = s.DiscordDaily
-	}
-	if st.Join.PublicAddr == "" && m.net.public != "" {
-		st.Join.PublicAddr = net.JoinHostPort(m.net.public, strconv.Itoa(js.Port))
 	}
 	if st.Join.PublicAddr == "" || time.Since(m.net.publicAt) > publicMaxAge {
 		m.lookupPublicIPLocked()
@@ -234,56 +268,49 @@ func (m *Manager) Status() Status {
 	if m.checks.freeDiskOK {
 		st.Checklist.FreeDiskGB = float64(m.checks.freeDisk) / (1 << 30)
 		if m.checks.freeDisk < 2<<30 {
-			st.Warnings = append(st.Warnings, "The drive with the worlds is almost full. Valheim stops saving when it runs out of space: free up some room.")
+			st.Warnings = append(st.Warnings, "The drive with the worlds is almost full. "+inst.short()+" stops saving when it runs out of space: free up some room.")
 		}
 	}
-	if errs := s.Validate(); errs != nil {
+	if errs := inst.srv.Validate(saved, ""); errs != nil {
 		st.Warnings = append(st.Warnings, "Some settings need fixing before the server can start: "+errs.Error())
 	}
+	st.Warnings = append(st.Warnings, m.foreignWarningsLocked()...)
+	gs := GameStatus{ID: inst.id, Game: inst.info.ID, Name: inst.info.Name, Short: inst.info.Short,
+		Letter: inst.info.Letter, Color: inst.info.Color, Stage: inst.info.Stage, ServerName: st.ServerName,
+		State: st.State, Installed: st.Installed, World: st.World, RunningWorld: st.RunningWorld,
+		Players: []game.Player{}, MaxPlayers: inst.info.MaxPlayers, Presence: inst.info.Presence, Join: j,
+		Job: inst.job, LastExit: inst.lastExit, NeedsRestart: st.NeedsRestart, NeedMB: inst.info.MemoryMB}
+	if hasBuild {
+		gs.Build = &build
+	}
+	if runState != nil {
+		gs.Players, gs.Count = runState.Players, runState.Count
+	}
+	if gs.Job != nil {
+		c := *gs.Job
+		gs.Job = &c
+	}
+	st.Games = []GameStatus{gs}
 	return st
 }
 
-// joinSettingsLocked is the settings with the server name, port, password
-// and crossplay the running server started with, if one runs: changes to
-// them only apply after a restart, and friends need the ones in use.
-func (m *Manager) joinSettingsLocked(run *serverRun) config.Settings {
-	s := m.settings
-	if run == nil {
-		return s
+// jobsLocked lists every unfinished job and each slot's last finished one.
+func (m *Manager) jobsLocked() []Job {
+	out := []Job{}
+	if m.appJob != nil {
+		out = append(out, *m.appJob)
 	}
-	s.Crossplay = !run.info.NoCrossplay
-	if run.info.Port != 0 { // 0 when started by an older version of the app
-		s.ServerName, s.Port, s.Password = run.info.Server, run.info.Port, run.info.Password
-	}
-	return s
-}
-
-// playerModsLocked lists the mods players need for world. For the running
-// server, that's the server mods it started with, at the versions it
-// loaded, and players' own mods from the settings, which need no restart.
-func (m *Manager) playerModsLocked(world string, run *serverRun) []ModInfo {
-	ids := m.settings.WorldOptions[world].Mods
-	var out []ModInfo
-	if run == nil || run.info.Played.Mods == nil { // stopped, or started by an older version of the app
-		for _, id := range ids {
-			if md, ok := mods.Find(id); ok {
-				out = append(out, ModInfo{Mod: md, Version: m.modVersions[md.Package]})
-			}
+	m.eachInstance(func(i *instance) {
+		if i.job != nil {
+			out = append(out, *i.job)
 		}
-		return out
-	}
-	for _, md := range mods.Catalog {
-		if v, ok := run.info.Played.Mods[md.ID]; ok {
-			out = append(out, ModInfo{Mod: md, Version: v})
-		} else if md.Players == mods.PlayersOnly && slices.Contains(ids, md.ID) {
-			out = append(out, ModInfo{Mod: md, Version: m.modVersions[md.Package]})
-		}
-	}
+	})
 	return out
 }
 
-// lanAddrs lists this computer's local network addresses with the port.
-func lanAddrs(port int) []string {
+// lanIPs lists this computer's local network addresses (IPv4), for how
+// friends at home join.
+func lanIPs() []string {
 	var out []string
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -299,7 +326,7 @@ func lanAddrs(port int) []string {
 			if !ok || ipn.IP.To4() == nil || ipn.IP.IsLinkLocalUnicast() {
 				continue
 			}
-			out = append(out, net.JoinHostPort(ipn.IP.String(), strconv.Itoa(port)))
+			out = append(out, ipn.IP.String())
 		}
 	}
 	return out
@@ -353,9 +380,10 @@ func (m *Manager) checksLoop() {
 	tick := time.NewTicker(5 * time.Second)
 	defer tick.Stop()
 	for {
+		inst := m.legacy()
 		m.mu.Lock()
 		due := time.Since(m.checks.at) > time.Minute
-		save, serverExe := m.paths.Save, m.paths.ServerExe
+		save, serverExe := inst.dirs.Saves, inst.srv.Program()
 		m.mu.Unlock()
 		if due {
 			var c checkCache
@@ -370,6 +398,7 @@ func (m *Manager) checksLoop() {
 			m.mu.Lock()
 			m.checks = c
 			m.mu.Unlock()
+			m.scanForeign() // other games' servers: still running?
 		}
 		select {
 		case <-m.ctx.Done():
@@ -397,7 +426,7 @@ func (m *Manager) recheckSoon() {
 // FixFirewall adds the firewall rules (asks for admin permission).
 func (m *Manager) FixFirewall() error {
 	m.mu.Lock()
-	exe, wake := m.paths.ServerExe, m.settings.DiscordWake
+	exe, wake := m.legacy().srv.Program(), m.settings.DiscordWake
 	m.mu.Unlock()
 	err := platform.FixFirewall(exe, m.opt.AppExe, wake)
 	m.recheckSoon()

@@ -1,11 +1,14 @@
 package manager
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"valheim-easy-server/internal/config"
+	"valheim-easy-server/internal/game"
 	"valheim-easy-server/internal/mods"
 	"valheim-easy-server/internal/worlds"
 )
@@ -13,6 +16,7 @@ import (
 // UpdateSettings saves general settings. The selected world and world
 // options have their own methods.
 func (m *Manager) UpdateSettings(in config.Settings) error {
+	inst := m.legacy()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	cur := m.settings
@@ -27,15 +31,15 @@ func (m *Manager) UpdateSettings(in config.Settings) error {
 		return errs
 	}
 	if next.ServerDir != cur.ServerDir || next.SaveDir != cur.SaveDir {
-		if m.run != nil {
+		if inst.run != nil {
 			return errors.New("Stop the server before changing its folders.")
 		}
-		if m.job != nil && m.job.Finished == nil {
-			return &BusyError{Title: lowerFirst(m.job.Title)}
+		if busy := m.busyJobLocked(inst); busy != nil {
+			return &BusyError{Title: lowerFirst(busy.Title)}
 		}
 	}
 	if next.IdleHibernate && !cur.IdleHibernate {
-		m.idleSince = timeNow() // start counting from now
+		m.machineIdleSince = timeNow() // start counting from now
 	}
 	if err := m.saveSettingsLocked(next); err != nil {
 		return err
@@ -48,9 +52,9 @@ func (m *Manager) UpdateSettings(in config.Settings) error {
 	}
 	// Turned on, or moved to another channel: post the join code there now.
 	// Likewise when the password is to be included, so friends get it.
-	if run := m.run; run != nil && next.Discord && (!cur.Discord || next.DiscordWebhook != cur.DiscordWebhook ||
+	if run := inst.run; run != nil && next.Discord && (!cur.Discord || next.DiscordWebhook != cur.DiscordWebhook ||
 		next.DiscordPassword && !cur.DiscordPassword) {
-		run.info.Announced = ""
+		run.rec.Announced = ""
 		if post, ok := m.announceLocked(run); ok {
 			m.queueDiscord(post)
 			go m.saveRunInfo(run)
@@ -59,31 +63,19 @@ func (m *Manager) UpdateSettings(in config.Settings) error {
 	return nil
 }
 
-// library is the worlds library for the current folders. A Library's
-// folders never change; when the settings move them, a new one replaces it,
-// and anything still using the old one finishes in the old folders.
-func (m *Manager) library() *worlds.Library { return m.libPtr.Load() }
-
-func newLibrary(p config.Paths) *worlds.Library {
-	return &worlds.Library{Worlds: p.Worlds, Backups: p.Backups, Staging: p.Staging}
-}
-
 // saveSettingsLocked writes settings and updates derived paths.
 func (m *Manager) saveSettingsLocked(s config.Settings) error {
 	if err := config.Save(m.paths.Settings, s); err != nil {
 		return fmt.Errorf("couldn't save settings: %w", err)
 	}
 	m.settings = s
-	oldServer := m.paths.Server
 	m.paths = config.ResolvePaths(m.opt.DataDir, s)
-	if m.paths.Server != oldServer {
-		m.modVersions = (&mods.Installer{Dir: m.paths.Server}).Installed()
-	}
-	if lib := m.library(); lib.Worlds != m.paths.Worlds || lib.Backups != m.paths.Backups || lib.Staging != m.paths.Staging {
-		m.libPtr.Store(newLibrary(m.paths))
-	}
-	if inst, ok := m.opt.Installer.(interface{ SetInstallDir(string) }); ok {
-		inst.SetInstallDir(m.paths.Server)
+	m.snapshotLocked()
+	// The legacy game's folders follow the settings (its adapter reads them
+	// from the snapshot at each call, so its world library and mods do too).
+	m.legacy().dirs = legacyDirs(m.paths)
+	if in, ok := m.opt.Installer.(interface{ SetInstallDir(string) }); ok {
+		in.SetInstallDir(m.paths.Server)
 	}
 	go m.notify()
 	return nil
@@ -98,13 +90,14 @@ func (m *Manager) SetWorldOptions(name string, o config.WorldOptions) error {
 	})
 }
 
-// SetWorldMods changes which mods a world is played with, keeping its
-// difficulty settings.
+// SetWorldMods changes which mods a world of the legacy game is played
+// with, keeping its difficulty settings.
 func (m *Manager) SetWorldMods(name string, ids []string) error {
-	return m.changeWorldOptions(name, func(prev config.WorldOptions) config.WorldOptions {
-		prev.Mods = ids
-		return prev
-	})
+	ml, ok := m.legacy().srv.(game.ModLister)
+	if !ok {
+		return errors.New("This game has no mods.")
+	}
+	return ml.SetWorldMods(name, ids)
 }
 
 func (m *Manager) changeWorldOptions(name string, change func(config.WorldOptions) config.WorldOptions) error {
@@ -126,31 +119,39 @@ func (m *Manager) changeWorldOptions(name string, change func(config.WorldOption
 	return m.saveSettingsLocked(next)
 }
 
-// Lists returns the admin, banned and permitted player lists.
+// Lists returns the legacy game's player lists (admins, banned and
+// permitted players).
 func (m *Manager) Lists() (map[config.ListKind][]string, error) {
-	m.mu.Lock()
-	save := m.paths.Save
-	m.mu.Unlock()
 	out := map[config.ListKind][]string{}
-	for _, k := range config.ListKinds {
-		ids, err := config.ReadList(save, k)
+	l, ok := m.legacy().srv.(game.Lister)
+	if !ok {
+		return out, nil
+	}
+	for _, k := range l.Lists() {
+		ids, err := l.ReadList(k.ID)
 		if err != nil {
 			return nil, err
 		}
-		out[k] = ids
+		out[config.ListKind(k.ID)] = ids
 	}
 	return out, nil
 }
 
-// SetList replaces one of the player lists.
+// SetList replaces one of the legacy game's player lists.
 func (m *Manager) SetList(kind config.ListKind, ids []string) error {
-	if kind.FileName() == "" {
+	inst := m.legacy()
+	l, ok := inst.srv.(game.Lister)
+	if !ok || !slices.ContainsFunc(l.Lists(), func(k game.ListKind) bool { return k.ID == string(kind) }) {
 		return errors.New("unknown list")
 	}
 	m.mu.Lock()
-	save := m.paths.Save
+	var rec *game.Record
+	if inst.run != nil {
+		r := inst.run.rec
+		rec = &r
+	}
 	m.mu.Unlock()
-	if err := config.WriteList(save, kind, ids); err != nil {
+	if err := l.WriteList(context.Background(), rec, string(kind), ids); err != nil {
 		return err
 	}
 	m.addActivity("info", "", fmt.Sprintf("The %s list was updated. Changes apply the next time the server starts.", listLabel(kind)))
@@ -185,19 +186,21 @@ type WorldsView struct {
 // can use it, and an alias keeps every use and the JSON exactly as before.
 type ModInfo = mods.Info
 
-// Worlds lists the worlds and their backups.
+// Worlds lists the legacy game's worlds and their backups.
 func (m *Manager) Worlds() (WorldsView, error) {
-	ws, orphans, err := m.library().List()
+	inst := m.legacy()
+	ws, orphans, err := inst.srv.Worlds().List()
 	if err != nil {
 		return WorldsView{}, err
 	}
-	installed := (&mods.Installer{Dir: m.Paths().Server}).Installed()
+	var all []ModInfo
+	if ml, ok := inst.srv.(game.ModLister); ok {
+		all = ml.WorldMods()
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	v := WorldsView{Worlds: ws, Orphans: orphans, Selected: m.settings.World, Options: m.settings.Clone().WorldOptions, Folder: m.paths.Worlds}
-	for _, md := range mods.Catalog {
-		v.Mods = append(v.Mods, ModInfo{Mod: md, Version: installed[md.Package]})
-	}
+	v.Mods = all
 	if v.Worlds == nil {
 		v.Worlds = []worlds.World{}
 	}
@@ -207,25 +210,26 @@ func (m *Manager) Worlds() (WorldsView, error) {
 	if v.Options == nil {
 		v.Options = map[string]config.WorldOptions{}
 	}
-	if m.run != nil {
-		v.Running = m.run.info.World
+	if inst.run != nil {
+		v.Running = inst.run.rec.World
 	}
 	return v, nil
 }
 
-// worldBusyLocked reports whether the running server uses a world.
-func (m *Manager) worldBusyLocked(name string) bool {
-	return m.run != nil && strings.EqualFold(m.run.info.World, name)
+// worldBusyLocked reports whether the instance's running server uses a
+// world.
+func (m *Manager) worldBusyLocked(inst *instance, name string) bool {
+	return inst.run != nil && strings.EqualFold(inst.run.rec.World, name)
 }
 
-func (m *Manager) checkWorldFree(name string) error {
+func (m *Manager) checkWorldFree(inst *instance, name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.worldBusyLocked(name) {
+	if m.worldBusyLocked(inst, name) {
 		return fmt.Errorf("%q is running on the server. Stop the server first.", name)
 	}
-	if m.job != nil && m.job.Finished == nil {
-		return &BusyError{Title: lowerFirst(m.job.Title)}
+	if busy := m.busyJobLocked(inst); busy != nil {
+		return &BusyError{Title: lowerFirst(busy.Title)}
 	}
 	return nil
 }
@@ -233,7 +237,8 @@ func (m *Manager) checkWorldFree(name string) error {
 // SelectWorld picks the world the server plays. With restart, a running
 // server is restarted straight away to switch.
 func (m *Manager) SelectWorld(name string, restart bool) error {
-	if msg := config.WorldNameProblem(name); msg != "" {
+	inst := m.legacy()
+	if msg := inst.srv.Worlds().NameProblem(name); msg != "" {
 		return errors.New(msg)
 	}
 	m.mu.Lock()
@@ -247,7 +252,7 @@ func (m *Manager) SelectWorld(name string, restart bool) error {
 		m.mu.Unlock()
 		return err
 	}
-	running := m.run != nil && m.run.info.World != name
+	running := inst.run != nil && inst.run.rec.World != name
 	m.mu.Unlock()
 	m.addActivity("world", "", fmt.Sprintf("%q is now the selected world.", name))
 	if running && restart {
@@ -260,10 +265,11 @@ func (m *Manager) SelectWorld(name string, restart bool) error {
 // it next starts.
 func (m *Manager) CreateWorld(name string, o config.WorldOptions, restart bool) error {
 	name = strings.TrimSpace(name)
-	if msg := config.WorldNameProblem(name); msg != "" {
+	lib := m.legacy().srv.Worlds()
+	if msg := lib.NameProblem(name); msg != "" {
 		return errors.New(msg)
 	}
-	if m.library().Exists(name) {
+	if lib.Exists(name) {
 		return fmt.Errorf("there's already a world called %q", name)
 	}
 	// Set the options even when none were chosen: a deleted world keeps its
@@ -280,7 +286,7 @@ func (m *Manager) CreateWorld(name string, o config.WorldOptions, restart bool) 
 func (m *Manager) BackupWorld(name string) error {
 	return m.runJob("backup", "Backing up "+name, false, func(_ ctxT, j *jobCtl) error {
 		j.step("Copying the world into a backup file…", -1)
-		b, err := m.library().Backup(name, "manual")
+		b, err := m.legacy().srv.Worlds().Backup(name, "manual")
 		if err != nil {
 			return err
 		}
@@ -292,15 +298,16 @@ func (m *Manager) BackupWorld(name string) error {
 
 // RestoreWorld puts a backup back. The current world is backed up first.
 func (m *Manager) RestoreWorld(name, backupID string) error {
-	if err := m.checkWorldFree(name); err != nil {
+	inst := m.legacy()
+	if err := m.checkWorldFree(inst, name); err != nil {
 		return err
 	}
 	return m.runJob("restore", "Restoring "+name, false, func(_ ctxT, j *jobCtl) error {
-		if err := m.checkRunning(name); err != nil {
+		if err := m.checkRunning(inst, name); err != nil {
 			return err
 		}
 		j.step("Keeping a copy of the current world, then restoring the backup…", -1)
-		if err := m.library().Restore(name, backupID); err != nil {
+		if err := inst.srv.Worlds().Restore(name, backupID); err != nil {
 			return err
 		}
 		m.addActivity("restore", "", fmt.Sprintf("%q was restored from a backup.", name))
@@ -317,12 +324,13 @@ func (m *Manager) DeleteWorld(name string) error {
 	if selected {
 		return errors.New("This is the selected world. Pick a different world to play before deleting it.")
 	}
-	if err := m.checkWorldFree(name); err != nil {
+	inst := m.legacy()
+	if err := m.checkWorldFree(inst, name); err != nil {
 		return err
 	}
 	return m.runJob("delete", "Deleting "+name, false, func(_ ctxT, j *jobCtl) error {
 		j.step("Keeping a backup copy, then deleting…", -1)
-		if err := m.library().Delete(name); err != nil {
+		if err := inst.srv.Worlds().Delete(name); err != nil {
 			return err
 		}
 		m.addActivity("delete", "", fmt.Sprintf("%q was deleted. A backup copy is kept on the Worlds page.", name))
@@ -333,11 +341,12 @@ func (m *Manager) DeleteWorld(name string) error {
 
 // RenameWorld renames an old-format world.
 func (m *Manager) RenameWorld(name, newName string) error {
-	if err := m.checkWorldFree(name); err != nil {
+	inst := m.legacy()
+	if err := m.checkWorldFree(inst, name); err != nil {
 		return err
 	}
 	newName = strings.TrimSpace(newName)
-	if err := m.library().Rename(name, newName); err != nil {
+	if err := inst.srv.Worlds().Rename(name, newName); err != nil {
 		return err
 	}
 	m.mu.Lock()
@@ -367,10 +376,10 @@ func (m *Manager) RenameWorld(name, newName string) error {
 	return err
 }
 
-func (m *Manager) checkRunning(name string) error {
+func (m *Manager) checkRunning(inst *instance, name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.worldBusyLocked(name) {
+	if m.worldBusyLocked(inst, name) {
 		return fmt.Errorf("%q is running on the server. Stop the server first.", name)
 	}
 	return nil

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"valheim-easy-server/internal/platform"
 	"valheim-easy-server/internal/worlds"
 )
 
@@ -21,11 +20,14 @@ var timeNow = time.Now
 // (the caller deletes it) and a name for the file, like "Midgard
 // 2026-10-23.zip".
 func (m *Manager) PrepareDownload(name string) (path, filename string, err error) {
-	lib := m.library()
-	if err := os.MkdirAll(lib.Staging, 0o755); err != nil {
+	inst := m.legacy()
+	m.mu.Lock()
+	staging := inst.dirs.Staging
+	m.mu.Unlock()
+	if err := os.MkdirAll(staging, 0o755); err != nil {
 		return "", "", err
 	}
-	path, err = lib.ExportFile(name, lib.Staging)
+	path, err = inst.srv.Worlds().ExportFile(name, staging)
 	if err != nil {
 		return "", "", fmt.Errorf("Couldn't pack %q: %v", name, err)
 	}
@@ -34,20 +36,27 @@ func (m *Manager) PrepareDownload(name string) (path, filename string, err error
 
 // ExportBackup streams a backup as a zip file.
 func (m *Manager) ExportBackup(w io.Writer, name, id string) error {
-	return m.library().ExportBackup(w, name, id)
+	return m.legacy().srv.Worlds().ExportBackup(w, name, id)
 }
 
-// NewUpload starts an upload of world files.
+// NewUpload starts an upload of world files for the legacy game.
 func (m *Manager) NewUpload() (*worlds.Upload, error) {
-	m.library().CleanUploads(2 * time.Hour)
-	u, err := m.library().NewUpload()
+	inst := m.legacy()
+	inst.srv.Worlds().CleanStaging(2 * time.Hour)
+	m.mu.Lock()
+	staging := inst.dirs.Staging
+	m.mu.Unlock()
+	// The upload area is the same for every game: files and unpacked zips
+	// in a folder of the instance's staging folder. Only the game knows
+	// what a world looks like in it (Worlds().Scan).
+	u, err := (&worlds.Library{Staging: staging}).NewUpload()
 	if err != nil {
 		return nil, err
 	}
 	m.mu.Lock()
 	updating := m.app.updating // the app is about to restart
 	if !updating {
-		m.uploads[u.ID] = u
+		inst.uploads[u.ID] = u
 	}
 	m.mu.Unlock()
 	if updating {
@@ -59,33 +68,37 @@ func (m *Manager) NewUpload() (*worlds.Upload, error) {
 
 // FinishUpload scans an upload for worlds.
 func (m *Manager) FinishUpload(id string) ([]worlds.Candidate, error) {
+	inst := m.legacy()
 	u, err := m.upload(id)
 	if err != nil {
 		return nil, err
 	}
-	cands := u.Scan(m.library())
+	cands := inst.srv.Worlds().Scan(u.Dir)
+	m.mu.Lock()
+	u.Candidates = cands
+	m.mu.Unlock()
 	if len(cands) == 0 {
 		m.DiscardUpload(id)
-		return nil, errors.New("No Valheim worlds were found in that. Add the world's folder (Valheim 1.0), its .fwl and .db files (older versions), or a zip of either.")
+		return nil, errors.New(inst.exact("no_worlds", fmt.Sprintf("No %s worlds were found in that.", inst.short())))
 	}
-	m.markInUse(cands)
+	m.markInUse(inst, cands)
 	return cands, nil
 }
 
 // markInUse flags candidates that would replace the world the server is
 // playing.
-func (m *Manager) markInUse(cands []worlds.Candidate) {
+func (m *Manager) markInUse(inst *instance, cands []worlds.Candidate) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i := range cands {
-		cands[i].InUse = cands[i].Exists && m.worldBusyLocked(cands[i].Name)
+		cands[i].InUse = cands[i].Exists && m.worldBusyLocked(inst, cands[i].Name)
 	}
 }
 
 func (m *Manager) upload(id string) (*worlds.Upload, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	u, ok := m.uploads[id]
+	u, ok := m.legacy().uploads[id]
 	if !ok {
 		return nil, errors.New("That upload has expired. Please upload the world again.")
 	}
@@ -94,9 +107,10 @@ func (m *Manager) upload(id string) (*worlds.Upload, error) {
 
 // DiscardUpload deletes an upload that won't be imported.
 func (m *Manager) DiscardUpload(id string) {
+	inst := m.legacy()
 	m.mu.Lock()
-	u, ok := m.uploads[id]
-	delete(m.uploads, id)
+	u, ok := inst.uploads[id]
+	delete(inst.uploads, id)
 	m.mu.Unlock()
 	if ok {
 		u.Remove()
@@ -110,17 +124,19 @@ func (m *Manager) ImportUpload(id string, choices []worlds.Choice) (int, error) 
 	if err != nil {
 		return 0, err
 	}
-	return m.startImport(u.Candidates, choices, true, func() { m.DiscardUpload(id) })
+	m.mu.Lock()
+	cands := u.Candidates
+	m.mu.Unlock()
+	return m.startImport(m.legacy(), cands, choices, true, func() { m.DiscardUpload(id) })
 }
 
-// LocalWorlds finds worlds saved by the Valheim game on this computer.
+// LocalWorlds finds worlds saved by the legacy game on this computer.
 func (m *Manager) LocalWorlds() []worlds.Candidate {
-	home, _ := os.UserHomeDir()
-	sources := worlds.GameSaveSources(home, platform.SteamPath())
-	cands := m.library().LocalCandidates(sources)
-	m.markInUse(cands)
+	inst := m.legacy()
+	cands := inst.srv.Worlds().Local()
+	m.markInUse(inst, cands)
 	m.mu.Lock()
-	m.localCands = cands
+	inst.localCands = cands
 	m.mu.Unlock()
 	if cands == nil {
 		return []worlds.Candidate{}
@@ -131,13 +147,14 @@ func (m *Manager) LocalWorlds() []worlds.Candidate {
 // ImportLocal copies chosen worlds from this computer's game saves and
 // returns the job doing it.
 func (m *Manager) ImportLocal(choices []worlds.Choice) (int, error) {
+	inst := m.legacy()
 	m.mu.Lock()
-	cands := m.localCands
+	cands := inst.localCands
 	m.mu.Unlock()
 	if len(cands) == 0 {
 		return 0, errors.New("Look for worlds on this computer first.")
 	}
-	return m.startImport(cands, choices, false, nil)
+	return m.startImport(inst, cands, choices, false, nil)
 }
 
 // startImport puts chosen worlds into the worlds folder as a job (moving
@@ -145,7 +162,7 @@ func (m *Manager) ImportLocal(choices []worlds.Choice) (int, error) {
 // playing stops the server first, which saves it, so the current state is
 // in the backup made before replacing; the server then starts again with
 // the new copy. after runs when the job ends.
-func (m *Manager) startImport(cands []worlds.Candidate, choices []worlds.Choice, move bool, after func()) (int, error) {
+func (m *Manager) startImport(inst *instance, cands []worlds.Candidate, choices []worlds.Choice, move bool, after func()) (int, error) {
 	names := chosenNames(cands, choices)
 	if len(names) == 0 {
 		if after != nil {
@@ -153,8 +170,8 @@ func (m *Manager) startImport(cands []worlds.Candidate, choices []worlds.Choice,
 		}
 		return 0, errors.New("Nothing was chosen to add.")
 	}
-	if m.replacesRunning(names) {
-		m.endStartWait() // don't wait for a start that is only loading the world
+	if m.replacesRunning(inst, names) {
+		m.endStartWait(inst) // don't wait for a start that is only loading the world
 	}
 	title := "Adding worlds"
 	if len(names) == 1 {
@@ -165,30 +182,30 @@ func (m *Manager) startImport(cands []worlds.Candidate, choices []worlds.Choice,
 			}
 		}
 	}
-	return m.startJob("import", title, false, func(ctx ctxT, j *jobCtl) error {
+	return m.startInstJob(inst, "import", title, false, func(ctx ctxT, j *jobCtl) error {
 		if after != nil {
 			defer after()
 		}
-		restart := m.replacesRunning(names)
+		restart := m.replacesRunning(inst, names)
 		running := "" // the world to start again: the selected one may be another
 		if restart {
 			m.mu.Lock()
-			if m.run != nil {
-				running = m.run.info.World
+			if inst.run != nil {
+				running = inst.run.rec.World
 			}
 			m.mu.Unlock()
-			if err := m.doStop(ctx, j); err != nil {
+			if err := m.doStop(ctx, j, inst); err != nil {
 				return err
 			}
 		}
-		before, _, _ := m.library().List()
+		before, _, _ := inst.srv.Worlds().List()
 		j.step("Putting the world in place…", -1)
 		busy := func(name string) bool {
 			m.mu.Lock()
 			defer m.mu.Unlock()
-			return m.worldBusyLocked(name)
+			return m.worldBusyLocked(inst, name)
 		}
-		done, err := m.library().Import(cands, choices, busy, move)
+		done, err := inst.srv.Worlds().Import(cands, choices, busy, move)
 		var added []string
 		for _, p := range done {
 			if p.Replaced {
@@ -216,7 +233,7 @@ func (m *Manager) startImport(cands []worlds.Candidate, choices []worlds.Choice,
 		}
 		if restart {
 			j.step("Starting the server again…", -1)
-			if serr := m.doStart(ctx, j, running); serr != nil {
+			if serr := m.doStart(ctx, j, inst, running); serr != nil {
 				if err == nil {
 					return fmt.Errorf("%s But the server didn't start again: %w", importResult(done), serr)
 				}
@@ -231,7 +248,7 @@ func (m *Manager) startImport(cands []worlds.Candidate, choices []worlds.Choice,
 			msg += " The server restarted with it."
 		}
 		// On a new server, the first world added is the one to play.
-		if len(before) == 0 && len(done) == 1 && !m.serverRunning() {
+		if len(before) == 0 && len(done) == 1 && !m.serverRunning(inst) {
 			if err := m.SelectWorld(done[0].Name, false); err == nil {
 				msg += " It's now the world the server plays."
 			}
@@ -282,10 +299,10 @@ func (m *Manager) moveWorldSettings(from, to string) error {
 	return m.saveSettingsLocked(next)
 }
 
-func (m *Manager) serverRunning() bool {
+func (m *Manager) serverRunning(inst *instance) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.run != nil
+	return inst.run != nil
 }
 
 // chosenNames maps the world names the choices put on the server to
@@ -310,11 +327,11 @@ func chosenNames(cands []worlds.Candidate, choices []worlds.Choice) map[string]b
 	return names
 }
 
-func (m *Manager) replacesRunning(names map[string]bool) bool {
+func (m *Manager) replacesRunning(inst *instance, names map[string]bool) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for name, replace := range names {
-		if replace && m.worldBusyLocked(name) {
+		if replace && m.worldBusyLocked(inst, name) {
 			return true
 		}
 	}
