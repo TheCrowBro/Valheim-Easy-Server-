@@ -181,10 +181,9 @@ type WorldsView struct {
 }
 
 // ModInfo is a mod the app offers, with the version installed, if any.
-type ModInfo struct {
-	mods.Mod
-	Version string `json:"version,omitempty"`
-}
+// It is mods.Info under its old name: the type moved so the game contract
+// can use it, and an alias keeps every use and the JSON exactly as before.
+type ModInfo = mods.Info
 
 // Worlds lists the worlds and their backups.
 func (m *Manager) Worlds() (WorldsView, error) {
