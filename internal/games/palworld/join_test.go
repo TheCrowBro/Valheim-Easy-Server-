@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode"
+	"unicode/utf8"
 
 	"valheim-easy-server/internal/game"
 	"valheim-easy-server/internal/install"
@@ -138,6 +140,11 @@ func TestInstallOrder(t *testing.T) {
 		calls = append(calls, "prereq checked="+boolText(p.Installed != nil))
 		if !strings.HasPrefix(p.URL, "https://") || !slices.Equal(p.Args, []string{"/install", "/quiet", "/norestart"}) {
 			t.Errorf("prereq = %+v", p)
+		}
+		// The shared messages start sentences with the name and put "The"
+		// before it, so it must be a capitalised name with no article.
+		if first, _ := utf8.DecodeRuneInString(p.Name); !unicode.IsUpper(first) || strings.HasPrefix(strings.ToLower(p.Name), "the ") {
+			t.Errorf("prereq name %q: the owner would see \"The %s installer failed\"", p.Name, p.Name)
 		}
 		return nil
 	}

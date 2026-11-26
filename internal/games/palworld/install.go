@@ -21,8 +21,12 @@ var steamApp = install.SteamApp{AppID: appID, Name: "Palworld", SizeGB: 6}
 // Microsoft's permanent one for the newest runtime, which changes with
 // every release, so there is no fixed checksum to compare; it is only ever
 // fetched over HTTPS from Microsoft.
+//
+// Name is Microsoft's own name for it, with no "the": install.EnsurePrereq
+// starts sentences with it ("… wasn't installed: it needs you to click Yes")
+// and puts it after its own "The" ("The … installer failed").
 var vcRuntime = install.Prereq{
-	Name:      "the Microsoft Visual C++ runtime",
+	Name:      "Microsoft Visual C++ Redistributable",
 	Installed: vcRuntimeOK,
 	URL:       "https://aka.ms/vc14/vc_redist.x64.exe",
 	Args:      []string{"/install", "/quiet", "/norestart"},
