@@ -7,12 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -52,23 +55,43 @@ func TestMain(m *testing.M) {
 
 // demoRun is one running copy of the stand-in.
 type demoRun struct {
-	t     *testing.T
+	t     testing.TB
+	exe   string
+	saves string
+	extra []string       // arguments after the usual ones, with "{name}" where the port of that name goes
+	ports map[string]int // "game", and one per "{name}" in extra
+	tries int            // how many times it was started (retry starts it again on new ports)
+
+	beforeLaunch func() // tests: runs once the ports are chosen, before each start
+
+	// The current run's; replaced only by launch, on the test's goroutine.
 	cmd   *exec.Cmd
 	stdin io.WriteCloser
-	saves string
-	port  int
+	port  int // ports["game"]
+	added chan struct{}
+	done  chan struct{}
 
 	mu     sync.Mutex
 	lines  []string
 	stderr strings.Builder
-	added  chan struct{}
-	done   chan struct{}
 	code   int
 }
 
 // startDemo copies the program into a folder of its own with config as
-// its fakeserver.json ("" for none) and starts it on a free port.
+// its fakeserver.json ("" for none) and starts it on ports of its own.
+// Where extra has "{name}", say "-api", "{api}", a port is chosen for that
+// name too, and r.ports[name] says which.
 func startDemo(t *testing.T, config string, extra ...string) *demoRun {
+	t.Helper()
+	r := newDemoRun(t, startDemoDir(t, config), extra...)
+	r.launch()
+	return r
+}
+
+// startDemoDir copies the program into a folder of its own, named so it
+// is the demo personality, with config as its fakeserver.json ("" for
+// none) one folder up, as install.Fake lays them out.
+func startDemoDir(t *testing.T, config string) string {
 	t.Helper()
 	dir := t.TempDir()
 	exe := filepath.Join(dir, "bin", filepath.Base(built))
@@ -78,17 +101,70 @@ func startDemo(t *testing.T, config string, extra ...string) *demoRun {
 		t.Fatal(err)
 	}
 	if config != "" {
-		os.WriteFile(filepath.Join(dir, configName), []byte(config), 0o644) // one folder up
+		os.WriteFile(filepath.Join(dir, configName), []byte(config), 0o644)
 	}
-	r := &demoRun{t: t, saves: filepath.Join(dir, "saves"), port: freePort(t), added: make(chan struct{}, 1), done: make(chan struct{})}
-	args := append([]string{"-port", strconv.Itoa(r.port), "-world", "Test World", "-saves", r.saves, "-name", "Test"}, extra...)
-	r.cmd = exec.Command(exe, args...)
-	r.cmd.Stderr = &lockedWriter{mu: &r.mu, b: &r.stderr}
-	r.stdin, _ = r.cmd.StdinPipe()
-	out, _ := r.cmd.StdoutPipe()
-	if err := r.cmd.Start(); err != nil {
-		t.Fatal(err)
+	return exe
+}
+
+// newDemoRun chooses the ports for running exe; launch starts it.
+func newDemoRun(t testing.TB, exe string, extra ...string) *demoRun {
+	t.Helper()
+	r := &demoRun{t: t, exe: exe, saves: filepath.Join(t.TempDir(), "saves"), extra: extra}
+	r.choosePorts()
+	t.Cleanup(func() {
+		if r.cmd != nil {
+			r.cmd.Process.Kill()
+			<-r.done
+		}
+	})
+	return r
+}
+
+func (r *demoRun) choosePorts() {
+	r.t.Helper()
+	r.ports = map[string]int{"game": freePort(r.t)}
+	for _, a := range r.extra {
+		if name, ok := portName(a); ok && r.ports[name] == 0 {
+			r.ports[name] = freePort(r.t)
+		}
 	}
+}
+
+// portName reads "{name}".
+func portName(arg string) (string, bool) {
+	if len(arg) > 2 && strings.HasPrefix(arg, "{") && strings.HasSuffix(arg, "}") {
+		return arg[1 : len(arg)-1], true
+	}
+	return "", false
+}
+
+// launch starts the program on the chosen ports, collecting its output.
+func (r *demoRun) launch() {
+	r.t.Helper()
+	r.tries++
+	if r.beforeLaunch != nil {
+		r.beforeLaunch()
+	}
+	args := []string{"-port", strconv.Itoa(r.ports["game"]), "-world", "Test World", "-saves", r.saves, "-name", "Test"}
+	for _, a := range r.extra {
+		if name, ok := portName(a); ok {
+			a = strconv.Itoa(r.ports[name])
+		}
+		args = append(args, a)
+	}
+	r.mu.Lock()
+	r.lines, r.code = nil, 0
+	r.stderr.Reset()
+	r.mu.Unlock()
+	cmd := exec.Command(r.exe, args...)
+	cmd.Stderr = &lockedWriter{mu: &r.mu, b: &r.stderr}
+	stdin, _ := cmd.StdinPipe()
+	out, _ := cmd.StdoutPipe()
+	if err := cmd.Start(); err != nil {
+		r.t.Fatalf("starting the stand-in: %v", err)
+	}
+	added, done := make(chan struct{}, 1), make(chan struct{})
+	r.cmd, r.stdin, r.port, r.added, r.done = cmd, stdin, r.ports["game"], added, done
 	go func() {
 		sc := bufio.NewScanner(out)
 		for sc.Scan() {
@@ -96,22 +172,75 @@ func startDemo(t *testing.T, config string, extra ...string) *demoRun {
 			r.lines = append(r.lines, sc.Text())
 			r.mu.Unlock()
 			select {
-			case r.added <- struct{}{}:
+			case added <- struct{}{}:
 			default:
 			}
 		}
-		err := r.cmd.Wait()
+		err := cmd.Wait()
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
+			r.mu.Lock()
 			r.code = ee.ExitCode()
+			r.mu.Unlock()
 		}
-		close(r.done)
+		close(done)
 	}()
-	t.Cleanup(func() {
-		r.cmd.Process.Kill()
-		<-r.done
-	})
-	return r
+}
+
+// stolenPortRetries is how many times one stand-in is started again on
+// new ports when another program took one of its ports first.
+const stolenPortRetries = 3
+
+// inUse finds the system's words for a port another program has (Unix;
+// Windows; and a port Windows set aside after it was checked).
+var inUse = regexp.MustCompile(`(?i)address already in use|only one usage of each socket address|forbidden by its access permissions`)
+
+// retry starts the stand-in again on new ports when it stopped before it
+// was ready because another program had taken one of the ports chosen for
+// it ("Error: can't open <what> <port>: ... in use", which the demo only
+// says while starting), at most stolenPortRetries times, and says so in
+// the test's log. It says whether it did.
+//
+// Choosing a free port and the stand-in opening it can't be one step, so
+// on a busy computer another program can take the port in between. A
+// stand-in that fails in any other way, or a port that stays taken, still
+// fails the test.
+func (r *demoRun) retry() bool {
+	r.t.Helper()
+	if r.tries > stolenPortRetries {
+		return false
+	}
+	r.mu.Lock()
+	lines := slices.Clone(r.lines)
+	r.mu.Unlock()
+	if slicesContain(lines, "Server ready") {
+		return false
+	}
+	var line string
+	for _, l := range lines {
+		if strings.Contains(l, "Error: can't open") && inUse.MatchString(l) {
+			line = l
+		}
+	}
+	if line == "" {
+		return false
+	}
+	numbers := strings.FieldsFunc(line, func(c rune) bool { return c < '0' || c > '9' })
+	var taken []string
+	for _, name := range slices.Sorted(maps.Keys(r.ports)) {
+		if p := r.ports[name]; slices.Contains(numbers, strconv.Itoa(p)) {
+			taken = append(taken, fmt.Sprintf("%s port %d", name, p))
+		}
+	}
+	if len(taken) == 0 {
+		return false
+	}
+	r.t.Logf("another program took the %s before the stand-in could open it (%q); starting it again on new ports (retry %d of %d)",
+		strings.Join(taken, " and "), line, r.tries, stolenPortRetries)
+	os.RemoveAll(r.saves) // it began making the world; the next start makes it again
+	r.choosePorts()
+	r.launch()
+	return true
 }
 
 type lockedWriter struct {
@@ -126,14 +255,41 @@ func (w *lockedWriter) Write(p []byte) (int, error) {
 }
 
 // waitLine waits for a log line containing each text, in order, after
-// the last one found, and returns the last line found.
+// the last one found, and returns the last line found. A start that
+// failed on a port another program took is tried again (retry), and the
+// lines are then looked for in the new run's output.
 func (r *demoRun) waitLine(texts ...string) string {
+	r.t.Helper()
+	for {
+		found, missing, exited := r.find(texts)
+		if !exited {
+			return found
+		}
+		if !r.retry() {
+			r.mu.Lock()
+			lines := strings.Join(r.lines, "\n")
+			r.mu.Unlock()
+			r.t.Fatalf("the stand-in exited (code %d) before %q; it wrote:\n%s\nstderr: %s", r.code, missing, lines, r.stderrText())
+		}
+	}
+}
+
+// find waits for the texts in the current run's output. When the program
+// exits first, it says which text it was still waiting for.
+func (r *demoRun) find(texts []string) (found, missing string, exited bool) {
 	r.t.Helper()
 	deadline := time.After(15 * time.Second)
 	from := 0
-	var found string
 	for _, text := range texts {
 		for {
+			// Once the program has ended, every line is in: look at
+			// them all once more before saying it exited first.
+			ended := false
+			select {
+			case <-r.done:
+				ended = true
+			default:
+			}
 			r.mu.Lock()
 			i := from
 			for ; i < len(r.lines) && !strings.Contains(r.lines[i], text); i++ {
@@ -147,10 +303,8 @@ func (r *demoRun) waitLine(texts ...string) string {
 			if ok {
 				break
 			}
-			select {
-			case <-r.done: // every line is in by now
-				r.t.Fatalf("the stand-in exited (code %d) before %q; it wrote:\n%s\nstderr: %s", r.code, text, lines, r.stderrText())
-			default:
+			if ended {
+				return "", text, true
 			}
 			select {
 			case <-r.added:
@@ -160,7 +314,7 @@ func (r *demoRun) waitLine(texts ...string) string {
 			}
 		}
 	}
-	return found
+	return found, "", false
 }
 
 func slicesContain(lines []string, text string) bool {
@@ -207,26 +361,17 @@ func (r *demoRun) world() demoWorld {
 	return w
 }
 
-func portTaken(proto string, port int) bool {
-	addr := "127.0.0.1:" + strconv.Itoa(port)
-	if proto == "udp" {
-		c, err := net.ListenPacket("udp", addr)
-		if err == nil {
-			c.Close()
-		}
-		return err != nil
-	}
-	l, err := net.Listen("tcp", addr)
-	if err == nil {
-		l.Close()
-	}
-	return err != nil
-}
-
 // TestDemo: a whole run with a script, the console and a stop.
 func TestDemo(t *testing.T) {
 	r := startDemo(t, `{"script":"join:Alex@0.2,death:Alex@0.3,deny:Bob@0.4,count@0.5,dance:Alex@0.6,leave:Alex@0.7,save@0.8","speed":60,"version":"9.9"}`)
-	r.waitLine("Demo Server version 9.9", `Creating world "Test World"`, "Server ready: players can join \"Test\" on port "+strconv.Itoa(r.port))
+	// The port is checked after the wait, not put in the text waited for:
+	// if another program took it first, waitLine starts the stand-in
+	// again on a new port, and r.port is only that new port once it
+	// returns.
+	ready := r.waitLine("Demo Server version 9.9", `Creating world "Test World"`, "Server ready: players can join \"Test\" on port ")
+	if want := "on port " + strconv.Itoa(r.port); !strings.HasSuffix(ready, want) {
+		t.Errorf("the ready line %q doesn't end with %q", ready, want)
+	}
 	if !portTaken("tcp", r.port) || !portTaken("udp", r.port) {
 		t.Error("the game port isn't in use while the stand-in runs")
 	}
@@ -317,11 +462,11 @@ func TestDemoWorldKept(t *testing.T) {
 // TestDemoPortInUse: like a real server, it stops with an error when
 // another program has its port.
 func TestDemoPortInUse(t *testing.T) {
-	port := freePort(t)
-	l, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
-	if err != nil {
-		t.Fatal(err)
-	}
+	var l net.Listener
+	port := openFree(t, func(port int) (err error) {
+		l, err = net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+		return err
+	})
 	defer l.Close()
 	out, err := exec.Command(built, "-port", strconv.Itoa(port), "-saves", t.TempDir()).CombinedOutput()
 	var ee *exec.ExitError
@@ -349,11 +494,10 @@ func TestDemoCrashAndNoReady(t *testing.T) {
 
 // TestDemoAPI: the HTTP JSON API with its password, and stopping through it.
 func TestDemoAPI(t *testing.T) {
-	api := freePort(t)
-	r := startDemo(t, `{"speed":60,"script":"join:Alex@0.1"}`, "-api", strconv.Itoa(api), "-apipassword", "s3cret")
+	r := startDemo(t, `{"speed":60,"script":"join:Alex@0.1"}`, "-api", "{api}", "-apipassword", "s3cret")
 	r.waitLine("Player joined: Alex")
 	call := func(method, path, pw string) (int, map[string]any) {
-		req, _ := http.NewRequest(method, "http://127.0.0.1:"+strconv.Itoa(api)+path, nil)
+		req, _ := http.NewRequest(method, "http://127.0.0.1:"+strconv.Itoa(r.ports["api"])+path, nil)
 		req.SetBasicAuth("admin", pw)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -389,15 +533,15 @@ func TestDemoRCONAndA2S(t *testing.T) {
 		t.Skip("internal/rcon and internal/a2s aren't written yet (stream RC)")
 	}
 	var extra []string
-	rp, qp := freePort(t), freePort(t)
 	if rconReady {
-		extra = append(extra, "-rcon", strconv.Itoa(rp), "-rconpassword", "pw")
+		extra = append(extra, "-rcon", "{rcon}", "-rconpassword", "pw")
 	}
 	if a2sReady {
-		extra = append(extra, "-query", strconv.Itoa(qp))
+		extra = append(extra, "-query", "{query}")
 	}
 	r := startDemo(t, `{"speed":60,"script":"join:Alex@0.1"}`, append(extra, "-maxplayers", "5")...)
 	r.waitLine("Player joined: Alex")
+	rp, qp := r.ports["rcon"], r.ports["query"]
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if rconReady {
@@ -473,10 +617,9 @@ func TestDemoProbeDuringStop(t *testing.T) {
 		if !rconWritten() {
 			t.Skip("internal/rcon isn't written yet (stream RC)")
 		}
-		rp := freePort(t)
-		addr := "127.0.0.1:" + strconv.Itoa(rp)
-		r := startDemo(t, `{"speed":1}`, "-rcon", strconv.Itoa(rp), "-rconpassword", "pw")
+		r := startDemo(t, `{"speed":1}`, "-rcon", "{rcon}", "-rconpassword", "pw")
 		r.waitLine("Server ready")
+		addr := "127.0.0.1:" + strconv.Itoa(r.ports["rcon"])
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if out, err := rcon.Exec(ctx, addr, "pw", "stop"); err != nil || out != "Stopping the server" {
@@ -498,9 +641,9 @@ func TestDemoProbeDuringStop(t *testing.T) {
 		if !a2sWritten() {
 			t.Skip("internal/a2s isn't written yet (stream RC)")
 		}
-		qp := freePort(t)
-		r := startDemo(t, `{"speed":1}`, "-query", strconv.Itoa(qp))
+		r := startDemo(t, `{"speed":1}`, "-query", "{query}")
 		r.waitLine("Server ready")
+		qp := r.ports["query"]
 		r.send("stop")
 		r.waitLine("Saving the world...")
 		probed := make(chan struct{})
@@ -529,15 +672,7 @@ func TestUnknownCommandLine(t *testing.T) {
 	}
 	// Naming the game in fakeserver.json makes any program name work.
 	os.WriteFile(filepath.Join(dir, configName), []byte(`{"game":"demo","speed":60}`), 0o644)
-	cmd := exec.Command(exe, "-port", strconv.Itoa(freePort(t)), "-saves", dir)
-	stdout, _ := cmd.StdoutPipe()
-	cmd.Start()
-	defer func() { cmd.Process.Kill(); cmd.Wait() }()
-	sc := bufio.NewScanner(stdout)
-	for sc.Scan() {
-		if strings.Contains(sc.Text(), "Server ready") {
-			return
-		}
-	}
-	t.Error("with \"game\": \"demo\" it never became ready")
+	r := newDemoRun(t, exe)
+	r.launch()
+	r.waitLine("Server ready")
 }

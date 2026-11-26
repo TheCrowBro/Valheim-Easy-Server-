@@ -163,27 +163,16 @@ func startLoop(t *testing.T, cfg Config) *Server {
 	return s
 }
 
-func freePort(t *testing.T) int {
-	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port
-}
-
 // TestListeners: the ports really are taken, so a second program (or the
 // app's check) can't open them.
 func TestListeners(t *testing.T) {
 	s := startLoop(t, Config{})
-	port := freePort(t)
-	if err := s.ListenTCP(port); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.ListenUDP(port); err != nil {
-		t.Fatal(err)
-	}
+	port := openFree(t, func(port int) error {
+		if err := s.ListenTCP(port); err != nil {
+			return err
+		}
+		return s.ListenUDP(port)
+	})
 	if l, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port)); err == nil {
 		l.Close()
 		t.Error("the TCP port could be opened again")
@@ -206,13 +195,11 @@ func TestListeners(t *testing.T) {
 // run; handlers run on the server's goroutine.
 func TestHTTPS(t *testing.T) {
 	s := startLoop(t, Config{})
-	port := freePort(t)
-	err := s.HTTP(port, true, func(w http.ResponseWriter, r *http.Request) {
-		WriteJSON(w, http.StatusOK, map[string]any{"path": r.URL.Path, "players": s.Players()})
+	port := openFree(t, func(port int) error {
+		return s.HTTP(port, true, func(w http.ResponseWriter, r *http.Request) {
+			WriteJSON(w, http.StatusOK, map[string]any{"path": r.URL.Path, "players": s.Players()})
+		})
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	s.Join("Alex")
 	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 	resp, err := client.Get("https://127.0.0.1:" + strconv.Itoa(port) + "/v1/api")
@@ -277,10 +264,7 @@ func TestPlayers(t *testing.T) {
 // its wait, and the other ports are closed by then.
 func TestCloseAllDoesNotHang(t *testing.T) {
 	s := startLoop(t, Config{})
-	port := freePort(t)
-	if err := s.ListenTCP(port); err != nil {
-		t.Fatal(err)
-	}
+	port := openFree(t, s.ListenTCP)
 	probed := make(chan struct{})
 	s.closeOnExit(closerFunc(func() error { <-probed; return nil }))
 	took := make(chan time.Duration, 1)
