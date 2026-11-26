@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"valheim-easy-server/internal/game"
@@ -66,8 +67,15 @@ func args(sv game.Saved) []string {
 // Fingerprint covers what a start gives the server: its command line, the
 // server name and password the setup applies, and the world. The admin
 // password is left out: it is the app's own business, and a new one is
-// applied without a restart.
+// applied without a restart. An empty world is the selected one, as the
+// manager asks while the server runs ("restart to apply").
+//
+// The manager holds its lock while it calls this, so it reads no files:
+// the plan names the world by its session instead (see playedWorld).
 func (s *server) Fingerprint(sv game.Saved, world string) string {
+	if world == "" {
+		world = sv.World
+	}
 	h := sha256.New()
 	for _, a := range args(sv) {
 		io.WriteString(h, a+"\x00")
@@ -103,6 +111,7 @@ func (s *server) Plan(ctx context.Context, req game.PlanRequest) (game.Plan, err
 	if errs := s.Validate(req.Saved, req.World); len(errs) > 0 {
 		return game.Plan{}, errs
 	}
+	world := s.playedWorld(req)
 	if err := s.setLogAside(); err != nil {
 		// Not worth refusing a start for: the server renames it itself as
 		// it starts, and until then the app may show a few old lines.
@@ -138,9 +147,42 @@ func (s *server) Plan(ctx context.Context, req game.PlanRequest) (game.Plan, err
 		Output:      game.GameLog,
 		LogPath:     s.logPath(),
 		ReadyWait:   readyWait,
-		Fingerprint: s.Fingerprint(req.Saved, req.World),
+		Fingerprint: s.Fingerprint(req.Saved, world),
 		Record:      rec,
 	}, nil
+}
+
+// playedWorld is the world a start of req.World plays, as the Worlds page
+// lists it. That is req.World itself, except for a save imported under a
+// file name of its own: the world inside it is listed under its session's
+// name, and the setup loads that session (setup.go). The selection then
+// moves to the session's name, here, before the server starts, so that
+// while it runs the selected world's fingerprint is the one the run
+// started with, and the panel doesn't ask for a restart that changes
+// nothing. Moving it later, once the world loaded, would leave a few
+// minutes of that false prompt at every start of such a save.
+func (s *server) playedWorld(req game.PlanRequest) string {
+	session := s.worlds.sessionOf(req.World)
+	if session == "" || strings.EqualFold(session, req.World) {
+		return req.World
+	}
+	moved := false
+	err := s.store.Save(func(sv *game.Saved) error {
+		if sv.World == req.World {
+			sv.World, moved = session, true
+		}
+		return nil
+	})
+	if err != nil {
+		// The start still plays the right world; the selection keeps
+		// the file's name, and so does the fingerprint, to match it.
+		s.log.Printf("couldn't select the world %q: %v", session, err)
+		return req.World
+	}
+	if moved {
+		s.log.Printf("the save %q belongs to the world %q; that world is now the selected one", req.World, session)
+	}
+	return session
 }
 
 // newWorld is what the setup needs to make a world the server hasn't got.

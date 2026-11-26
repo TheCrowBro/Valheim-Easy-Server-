@@ -201,6 +201,9 @@ var errUnknownAdmin = errors.New("This Satisfactory server was set up before (in
 // claim claims a server that has never been claimed. The admin password
 // is the one the owner typed, or a new one, and is saved before the claim
 // is sent, so a claim whose answer is lost still leaves the app knowing it.
+// What the app gave the server before (its name, the friends' password)
+// went with the old claim, so it is forgotten at the same time and
+// applied again afterwards, even if the answer is lost.
 func (s *server) claim(ctx context.Context, rec game.Record, c *apiClient) error {
 	var admin string
 	err := s.store.Save(func(sv *game.Saved) error {
@@ -210,6 +213,7 @@ func (s *server) claim(ctx context.Context, rec game.Record, c *apiClient) error
 		}
 		admin = sv.Server["adminPassword"]
 		sv.State[stateAdmin] = admin
+		forgetApplied(sv)
 		return nil
 	})
 	if err != nil {
@@ -268,13 +272,28 @@ func (s *server) passwordLogIn(ctx context.Context, rec game.Record, c *apiClien
 				sv.Server["adminPassword"] = pw
 			}
 			if sv.State[stateClaimed] == "" || sv.State[stateClaimPort] != itoa(c.port) {
+				// A server on another port than last time: what it
+				// was given on this port, if anything, may differ.
 				sv.State[stateClaimed] = time.Now().UTC().Format(time.RFC3339)
 				sv.State[stateClaimPort] = itoa(c.port)
+				forgetApplied(sv)
 			}
 			return nil
 		})
 	}
 	return errUnknownAdmin
+}
+
+// forgetApplied forgets which server name and friends' password the app
+// gave the server, so the next setup gives both again. The server keeps
+// them per game port, with its claim (ServerSettings.<port>.sav), so they
+// are only known for the port of the claim the app last saw: after the
+// app picked new ports, after the port goes back to one used before, or
+// after the server forgot its claim, the server there may have no
+// friends' password at all, while the panel shows one.
+func forgetApplied(sv *game.Saved) {
+	delete(sv.State, stateName)
+	delete(sv.State, statePassword)
 }
 
 // applySettings gives the server what changed since the app last told it:
@@ -345,7 +364,9 @@ func (s *server) applySettings(ctx context.Context, rec game.Record, c *apiClien
 }
 
 // loadWorld makes sure the run's world is the one being played, and is the
-// one the server loads by itself next time.
+// one the server loads by itself next time. For an imported save, the run's
+// world is the file's name and the session is the one inside it (the plan
+// has already moved the selection to that session).
 func (s *server) loadWorld(ctx context.Context, rec game.Record, c *apiClient) error {
 	target := s.worlds.sessionOf(rec.World)
 	if target == "" {
@@ -396,17 +417,6 @@ func (s *server) loadWorld(ctx context.Context, rec game.Record, c *apiClient) e
 		if err := s.checked(rec, c, func() error { return c.setAutoLoadSession(ctx, target) }); err != nil {
 			return fmt.Errorf("couldn't make %q the world the server loads when it starts: %w", target, err)
 		}
-	}
-	if target != rec.World {
-		// An imported save is listed under its own session name: the
-		// selection follows it.
-		s.store.Save(func(sv *game.Saved) error {
-			if sv.World == rec.World {
-				sv.World = target
-			}
-			return nil
-		})
-		s.log.Printf("the save %q belongs to the world %q; that world is now the selected one", rec.World, target)
 	}
 	return nil
 }

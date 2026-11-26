@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -222,9 +223,10 @@ func TestSetupAdminPasswordChange(t *testing.T) {
 
 // The server keeps its claim per game port, so after the app picks new
 // ports the server there is unclaimed, and the app claims it again with
-// the same admin password.
+// the same admin password, and gives it the friends' password again.
 func TestSetupNewPortClaimsAgain(t *testing.T) {
 	f := newSetupFixture(t)
+	f.s.store.Save(func(sv *game.Saved) error { sv.Server["password"] = "letmein"; return nil })
 	if _, err := f.after(f.rec(true, "Grass Fields")); err != nil {
 		t.Fatal(err)
 	}
@@ -242,9 +244,59 @@ func TestSetupNewPortClaimsAgain(t *testing.T) {
 		if a.admin != "app-made-admin-password" {
 			t.Errorf("claimed with %q, not the app's admin password", a.admin)
 		}
+		if a.client != "letmein" {
+			t.Errorf("the server on the new port has the friends' password %q, not the settings' one:\n%s", a.client, calls)
+		}
 	})
 	if st := f.s.store.Get().State; st[stateClaimPort] != itoa(moved.port()) || st[stateCertPort] != itoa(moved.port()) {
 		t.Errorf("State = %v; want the claim and the key noted for the new port", st)
+	}
+}
+
+// Going back to a port used before: the server there is still claimed
+// with the app's admin password, but has the name and friends' password
+// it had then. The app gives it the ones in the settings, so a server
+// that had no password then doesn't run open now.
+func TestSetupBackToAnEarlierPort(t *testing.T) {
+	f := newSetupFixture(t)
+	first := f.api
+	if _, err := f.after(f.rec(true, "Grass Fields")); err != nil {
+		t.Fatal(err)
+	}
+	moved := newFakeAPI(t, f.s.savesDir())
+	f.api = moved
+	f.s.store.Save(func(sv *game.Saved) error {
+		sv.Ports["game"] = moved.port()
+		sv.Server["password"], sv.Server["serverName"] = "letmein", "New name"
+		return nil
+	})
+	if _, err := f.after(f.rec(false, "")); err != nil {
+		t.Fatal(err)
+	}
+
+	f.api = first
+	first.restart()
+	f.s.store.Save(func(sv *game.Saved) error { sv.Ports["game"] = first.port(); return nil })
+	calls, err := f.after(f.rec(false, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(calls, "ClaimServer") {
+		t.Errorf("claimed again a server that is still claimed:\n%s", calls)
+	}
+	first.set(func(a *fakeAPI) {
+		if a.client != "letmein" || a.name != "New name" {
+			t.Errorf("back on the first port the server has the password %q and the name %q; want the settings' ones:\n%s", a.client, a.name, calls)
+		}
+	})
+	// The next start on that port has nothing more to give it.
+	first.restart()
+	calls, err = f.after(f.rec(false, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(calls, "SetClientPassword") || strings.Contains(calls, "RenameServer") {
+		t.Errorf("the password or name was given again with nothing changed:\n%s", calls)
 	}
 }
 
@@ -328,15 +380,32 @@ func TestPending(t *testing.T) {
 
 // A save imported under a file name of its own: starting that name loads
 // it, and the selected world becomes the session inside it, which is how
-// the Worlds page lists it.
+// the Worlds page lists it. The selection moves as the start is planned,
+// so the running server's fingerprint is the selected world's all along
+// (no false "restart to apply").
 func TestSetupImportedSave(t *testing.T) {
 	f := newSetupFixture(t)
+	placeProgram(t, f.s)
 	writeTestSave(t, f.s.savesDir(), "My upload", "Home Base", time.Now())
 	f.s.store.Save(func(sv *game.Saved) error { sv.World = "My upload"; return nil })
 	if !f.s.worlds.Exists("My upload") {
 		t.Fatalf("the imported file's name isn't a world, so a start would make a new one")
 	}
-	calls, err := f.after(f.rec(false, ""))
+	plan, err := f.s.Plan(context.Background(), game.PlanRequest{World: "My upload", Saved: f.s.store.Get()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w := f.s.store.Get().World; w != "Home Base" {
+		t.Errorf("the selected world is %q, not the session's name", w)
+	}
+	if fp := f.s.Fingerprint(f.s.store.Get(), ""); fp != plan.Fingerprint {
+		t.Errorf("the selected world's fingerprint %s isn't the plan's %s: the panel would ask for a restart", fp, plan.Fingerprint)
+	}
+	// The run's world is the name the start was asked for, as the
+	// manager records it.
+	rec := f.rec(false, "")
+	rec.World = "My upload"
+	calls, err := f.after(rec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -344,19 +413,21 @@ func TestSetupImportedSave(t *testing.T) {
 		!strings.Contains(calls, `SetAutoLoadSessionName(sessionName="Home Base") as Administrator`) {
 		t.Errorf("calls:\n%s", calls)
 	}
-	if w := f.s.store.Get().World; w != "Home Base" {
-		t.Errorf("the selected world is %q, not the session's name", w)
+	if fp := f.s.Fingerprint(f.s.store.Get(), ""); fp != plan.Fingerprint {
+		t.Errorf("after the setup, the selected world's fingerprint %s isn't the plan's %s", fp, plan.Fingerprint)
 	}
 }
 
 // A server that forgot its claim (its settings file was deleted) is claimed
-// again, rather than reported as set up by someone else.
+// again, rather than reported as set up by someone else, and is given the
+// friends' password again, which went with the file.
 func TestSetupServerForgotItsClaim(t *testing.T) {
 	f := newSetupFixture(t)
+	f.s.store.Save(func(sv *game.Saved) error { sv.Server["password"] = "letmein"; return nil })
 	if _, err := f.after(f.rec(true, "Grass Fields")); err != nil {
 		t.Fatal(err)
 	}
-	f.api.set(func(a *fakeAPI) { a.claimed, a.admin = false, "" })
+	f.api.set(func(a *fakeAPI) { a.claimed, a.admin, a.client, a.name = false, "", "", "" })
 	f.api.restart()
 	calls, err := f.after(f.rec(false, ""))
 	if err != nil {
@@ -365,6 +436,47 @@ func TestSetupServerForgotItsClaim(t *testing.T) {
 	if !strings.Contains(calls, "ClaimServer(adminPassword=<admin password>, serverName=\"Factory Friends\") as InitialAdmin") {
 		t.Errorf("not claimed again:\n%s", calls)
 	}
+	f.api.set(func(a *fakeAPI) {
+		if a.client != "letmein" || a.name != "Factory Friends" {
+			t.Errorf("after the new claim the server has the password %q and the name %q; want the settings' ones:\n%s", a.client, a.name, calls)
+		}
+	})
+}
+
+// A claim whose answer was lost: the server is claimed with the app's
+// admin password, and the app logs in with it next time on the same port.
+// What it gave the server before the claim is forgotten all the same, so
+// the friends' password is set.
+func TestSetupClaimAnswerLost(t *testing.T) {
+	f := newSetupFixture(t)
+	f.s.store.Save(func(sv *game.Saved) error { sv.Server["password"] = "letmein"; return nil })
+	if _, err := f.after(f.rec(true, "Grass Fields")); err != nil {
+		t.Fatal(err)
+	}
+	// The server forgot its claim, and the claim's answer never arrives
+	// (the server is claimed all the same).
+	f.api.set(func(a *fakeAPI) {
+		a.claimed, a.admin, a.client = false, "", ""
+		a.answer["ClaimServer"] = func(w http.ResponseWriter) {
+			a.claimed, a.admin = true, "app-made-admin-password"
+			writeAPI(w, 500, `{"errorCode":"internal_error"}`)
+		}
+	})
+	f.api.restart()
+	if _, err := f.after(f.rec(false, "")); err == nil {
+		t.Fatalf("the setup went on without the claim's answer")
+	}
+	f.api.set(func(a *fakeAPI) { delete(a.answer, "ClaimServer") })
+	f.api.restart()
+	calls, err := f.after(f.rec(false, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.api.set(func(a *fakeAPI) {
+		if a.client != "letmein" {
+			t.Errorf("the server has the friends' password %q; want the settings' one:\n%s", a.client, calls)
+		}
+	})
 }
 
 // A setup still waiting for an earlier run's server stops when a new run

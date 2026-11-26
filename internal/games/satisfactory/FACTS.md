@@ -232,7 +232,10 @@ Sources, all read on 2026-11-26:
   on a first start). That file holds the claim, the server name, the
   passwords, the session to load at start and the certificate (wiki), so
   they are per game port: on a new port the server is unclaimed again,
-  and the app claims it again with the same admin password.
+  and the app claims it again with the same admin password. The app's
+  note of the name and friends' password it gave the server belongs to
+  the port of the claim, so on another port (new, or one used before) or
+  after a new claim it gives both again (setup.go, forgetApplied).
 - Settled (wiki): three rotating autosaves, `<session>_autosave_0.sav` to
   `_2`, every 300 seconds by default (`FG.AutosaveInterval`).
 - Settled (headers via satisfactory-3d-map, wiki): a save's header starts
@@ -249,8 +252,10 @@ Sources, all read on 2026-11-26:
   folder, which is where the server loads saves from; the API's
   UploadSaveGame would do the same but only while the server runs. The
   world is then listed under the session inside the save; starting the
-  name it was imported under loads it, and the selection follows the
-  session's name (worlds.go, setup.go).
+  name it was imported under loads it, and the selection moves to the
+  session's name as that start is planned, so that "restart to apply"
+  isn't shown for it while the server runs (worlds.go, plan.go,
+  setup.go).
 - The app's choices: a world is a session; the app's own save is named
   after the session (`<session>.sav`, SaveGame `{saveName}` with the
   session's name); a new world is saved right after it is made, so it is

@@ -196,6 +196,34 @@ func TestFingerprint(t *testing.T) {
 	if s.Fingerprint(sv, "Other") == base {
 		t.Errorf("another world has the same fingerprint")
 	}
+	// The manager asks with no world for the selected one, while the
+	// server runs (status.go's NeedsRestart).
+	if s.Fingerprint(sv, "") != base {
+		t.Errorf("the fingerprint of the selected world (no world given) isn't that of %q", sv.World)
+	}
+}
+
+// The plan's fingerprint is what the running server is compared with: with
+// nothing changed since the start, the selected world's is the same, for a
+// new world and for one already there.
+func TestPlanFingerprintMatchesSelection(t *testing.T) {
+	s := testServer(t, true)
+	placeProgram(t, s)
+	for _, isNew := range []bool{true, false} {
+		if !isNew {
+			writeTestSave(t, s.savesDir(), "Factory_autosave_0", "Factory", time.Now())
+		}
+		p, err := s.Plan(context.Background(), game.PlanRequest{World: "Factory", New: isNew, Saved: s.store.Get()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fp := s.Fingerprint(s.store.Get(), ""); fp != p.Fingerprint {
+			t.Errorf("new world %v: Fingerprint(settings, \"\") = %s, the plan's = %s", isNew, fp, p.Fingerprint)
+		}
+		if w := s.store.Get().World; w != "Factory" {
+			t.Errorf("new world %v: the plan changed the selection to %q", isNew, w)
+		}
+	}
 }
 
 func TestStartingLocation(t *testing.T) {

@@ -397,8 +397,8 @@ const (
 	stateAdmin     = "admin"     // the admin password the server has now
 	stateCert      = "cert"      // the API certificate's key fingerprint the app trusts
 	stateCertPort  = "certPort"  // the game port that key belongs to
-	stateName      = "name"      // the server name last applied
-	statePassword  = "password"  // a hash of the friends' password last applied
+	stateName      = "name"      // the server name last applied, on the claim's port
+	statePassword  = "password"  // a hash of the friends' password last applied, likewise
 )
 
 // gamePort is the run's game port.

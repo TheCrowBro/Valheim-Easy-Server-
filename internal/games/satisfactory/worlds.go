@@ -221,7 +221,7 @@ func (w *worldStore) sessionOf(world string) string {
 // Exists adds to the shared store's answer the name of a save file: an
 // import places a save under the name the owner chose, while the world it
 // holds is listed under the session inside it. Starting that name loads
-// it (setup.go), and the selection then follows the session's name.
+// it (setup.go), and the selection moves to the session's name (plan.go).
 func (w *worldStore) Exists(name string) bool {
 	if w.Worlds.Exists(name) {
 		return true
