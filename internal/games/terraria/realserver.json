@@ -1,0 +1,7 @@
+{
+  "os": ["windows-latest", "macos-15-intel"],
+  "onDemand": false,
+  "timeoutMinutes": 60,
+  "package": "./internal/games/terraria/",
+  "run": "TestRealServer"
+}

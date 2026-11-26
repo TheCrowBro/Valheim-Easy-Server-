@@ -1,0 +1,42 @@
+# events
+join	Big Bob	Big Bob joined the game.
+leave	Big Bob	Big Bob left the game.
+saved		World saved.
+join	Alex	Alex joined the game.
+leave	Alex	Alex left the game.
+saved		World saved.
+join	Watcher	Watcher joined the game.
+join	Alex	Alex joined the game.
+leave	Alex	Alex left the game.
+leave	Watcher	Watcher left the game.
+saved		World saved.
+stopping		
+# shown on the Log page
+127.0.0.1:43782 is connecting...
+Big Bob has joined.
+<Big Bob> Alex has joined.
+<Big Bob> Alex has joined.
+<Big Bob> Alex has joined.
+Big Bob has left.
+Saving world data: 15%
+Validating world save: 34%
+Backing up world file
+127.0.0.1:57256 is connecting...
+Alex has joined.
+<Alex> hello there
+Alex has left.
+Saving world data: 19%
+Validating world save: 34%
+Backing up world file
+127.0.0.1:53948 is connecting...
+Watcher has joined.
+127.0.0.1:53964 is connecting...
+Alex has joined.
+Alex has left.
+Watcher has left.
+Saving world data: 11%
+Validating world save: 35%
+Backing up world file
+Saving before exit...
+# state
+ready=false version= count=0 players= saved=true stopping=true

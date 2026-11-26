@@ -1,0 +1,15 @@
+# events
+load_failed		The world file couldn't be loaded. It may be damaged: restore a backup from the Worlds page.
+# shown on the Log page
+Error Logging Enabled.
+Terraria Server v1.4.6.1
+Resetting game objects 1%
+Loading world data: 1%
+Load failed!  No backup found.
+System.IO.EndOfStreamException: Unable to read beyond the end of the stream.
+  at System.IO.BinaryReader.ReadByte () [0x00018] in <d1664be62cd44600bbd25f7afa292479>:0
+  at Terraria.IO.WorldFile.LoadWorldTiles (System.IO.BinaryReader reader, System.Boolean[] importance) [0x002ff] in <57758d64a21b4fd7a3a88e59ef8f9b69>:0
+  at Terraria.IO.WorldFile.LoadWorld_Version2 (System.IO.BinaryReader reader) [0x00053] in <57758d64a21b4fd7a3a88e59ef8f9b69>:0
+  at Terraria.IO.WorldFile.LoadWorld () [0x00239] in <57758d64a21b4fd7a3a88e59ef8f9b69>:0
+# state
+ready=false version=1.4.6.1 count=0 players= saved=false stopping=false

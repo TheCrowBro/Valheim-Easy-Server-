@@ -1,0 +1,21 @@
+# events
+online		The server is online and ready for players.
+saved		World saved.
+# shown on the Log page
+Error Logging Enabled.
+Terraria Server v1.4.6.1
+Creating world - Seed: egs-test, Width: 4200, Height: 1200, Evil: -1, Difficulty: 0
+Resetting game objects 1%
+51.7% - Creating jungle ruins - 97.1%
+51.7% - Creating hornet nests - 0.0%
+100.0% - Final clean up - 98.1%
+100.0% - Finalizing world - 100.0%
+Terraria Server v1.4.6.1
+Listening on port 17777
+Type 'help' for a list of commands.
+Server started
+Saving world data: 3%
+Validating world save: 48%
+Backing up world file
+# state
+ready=true version=1.4.6.1 count=0 players= saved=true stopping=false
