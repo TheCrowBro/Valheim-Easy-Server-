@@ -284,3 +284,14 @@ After review:
 Review findings (fixed in the follow-up unless it says otherwise):
 - must-fix: The Monitor marks a crash or a taken-port exit as a requested stop, so the manager reports it as a normal stop and never restarts it
 - should-fix: World names, passwords and server names outside Windows' ANSI code page reach Java mangled
+
+## F-win (mg/fakeserver-win)
+
+1. Recommendation for internal/platform/proc_windows.go, which isn't mine to change. On Windows, after Proc.Close, Exited() returns false and Kill() fails silently because h=0. Close also writes p.h with no lock, so it races with any Exited or Kill still running. On Unix, Close does nothing and Exited keeps returning true. That difference caused this failure. The manager is safe today because it waits on its own done channel and closes the handle only after the process ends. But any R3 code that polls Exited() after a reaper may have closed the handle will hit the same trap, and only on Windows. Suggested platform fix: Close remembers that the process has ended (or Exited returns true once the handle is gone), Close is guarded by a mutex, or at least the Close docs say "never use a Proc after Close". Interrupt blocking for 1 s on Windows also makes timing differ by system.
+2. The "fakeserver: exiting now (code N)" line goes to stderr. A future personality whose plan uses its own log file instead of Capture won't show it in gametest's tail, because gametest only captures output for Capture plans. G streams copying demo.go get the line for free. Their Monitors should ignore lines starting "fakeserver: ", as demo's does with Hide.
+3. After a takeover on Linux and macOS, the new timing note says "exit code -1". platform can't know the exit code of a process it didn't start there; this is expected, not an error.
+4. Nothing was pushed or tagged. The only change is one commit on mg/fakeserver-win, on top of e236b73.
+
+After review:
+
+Nothing blocking, and nothing outside this stream's files was needed. When you add F-win's entry to docs/dev/multigame/stream-notes.md (your file), use the corrected timing expectation from the summary, not the "~1.0 s" line from my first handoff. Nothing was pushed or tagged, and no other branch was touched.
