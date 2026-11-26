@@ -49,3 +49,30 @@ My reading of the brief's "legacy id unchanged": a packet with no id reads as th
 - Tell the game streams that use worldstore (Minecraft, Terraria, Necesse, Vintage Story and the rest) to make the store once, for example in Game.New, keep it on the server value, and return it from Worlds(). Writing `func (s *server) Worlds() game.Worlds { return worldstore.New(...) }` would make every upload fail as expired and stop changes running one at a time. This is now in the comment on New.
 - Small change to an error message: when an import can't put the old world back, it now names the backup to restore, for example "Automatic copy before it was replaced", instead of "the world's backups".
 - No files outside internal/worldstore/** were touched.
+
+## VM (mg/manager)
+
+**Changes to existing tests and files outside my own:**
+1. **Test changes.** Existing tests change only by 4.1's replacements, with one exception. In `legacy_golden_test.go`, `legacyRunInfo()` has `NoCrossplay`, `ModsCode` and `CodeMods`, which `game.Record` doesn't have. They now go in `Extra: valheim.RecordExtra(...)` (plus imports).
+2. **Old helper names kept in a test file.** The tests call old helpers that now live in the adapter. Rather than editing the tests, I added a new test-only file, `internal/manager/legacy_names_test.go`, that maps those names onto the adapter's code: `argsKey`, `onlineMessage.text`, `m.exitHint()`, `eventsFromLog`, `remind`, `dailyText`, `m.library()`, `savedCode`. Please confirm this is acceptable.
+3. **Web test file.** I added `internal/web/games_test.go`, which only does `import _ games/all`. The web tests make their own manager, and the manager needs Valheim registered. No route or JSON changed.
+
+**Places the frozen contract fell short, all worked around inside my own files:**
+1. **Replay timing.** `Monitor.Line` has no notion of reading a log back. The manager uses two local optional interfaces, `Replaying(bool)` and `FromLog()`, which Valheim's Monitor implements. They should probably become optional interfaces in `internal/game`.
+2. **Adapter errors with a next step.** An adapter can't return the manager's `ActionError`. Valheim returns its own `ActionError` with a `SuggestedAction()` method, and `actionOf()` converts it. A `game.ActionError` type would be cleaner.
+3. **Activity messages from Plan.** `PlanRequest` has nowhere to add activity-feed entries (mod installs, "Couldn't check for server updates"). I added `LegacyStore.Note`. R3 games will need this too.
+4. **LegacyStore differs from spec 5.1:**
+   - `Update(change func(*config.Settings) error)` replaces `Save(config.Settings)`, so a change is a single atomic step under `m.mu`.
+   - `ModVersions` and `SetModVersions` are gone: the adapter keeps the installed mod versions itself, keyed by the server folder.
+   - `Note` is added.
+5. **Discord escaping.** Adapters may not import `internal/discord`, so `games/valheim` has a copy of `discord.Escape`, with a test that keeps the two the same. Consider allowing `internal/discord` for adapters.
+6. **Late join code.** The Monitor's `RunState.Extra` also carries `"codeLate"`, which today's "late" join-code problem needs.
+
+**Waiting on other streams:**
+- **Wake packet (stream SV):** once `internal/wol/game.go` lands, change the single call site `var wakePacketGame` in `internal/manager/wakesignal.go` to `wol.GameOf`. `TestWakePacketForOtherGame` replaces that variable, so it keeps working.
+- **SteamCMD (stream I):** Valheim still installs through `LegacyStore.Installer()` (`steamcmd.Installer`). Its update on start uses today's path, and an error shows today's "Couldn't check for server updates…" warning. When I lands, `games/valheim` `Plan` should use I's skip-if-busy/`TryLock` update mode, and the default `steamcmd.SteamCMD{}` in `manager.New` keeps an empty AppID, which means Valheim.
+- **R3 (M3):** not done here because they are R3 work: 4.9's full `GameStatus` (R2 has a subset), the observer hooks, the `Capture`/`GameLog` outputs (Valheim uses `LogArg`), console and RCON stop steps (they return `ErrNoConsole`), and the servers.json-backed Store.
+
+After review:
+
+Nothing is blocking, and no files outside this stream's ownership were needed. One thing you might choose to do: TestOneGameRegistered in internal/manager is now the only test that counts the games in the shipped registry (internal/games/all). Every R3 game stream (G-*) adds a file to internal/games/all, so the first one merged after the R2 cut must change or remove this test, as intended. You may want to tell the M3 or G streams that this is expected.
