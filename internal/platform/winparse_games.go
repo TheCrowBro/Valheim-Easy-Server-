@@ -108,7 +108,11 @@ func gamesFirewallScript(serverExe, appExe string, games []GameRule) string {
 		for _, r := range rules {
 			add := `netsh $fw add rule "name=` + r.name + `" dir=in action=allow "program=` + v + `"`
 			if r.proto != "" {
-				add += " protocol=" + r.proto + " localport=" + r.ports
+				// The ports are in quotes because PowerShell reads a bare
+				// comma as a list: localport=7777,7778 would reach netsh as
+				// two arguments, "localport=7777" and "7778", and netsh
+				// would refuse the line and make no rule.
+				add += " protocol=" + r.proto + ` "localport=` + r.ports + `"`
 			}
 			adds = append(adds, add)
 		}
