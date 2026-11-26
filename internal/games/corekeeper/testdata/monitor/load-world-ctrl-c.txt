@@ -1,0 +1,75 @@
+# Events the Monitor finds in testdata/real/load-world-ctrl-c.log, its state at the end, then the lines the Log page shows.
+code
+relay_failed text="The server can't reach Steam's relay network yet, so friends may not be able to join. Check this computer's internet connection."
+online text="The server is online and ready for players."
+stopping
+state: ready=true version="1.3.0.7" code="Ek8c5udkq9vH3cf" count=0 players=[] stopping=true quitHandlers=true
+end: 0 leave events, saved=true
+shown: 67 lines
+  The selected window backend is x11
+  Display 0 'screen': 1x1 (primary device).
+  Desktop is 1 x 1 @ 0 Hz
+  Initialize engine version: 6000.0.59f2 (ef281c76c3c1)
+  GfxDevice: creating device client; kGfxThreadingModeNonThreaded
+  Renderer: llvmpipe (LLVM 20.1.2, 256 bits)
+  Vendor:   Mesa
+  Version:  4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.5
+  GLES:     0
+  OPENGL LOG: Creating OpenGL 4.5 graphics device ; Context level  <OpenGL 4.5> ; Context handle 965039840
+  Begin MonoManager ReloadAssembly
+  - Loaded All Assemblies, in  0.115 seconds
+  - Finished resetting the current domain, in  0.002 seconds
+  --- Startup info ---
+  Time (UTC): 2026-11-26T21:43:38Z
+  Game version: 1.3.0.7-5554
+  Unity version: 6000.0.59f2
+  OS version: Linux 6.18 Ubuntu 24.04 64bit
+  Graphics device: llvmpipe (LLVM 20.1.2, 256 bits) (OpenGLCore, OpenGL 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.5)
+  --- END Startup info ---
+  Initializing Steamworks with AppID 1621690
+  [S_API] SteamAPI_Init(): Loaded local 'steamclient.so' OK.
+  Setting breakpad minidump AppID = 1621690
+  [S_API FAIL] Tried to access Steam interface SteamNetworkingUtils004 before SteamAPI_Init succeeded.
+  Steam API initialized
+  Logged in with userid:2248397838
+  Setup Steam Server
+  PlatformConfiguration: successfully loaded base platform configuration for variant PC.
+  UnloadTime: 3.100180 ms
+  Checking system requirements: PASS
+  Manager prelaunch and GO initialization starting...
+  Initialize global manager
+  Loading data blocks...
+  Data blocks finished loading from addressables (7.18s, 13716 blocks in 28 batches)
+  Loaded 13716 data blocks from addressables in 7.1951765 s
+  Got 13716 data blocks from addressables
+  Adding data blocks to runtime lists
+  Initialized 13716 (active: 13716) data blocks in 0.1087265 s
+  Ran post data block load callbacks in 0.1447125 s
+  Global manager Resources.Load
+  Start initializing all managers
+  Core count is 4
+  Job worker count is 3
+  PrefsManager: applying settings for platform variant PlatformConfiguration_PC.
+  Simulation tick rate=20 Network tick rate=20
+  Listening on SteamID userid:90298348162241550
+  ConvertAuthoringDataRoutine complete. Process was successful.
+  Ek8c5udkq9vH3cf
+  Started session with info: Ek8c5udkq9vH3cf
+  GameInfo path: /home/owner/EGS/games/corekeeper/server/CoreKeeperServer_Data/../GameInfo.txt
+  GameID path: /home/owner/EGS/games/corekeeper/server/CoreKeeperServer_Data/../GameID.txt
+  Old and new server gameid is the same
+  Decompressed brotli compressed world file: 44203 bytes -> 486312 bytes
+  Deserialize world finishied
+  successfully loaded world file into SerializeWorld
+  found 14 chunks in serialized world
+  Using seed 1391267135
+  World uses generation type FullRelease
+  World creation version is Ck130
+  Has 13 activated content bundles: FullRelease, Classic, LegendaryScepterDungeon, MossBiomeDungeons, UniqueCrystalMerchantScene, AbioticFactor, AmberBoulderDunge…
+  Skip StartRoomWithEasterEggItem: content bundle EasterEggItemStartScene not activated.
+  SteamNet Error: Unable to communicate with ANY of 33 Steam Datagram routing cluster.  Possible problem with local internet connection?
+  Got quit request
+  Exit blocked by ECSManager
+  Quit blocked
+  Got quit request
+  Running quit handlers

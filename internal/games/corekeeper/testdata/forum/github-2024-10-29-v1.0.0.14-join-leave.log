@@ -1,0 +1,50 @@
+Logged in with userid:2535600146
+Listening on SteamID userid:90207303732703250
+Started session with Game ID bvpvPP6a3VjMucnq5Cu8HifZQ73C
+no existing save file, starting with empty world
+starting a new world : 2d3b4526a4e6079b127b6a1aa6d79c6c
+Starting new world with generation type FullRelease
+Adding marker for LarvaHiveBossDungeon at int2(220, -201)
+Adding marker for ShamanBossRoom at int2(222, 189)
+Adding marker for BirdBoss at int2(276, 473)
+Adding marker for PoisonSlimeBossDungeon at int2(495, 341)
+Adding marker for SlipperySlimeBossDungeon at int2(-549, -455)
+Adding marker for OctopusBossArea at int2(-430, -478)
+Adding marker for ScarabBossArea at int2(-167, -568)
+Adding marker for LavaSlimeBossDungeon at int2(486, -486)
+Adding marker for CrystalMeteorScene at int2(14, -697)
+timescale = 0
+Accepted connection from 76561198056526695 with result OK awaiting authentication
+SteamNet Warning: [#2320726969 P2P steamid:76561198056526695 vport 0] Relay candidates enabled by P2P_Transport_ICE_Enable, but P2P_TURN_ServerList is empty
+Connected to userid:76561198056526695
+Successful authentication from userid:76561198056526695
+timescale = 1
+Read cartography table map with 0 parts
+Running 0 electricity updates initially
+server has ghost collection hash 11858044417851913081 for 1828 ghosts
+Accepted connect RPC
+spawning player with character data size 16682
+Creating new player entity
+[userid:76561198056526695] player Gonaeng connected islocalplayer=False
+[userid:76561198056526695] is using new name Gonaeng
+Started game for new connection
+Spawning StartRoom
+Spawning SlimeBoss
+Spawning LarvaBossSpawn
+Spawning CavelingMerchantRoom
+Spawning FishingMerchantArea
+[userid:76561198056526695] add or refresh condition None 0 duration 0 for Player: amount=1, variation=0
+Spawning BirdBoss
+Removing fake marker for BirdBoss
+Disconnected from userid:76561198056526695 with reason App_Min
+check connection state
+player disconnect
+timescale = 0
+Got quit request
+Exit blocked by ECSManager
+Quit blocked
+timescale = 1
+Got quit request
+Save is still pending
+Exit blocked by ECSManager
+Quit blocked

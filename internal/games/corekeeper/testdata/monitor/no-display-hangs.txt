@@ -1,0 +1,10 @@
+# Events the Monitor finds in testdata/real/no-display-hangs.log, its state at the end, then the lines the Log page shows.
+state: ready=false version="" code="" count=0 players=[] stopping=false quitHandlers=false
+end: 0 leave events, saved=false
+shown: 6 lines
+  error: XDG_RUNTIME_DIR is invalid or not set in the environment.
+  The selected window backend is (null)
+  Error getting num native displays: Video subsystem has not been initialized
+  Error getting num native displays: Video subsystem has not been initialized
+  Desktop is 0 x 0 @ 0 Hz
+  error: XDG_RUNTIME_DIR is invalid or not set in the environment.
