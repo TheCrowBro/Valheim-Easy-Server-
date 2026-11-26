@@ -196,3 +196,91 @@ After review:
 After review:
 
 Nothing to decide. This commit changes only internal/manager/r2_test.go, which this stream owns. setup's shared cleanup in manager_test.go has the same weakness: after ForceStop it waits only for the state to leave "online", not for the server process to exit. That only matters for tests that end while a server is still starting. I left it alone because it was outside this finding.
+
+## G-minecraft (mg/g-minecraft)
+
+**Decisions or files I need you for:**
+1. **Contract gap.** worldstore.Format's Detect and Place use worlds.Candidate, but adapters may not import internal/worlds (TestImportRules fails if they do). So Minecraft uses worldstore's default folder detection instead of 5.2's "folders holding level.dat". To get the stricter Detect, either add internal/worlds to the adapters' allowed imports or add `type Candidate = worlds.Candidate` to worldstore. The other game streams will hit the same gap.
+2. **Q6 needs a runtime hook.** Info.OS can't change at runtime, so the panel can't grey Minecraft out on a Mac whose Java won't start. The adapter saves State["unsupported"] and refuses to start with "Needs Windows: the newest Minecraft needs a newer macOS". Consider an optional interface the panel can ask for the support level and reason.
+3. **State keys other streams must set.**
+   - State["eula"] holds the time the owner ticked the EULA (RFC 3339). The UI module, Add a game or the API must write it; Plan refuses to start without it.
+   - State["cgnat"]="true" must come from the router code (6.5). Without it, "auto" puts the allow list on from the first start.
+   - State["allowListOn"] is the adapter's own.
+4. **New event kinds for the manager.** "allow_list_on" (with feed text) and "rcon_failed" (a warning). turned_away carries the account id; Allow is `WriteList(ctx, rec, "allowed", current + name)`.
+5. **Choice to confirm: what happens when someone comes in from the internet while "auto" is still off.** The adapter adds everyone playing at that moment to the list, then turns it on over RCON, so nobody playing is thrown out. That includes the newcomer, who may be a stranger. The first time the list goes on before a start, everyone in Minecraft's user cache who isn't banned is added once; after that the list is the owner's.
+
+**Departures from 5.2's wording and things worth knowing:**
+6. Plan also sets `level-name` (so the world's own name matches) and `log-ips=true` (the "auto" rule reads the login address).
+7. deaths.json sits beside the code and is embedded, not in testdata, because the Monitor needs it at runtime.
+8. 5.2's Temurin URL wording is superseded: the checksum comes from the same Adoptium answer as the link.
+9. Minecraft rewrites server.properties at every start with default permissions (0644 on Unix). The RCON password, new each run, therefore ends up in a world-readable file even though the plan writes it 0600.
+10. `broadcast-rcon-to-ops` is left at the server's default, so the app's list changes show in the log and to admins in game as "[Rcon: …]".
+11. The manager must not treat exit code 130 after its own Ctrl+C as a crash; the real JVM and the stand-in both exit with 130.
+12. The macOS setup-checklist line about the RCON port belongs to the UI module, which I didn't build.
+13. Registration is still to do: add internal/games/all/minecraft.go after the R2 cut and change TestOneGameRegistered at the same time.
+
+After review:
+
+1. The pending allow-list switch is sent on the first Tick after the replay ends. That relies on the manager not calling Tick while it is reading back a taken-over server's log (manager/server.go tick() returns early when run.replaying is set). If a future manager ticks during the replay, the switch is sent early, but that is harmless: turnOnAllowList still does nothing when the list is already on.
+2. Until the manager's checks loop first calls Build() after the app starts, a stopped Minecraft's Join steps say "the same Minecraft version as the server" instead of naming the version. Spec 4.8's checks loop calls Build() at startup and every minute, which fills it in.
+3. On Windows or Linux, a new Java that fails its check is deleted, so a later start or Repair downloads it again (about 59 MB). I chose that so the Status shows not installed instead of installed with a Java that can't start. Say if you'd rather keep the failed Java and add a state flag instead.
+
+Review findings (fixed in the follow-up unless it says otherwise):
+- should-fix: Taking over a running server replays the log and turns the allow list on again, re-adding players the owner removed
+- should-fix: Join reads files through Build() while the manager holds its lock (Status, spec 4.8)
+- should-fix: A Java that fails its check on update-on-start has already replaced the old Java, yet the plan still starts "the version that's installed"
+- should-fix: Join differs from the contract and spec 4.9: Public is true, LAN entries have no port, the port comes from the settings rather than the running server
+
+## G-terraria (mg/g-terraria)
+
+1. **Install layout differs from the spec.** The server goes in server/Windows, server/Mac or server/Linux, not server/<version>/. A version folder would give the program a new path at every update. The firewall rule for the old path would then stop matching, so a start right after an update (perhaps from Discord with nobody at the PC) would wait for an admin prompt before friends could connect. The update still unpacks fully before swapping, and puts the old server back if the swap fails. Please confirm, and update spec 5.3.
+2. **No world "evil" setting.** The 1.4.6.1 server has no config key or switch for it; when it makes a world from the config file, it picks one at random. The spec's newWorld field "evil" was dropped. Please update 5.3.
+3. **Other small departures:**
+   - `banlist=` is written into the config as an absolute path in server/, because its default would land inside the Mac bundle that updates replace.
+   - A new warning event kind, "server_full".
+   - Join.Address is the bare IP, because Terraria asks for the port separately.
+   - Default new-world size is medium.
+   - Order is 3 and Stage is preview.
+4. **Contract gaps:**
+   - Plan has no way to add an activity-feed note when update-on-start fails; it only logs. This is the same gap VM met.
+   - After "exit" the server prints nothing more, so Monitor.End sets LastSave when "Saving before exit..." was seen, without an event.
+   - M3's console stop must give ErrNoConsole after a takeover, as gametest does.
+5. **Files I didn't create:** I did not add cmd/fakeserver/terraria_test.go, since it isn't in my ownership. The stand-in is exercised through the adapter's Conformance and takeover tests.
+6. **Registration:** the package registers itself in init(), as Valheim does. When the lead adds internal/games/all/terraria.go after the R2 cut, TestOneGameRegistered in internal/manager must change, as VM noted.
+7. **realserver.json** lists windows-latest and macos-15-intel, a 60-minute timeout and no setup script. The test also runs on Linux.
+8. **Re-published zip:** Re-Logic re-uploaded terraria-server-1461.zip on 2026-11-24 under the same name. An update compares versions by name, so a same-name fix only arrives through Repair.
+
+After review:
+
+1. **Order scheme across the game streams.** I used section 5.n gives (n-1)*10, because it matches Valheim's 0 and Minecraft's 10 with no change to Minecraft. If you choose another scheme (for example the reviewer's section × 10, which would make Minecraft 20 and Terraria 30), both branches need their value changed. Either way, the other game streams (Necesse 30, Vintage Story 40 and so on) should be told the scheme before you add internal/games/all/terraria.go.
+2. **Repair now asks for administrator rights again on Windows.** Because a repair forces the XNA reinstall when XNA is listed, every Repair of Terraria shows a Windows permission prompt, whatever the owner clicked it for. If they click No, the repair reports an error after the server files are already downloaded again. I think that is right for an action the owner starts themselves, but tell me if you'd rather only force XNA when its exit hint was last shown.
+3. **Worth knowing for other games.** I didn't change `install.EnsurePrereq` (stream I owns it). It always runs `msiexec /i`, and it returns early whenever Installed says yes, so it has no repair mode. I worked around that inside the adapter: no Installed check, plus REINSTALL properties. Another game whose Repair needs to reinstall a prerequisite will hit the same gap.
+
+Review findings (fixed in the follow-up unless it says otherwise):
+- should-fix: The XNA exit hint tells the owner to click Repair, but Repair never reinstalls XNA in the one case where that hint can appear
+- should-fix: Info.Order 3 puts Terraria ahead of Minecraft once both streams merge
+
+## G-necesse (mg/g-necesse)
+
+1. **Registration.** Add internal/games/all/necesse.go after the R2 cut. Its first merge must change or remove TestOneGameRegistered, as VM noted.
+2. **Contract gap.** worldstore.Format.Detect and Place use worlds.Candidate, but TestImportRules (spec 2.1) forbids internal/worlds in adapters other than Valheim. So no game can write a Detect. Minecraft's "a folder holding level.dat" needs one too. Please either allow internal/worlds for adapters or add `type Candidate = worlds.Candidate` (and friends) to internal/game. With that, Necesse could check uploads for world.dat and leave LATEST_BACKUP1.zip out of the owner's own worlds.
+3. **internal/steamcmd, stream I's code.** On Linux, SteamCMD starts its lines with ESC[0m, so `^Success! App` and `^ERROR!` never match. Every install there ends "SteamCMD finished without confirming the install". This doesn't affect the owner (Linux isn't offered), and the Valheim Mac cell passing suggests macOS has no such codes. But it stops any SteamCMD real-server check running on Linux. A one-line fix would strip `\x1b\[[0-9;]*m` before matching. Also, a fresh SteamCMD's first app_update fails with "Missing configuration"; the existing retry covers it.
+4. **Spec 5.4 corrections**, if you want them in the spec (all explained in FACTS.md): stop with "stop" not "exit"; worlds in `<saves>/saves/worlds`; download about 100 MB; a memoryMB setting for `-Xmx`; no leading "-" in values; Deaths stays false; Ctrl+C after a takeover loses up to about a minute of play.
+5. **G-minecraft.** Its stand-in's Match must not accept Necesse's `java ... -jar Server.jar -nogui -datadir ...`. A case-insensitive check for "server.jar" would, and the stand-in would then exit with "could start minecraft or necesse". My TestStandInMatch catches this once both are merged.
+6. **Visible text.** The Ctrl+C step's Say text and ExitHint texts are new visible strings. None contain the app's name.
+7. **Not done:** the UI module (phase 0' isn't frozen yet).
+8. **Side effects on this machine:**
+   - I installed lib32gcc-s1, lib32stdc++6 and libc6-i386 with apt so SteamCMD could run.
+   - I removed ~/.config/Necesse and ~/Steam, which my runs had created.
+   - Downloads and logs are under the scratchpad folders gnec/ and gnec-scripts/.
+
+After review:
+
+- Not my stream, please route to stream I (internal/steamcmd). The current Linux SteamCMD (version 1794537082, 2026-11-26) prints its success line as "\x1b[0mSuccess! App '1169370' fully installed." successLine in internal/steamcmd/steamcmd.go is anchored `(?i)^Success! App '<id>'`, so every install fails with "SteamCMD finished without confirming the install. Last message: \x1b[0m", even though the files are installed. bed004b's shipped reSuccess has the same anchor. Whether Windows and macOS SteamCMD now print these codes into a pipe is unknown. If they do, installed copies' Valheim updates are affected too. A likely fix is to strip ANSI codes from each line before matching (I tried a local-only test edit to confirm it; it was not allowed, so I didn't make it).
+- Possible follow-up, not done: the data folder check refuses to start Necesse when the app's data folder path has a character the code page lacks. GetShortPathName (8.3 names) could make it work in that case. I left it out because the 8.3 path is Windows-only and I can't test it here.
+- An imported world whose file name has such characters will be listed but refused at start. Worlds can't be renamed in the app (ErrCantRename), so the owner would have to rename the file by hand. Like the dash rule, worldstore's import path doesn't apply the adapter's NameProblem.
+- The manager's onExit counts any exit with Stopping false as a crash (its restart still needs run.ready). So a start that fails with "Invalid world path" or a taken port is now reported both by the start job ("stopped while starting" with the hint) and by a "crashed" activity. That is the same as any other game failing during start.
+
+Review findings (fixed in the follow-up unless it says otherwise):
+- must-fix: The Monitor marks a crash or a taken-port exit as a requested stop, so the manager reports it as a normal stop and never restarts it
+- should-fix: World names, passwords and server names outside Windows' ANSI code page reach Java mangled
