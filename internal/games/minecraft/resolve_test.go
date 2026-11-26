@@ -249,7 +249,7 @@ func TestDashUUID(t *testing.T) {
 		}
 	}
 	for ip, want := range map[string]bool{
-		"69.92.205.184": true, "203.0.113.7": true, "127.0.0.1": false, "192.168.1.20": false, "10.0.0.2": false,
+		"198.51.100.77": true, "203.0.113.7": true, "127.0.0.1": false, "192.168.1.20": false, "10.0.0.2": false,
 		"100.64.1.2": false, "[2001:db8::1]": true, "[fd00::1]": false, "[0:0:0:0:0:0:0:1]": false, "**.**.**.**": false, "local": false,
 	} {
 		if got := publicAddr(ip); got != want {

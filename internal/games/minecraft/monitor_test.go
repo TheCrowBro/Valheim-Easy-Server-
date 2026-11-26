@@ -277,10 +277,10 @@ func TestMonitorOnlineMode(t *testing.T) {
 	}
 
 	r = replay(t, "online-1.8-mc78020.log", planned(allowOff, allowAuto))
-	if got := r.kinds(); !slices.Equal(got, []string{"allow_list_on:Andr3wSp1tsLava", "join:Andr3wSp1tsLava", "leave:Andr3wSp1tsLava"}) {
+	if got := r.kinds(); !slices.Equal(got, []string{"allow_list_on:Ingrid", "join:Ingrid", "leave:Ingrid"}) {
 		t.Errorf("events %q", got)
 	}
-	if turned := r.turned(1); len(turned) != 1 || !slices.Equal(turned[0], []string{"Andr3wSp1tsLava"}) {
+	if turned := r.turned(1); len(turned) != 1 || !slices.Equal(turned[0], []string{"Ingrid"}) {
 		t.Errorf("turnOn asked for %q, want the player who came in", turned)
 	}
 	if st := r.m.State(); st.Extra[extraAllowList] != allowOn {
