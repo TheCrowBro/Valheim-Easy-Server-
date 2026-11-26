@@ -166,7 +166,7 @@ func TestMonitorPlayers(t *testing.T) {
 	if got := r.kinds(); !slices.Equal(got, want) {
 		t.Fatalf("events = %q, want %q", got, want)
 	}
-	accounts := map[string]string{"D4K0T4": "ytwWtP2AoVMaguyvMZvAlDP8", "Keelaesh": "Ejhkq0bqaeDTRoy8PpsoT107", "vfctffu": "tnZJvnzu98OpoPSNeKe84QGT", "Sozuke": "xsWcS4KbTBAxmruer0ceOWC+"}
+	accounts := map[string]string{"D4K0T4": "MadeUpUid1AAAAAAAAAAAAAA", "Keelaesh": "MadeUpUid3AAAAAAAAAAAAAA", "vfctffu": "MadeUpUid4AAAAAAAAAAAAAA", "Sozuke": "MadeUpUid2AAAAAAAAAAAAA+"}
 	for _, e := range r.events {
 		if e.Account != accounts[e.Name] {
 			t.Errorf("%s %s has account %q, want %q", e.Kind, e.Name, e.Account, accounts[e.Name])
@@ -192,7 +192,7 @@ func TestMonitorPlayers(t *testing.T) {
 	if got := r.kinds(); !slices.Equal(got, []string{"join:Teskey", "leave:Teskey"}) {
 		t.Fatalf("events = %q", got)
 	}
-	if r.events[0].Account != "FX/HnQer9ara+/ggPPMJwE5R" {
+	if r.events[0].Account != "MadeUp/Uid6AAAAAAAAAAA+A" {
 		t.Errorf("account %q", r.events[0].Account)
 	}
 	if r.events[1].Text != "Teskey left the game (The Players client crashed)." {
@@ -269,12 +269,16 @@ func TestMonitorLines(t *testing.T) {
 }
 
 func TestExitHints(t *testing.T) {
-	srv := &server{}
+	saves := filepath.Join("instance", "saves")
+	srv := &server{env: game.Env{Dirs: game.Dirs{Saves: saves}}}
 	for file, want := range map[string]string{
-		"real/port-in-use.log":          "port",
-		"real/corrupt-world.log":        "Restore one of its backups",
-		"real/damaged-config.log":       "settings file",
-		"real/minimal-config.log":       "settings file",
+		"real/port-in-use.log":   "port",
+		"real/corrupt-world.log": "Restore one of its backups",
+		// The app can't always repair a file the server can't read, so the
+		// owner is told where it is and how to get a new one.
+		"real/damaged-config.log": "settings file, " + filepath.Join(saves, "serverconfig.json") + ". Start it again",
+		// This one the app sets aside at the next start (TestPlanGenConfig).
+		"real/minimal-config.log":       "default player role it doesn't have. Start it again: the app sets that file aside",
 		"real/dotnet-wrong-runtime.log": ".NET",
 		"real/dotnet-missing-dll.log":   "Repair",
 		"real/first-run-no-config.log":  "",

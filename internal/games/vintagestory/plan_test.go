@@ -227,8 +227,15 @@ func TestPlanGenConfig(t *testing.T) {
 		t.Errorf("generated then set: %v", c)
 	}
 
-	// Broken by hand: set aside, a new one made.
-	for _, broken := range []string{`{"ServerName": "x",,`, `{"ServerName": "x", "Port": 1}`} {
+	// Broken by hand: set aside, a new one made. Each of these stops the
+	// real server (or the app) at every start, so keeping it would never
+	// work.
+	for _, broken := range []string{
+		`{"ServerName": "x",,`,
+		`{"ServerName": "x", "Port": 1}`,
+		`{"Roles": [{"Code": "admin"}], "DefaultRoleCode": "suplayer"}`,
+		`{"Roles": [{"Code": "suplayer"}], "WorldConfig": [1]}`,
+	} {
 		writeFile(t, cfgPath, broken)
 		var said []string
 		req.Step = func(msg string, _ float64) { said = append(said, msg) }

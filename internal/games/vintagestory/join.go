@@ -2,6 +2,7 @@ package vintagestory
 
 import (
 	"net"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -90,8 +91,16 @@ func (s *server) ExitHint(tail []string) string {
 		return "Another program is using Vintage Story's port, so the server couldn't open it. Close that program, or choose new ports for Vintage Story."
 	case has("Failed opening savegame"):
 		return "The world couldn't be opened: its file may be damaged. Restore one of its backups on the Worlds page."
-	case has("Failed to read serverconfig.json", "no such group exists"):
-		return "The server couldn't use its settings file. Start it again: the app sets a broken settings file aside and makes a new one."
+	case has("no such group exists"):
+		// The app sets such a file aside at the next start (usable).
+		return "The server's settings file names a default player role it doesn't have. Start it again: the app sets that file aside and makes a new one."
+	case has("Failed to read serverconfig.json"):
+		// The app sets the file aside when it isn't JSON at all, but it
+		// can't tell a value of the wrong kind that only the server's
+		// reader refuses (a word where a number belongs), so the owner
+		// gets a way out that always works: without the file, the server
+		// makes a new one.
+		return "The server couldn't read its settings file, " + filepath.Join(s.env.Dirs.Saves, configName) + ". Start it again: the app sets aside a file that isn't proper JSON and makes a new one. If the server stops the same way again, a setting in that file has a value it can't use: undo your change to the file, or move it out of that folder, and start again."
 	case has("still contains old files from a previous game version"):
 		return "Some of the server's files are left over from an older version. Click Repair to install it again."
 	case has("A full harddisk can heavily corrupt a savegame", "Out of disk space"):

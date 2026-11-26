@@ -2,6 +2,8 @@ package vintagestory
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -71,10 +73,42 @@ func TestApplyConfig(t *testing.T) {
 			t.Errorf("%q: no error", bad)
 		}
 	}
-	if err := usable([]byte(`{"Roles":[]}`)); err == nil {
-		t.Error("a file without roles is usable")
+}
+
+// TestUsable: a file the server stops on at every start is not usable, so
+// the app sets it aside instead of starting the server on it again.
+func TestUsable(t *testing.T) {
+	for in, ok := range map[string]bool{
+		// Without DefaultRoleCode the server's default, suplayer, must be
+		// there (minimal-config.log).
+		`{"Roles":[{"Code":"suplayer"}]}`:                                             true,
+		`{"Roles":[{"Code":"admin"}]}`:                                                false,
+		`{"Roles":[{"Code":"suvisitor"},{"Code":"admin"}],"DefaultRoleCode":"admin"}`: true,
+		`{"Roles":[{"Code":"suplayer"}],"DefaultRoleCode":"nobody"}`:                  false,
+		`{"Roles":[{"Code":"suplayer"}],"DefaultRoleCode":null}`:                      false,
+		`{"Roles":[{"Code":"suplayer"}],"DefaultRoleCode":["suplayer"]}`:              false,
+		`{"Roles":[{"Code":"suplayer"}],"WorldConfig":null}`:                          true,
+		`{"Roles":[{"Code":"suplayer"}],"WorldConfig":{"Seed":"1"}}`:                  true,
+		`{"Roles":[{"Code":"suplayer"}],"WorldConfig":[1]}`:                           false,
+		`{"Roles":[{"Code":"suplayer"}],"WorldConfig":"x"}`:                           false,
+		`{"Roles":[]}`:                     false,
+		`{"Roles":null}`:                   false,
+		`{"Roles":[1]}`:                    false,
+		`{"Roles":{"Code":"suplayer"}}`:    false,
+		`{}`:                               false,
+		`{"Roles":[{"Code":"suplayer"}],,`: false,
+	} {
+		if err := usable([]byte(in)); (err == nil) != ok {
+			t.Errorf("usable(%s) = %v, want usable %v", in, err, ok)
+		}
 	}
-	if err := usable([]byte(`{"Roles":[{"Code":"suplayer"}]}`)); err != nil {
-		t.Error(err)
+	for _, f := range []string{"serverconfig-genconfig-1.22.7.json", "serverconfig-first-run-1.22.7.json"} {
+		b, err := os.ReadFile(filepath.Join("testdata", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := usable(b); err != nil {
+			t.Errorf("the server's own %s: %v", f, err)
+		}
 	}
 }

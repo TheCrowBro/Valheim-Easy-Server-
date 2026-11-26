@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -199,50 +200,88 @@ func applyConfig(b []byte, v configValues) ([]byte, error) {
 }
 
 // writeConfig writes the settings for one start: the server's own file
-// with the app's keys set. A file the app can't read (the owner edited it
-// by hand and broke it) is set aside, never thrown away, and the server
-// writes a new one.
+// with the app's keys set. A file the server would stop on every time (the
+// owner edited it by hand and broke it) is set aside, never thrown away,
+// and the server writes a new one, so the next start works.
 func (s *server) writeConfig(ctx context.Context, dll string, v configValues, step func(string, float64)) error {
 	path := filepath.Join(s.env.Dirs.Saves, configName)
 	b, err := os.ReadFile(path)
 	if err == nil {
-		if perr := usable(b); perr != nil {
-			aside := path + ".damaged-" + time.Now().Format("2006-01-02_15-04-05")
-			if rerr := os.Rename(path, aside); rerr != nil {
-				return fmt.Errorf("The server's settings file %s can't be used (%v), and it couldn't be set aside: %v", path, perr, rerr)
-			}
-			step("The server's settings file couldn't be used ("+perr.Error()+"), so it was set aside as "+filepath.Base(aside)+" and a new one made.", -1)
-			s.log.Printf("serverconfig.json can't be used (%v); set aside as %s", perr, aside)
-			err = fs.ErrNotExist
+		out, perr := configFor(b, v)
+		if perr == nil {
+			return writePrivate(path, out)
 		}
-	}
-	if errors.Is(err, fs.ErrNotExist) {
-		if err := s.genConfig(ctx, dll); err != nil {
-			return err
+		aside := path + ".damaged-" + time.Now().Format("2006-01-02_15-04-05")
+		if rerr := os.Rename(path, aside); rerr != nil {
+			return fmt.Errorf("The server's settings file %s can't be used (%v), and it couldn't be set aside: %v", path, perr, rerr)
 		}
-		b, err = os.ReadFile(path)
+		step("The server's settings file couldn't be used ("+perr.Error()+"), so it was set aside as "+filepath.Base(aside)+" and a new one made.", -1)
+		s.log.Printf("serverconfig.json can't be used (%v); set aside as %s", perr, aside)
+		err = fs.ErrNotExist
 	}
-	if err != nil {
+	if !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("Couldn't read the server's settings file: %v", err)
 	}
-	out, err := applyConfig(b, v)
+	if err := s.genConfig(ctx, dll); err != nil {
+		return err
+	}
+	if b, err = os.ReadFile(path); err != nil {
+		return fmt.Errorf("Couldn't read the server's settings file: %v", err)
+	}
+	out, err := configFor(b, v)
 	if err != nil {
-		return fmt.Errorf("The server's settings file %s can't be read: %v", path, err)
+		// The server has only just written this file itself, so setting
+		// it aside again would go round in circles.
+		return fmt.Errorf("The settings file the Vintage Story server made, %s, can't be used: %v", path, err)
 	}
 	return writePrivate(path, out)
 }
 
+// configFor is the file for one start, or why the file b can't be used.
+func configFor(b []byte, v configValues) ([]byte, error) {
+	if err := usable(b); err != nil {
+		return nil, err
+	}
+	return applyConfig(b, v)
+}
+
 // usable says why a serverconfig.json can't be used, or nil. Besides being
-// JSON it must have the player roles, without which the server stops at
-// once (a file someone wrote from scratch, FACTS.md).
+// JSON it must have the player roles, and its DefaultRoleCode must be one
+// of them: otherwise the server stops at once ("You have configured a
+// default group code … but no such group exists! Killing server",
+// FACTS.md), on every start, because nothing else changes the file. The
+// app must also be able to set the world in its WorldConfig.
+//
+// A value Go reads but the server can't (a word where it wants a number)
+// isn't caught here: that would take the server's whole format. The exit
+// hint for "Failed to read serverconfig.json" tells the owner what to do.
 func usable(b []byte) error {
 	o, err := parseObject(b)
 	if err != nil {
 		return err
 	}
-	var roles []json.RawMessage
-	if json.Unmarshal(o.vals["Roles"], &roles) != nil || len(roles) == 0 {
+	var roles []struct{ Code *string }
+	if err := json.Unmarshal(o.vals["Roles"], &roles); o.has("Roles") && err != nil {
+		return errors.New("its player roles can't be read")
+	}
+	if len(roles) == 0 {
 		return errors.New("it has no player roles")
+	}
+	// Without the key the server uses its own default, suplayer
+	// (minimal-config.log). A null would leave it no role at all.
+	def := "suplayer"
+	if raw, ok := o.vals["DefaultRoleCode"]; ok {
+		var code *string
+		if json.Unmarshal(raw, &code) != nil || code == nil {
+			return errors.New("its DefaultRoleCode isn't a role's code")
+		}
+		def = *code
+	}
+	if !slices.ContainsFunc(roles, func(r struct{ Code *string }) bool { return r.Code != nil && *r.Code == def }) {
+		return fmt.Errorf("its DefaultRoleCode %q isn't one of its player roles", def)
+	}
+	if _, err := o.object("WorldConfig"); err != nil {
+		return errors.New("its WorldConfig isn't a JSON object")
 	}
 	return nil
 }

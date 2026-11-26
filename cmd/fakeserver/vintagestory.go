@@ -136,6 +136,9 @@ func runVintageStory(s *Server) {
 		b, err = os.ReadFile(cfgPath)
 	}
 	if err == nil {
+		// A file without DefaultRoleCode gets the real server's own
+		// default (its minimal-config.log names suplayer).
+		v.cfg.DefaultRoleCode = "suplayer"
 		err = json.Unmarshal(bytes.TrimPrefix(b, []byte("\ufeff")), &v.cfg)
 	}
 	if err != nil {

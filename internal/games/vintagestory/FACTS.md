@@ -125,6 +125,14 @@ under "Only the Windows CI cell can confirm" at the end, and
   Newtonsoft's exception, then "Stop reason: serverconfig.json read error",
   exit 0 (`damaged-config.log`). The app sets such a file aside
   (`serverconfig.json.damaged-<time>`) and has the server write a new one.
+  It does the same with a file whose `DefaultRoleCode` (`suplayer` when the
+  key is missing, as in `minimal-config.log`) isn't one of its `Roles`, and
+  with one whose `WorldConfig` isn't an object: the server would stop on
+  those at every start. A value Go reads but the server's reader
+  (Newtonsoft) refuses, such as a word where a number belongs, isn't caught
+  by the app (not run here; it would take the server's whole format), so
+  ExitHint for "Failed to read serverconfig.json" names the file and tells
+  the owner to undo the change or move the file out of the saves folder.
 
 ## The port (settled, run here)
 
@@ -155,13 +163,13 @@ under "Only the Windows CI cell can confirm" at the end, and
   2.1 GHz. It always says so, so the Monitor needs no Tick fallback.
 - **Join** (spec's "verify which part is the name" settled): `{0} {1} joins.`,
   where `{0}` is the player's name and `{1}` the address they came from:
-  "Keelaesh [::ffff:5.187.212.60]:64570 joins." (a 1.20.12 server's
+  "Keelaesh [::ffff:198.51.100.30]:64570 joins." (a 1.20.12 server's
   server-main.log in issue
   [anegostudios/VintageStory-Issues#7431](https://github.com/anegostudios/VintageStory-Issues/issues/7431),
-  29.10.2025) and "Teskey [::ffff:10.42.2.229]:54896 joins." (a 1.22.3
+  29.10.2025) and "Teskey [::ffff:192.0.2.60]:54896 joins." (a 1.22.3
   console in [#9655](https://github.com/anegostudios/VintageStory-Issues/issues/9655),
   4.6.2026). The line before names the account: "Client 56 uid
-  Ejhkq0bqaeDTRoy8PpsoT107 attempting identification. Name: Keelaesh". Names
+  MadeUpUid3AAAAAAAAAAAAAA attempting identification. Name: Keelaesh". Names
   match `^(\w|-){1,16}$` (the server's own rule, in its dll, with "{0} can't
   join (invalid Playername: {1})."), so they have no spaces.
 - **Leave:** "Player Keelaesh left." (#7431), or, when the server removes
@@ -171,7 +179,11 @@ under "Only the Windows CI cell can confirm" at the end, and
   1.22.6, names hidden by the reporter). Both count as leaving.
   These excerpts are in `testdata/issues/`; GitHub's page view was read on
   2026-11-26 and long lines were put back together from it, so spacing inside
-  a line may differ from the original file.
+  a line may differ from the original file. The players' addresses, uids and
+  auth token there are other people's, so the copies (and the quotes here)
+  have documentation addresses (192.0.2.x, 198.51.100.x, 203.0.113.x),
+  made-up uids of the same length and letters, and "(removed)" instead; the
+  Monitor doesn't depend on any of them.
 - **Wrong password:** "{0} fails to join (invalid server password)." (in the
   dll; no public log shows it, and nobody can join a server here without a
   game account). The Monitor makes it a `wrong_password` warning.
