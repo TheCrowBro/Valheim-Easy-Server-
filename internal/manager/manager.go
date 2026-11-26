@@ -400,7 +400,7 @@ func (m *Manager) CurrentLogPath() string {
 	if inst.run != nil {
 		return inst.run.rec.LogPath
 	}
-	return newestLog(inst)
+	return newestLog(inst, inst.dirs.Logs)
 }
 
 // --- saved data ---------------------------------------------------------

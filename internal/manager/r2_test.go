@@ -7,6 +7,7 @@ package manager
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http/httptest"
 	"os"
@@ -18,19 +19,33 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/ssh"
+
 	"valheim-easy-server/internal/config"
 	"valheim-easy-server/internal/game"
+	// The registry the app ships: main imports internal/games/all, so the
+	// count below must see every game wired in there, not only Valheim,
+	// which legacy_names_test.go imports by itself. (Only test files may
+	// import it here: the manager's own code reaches games through the
+	// registry, which TestImportRules checks.)
+	_ "valheim-easy-server/internal/games/all"
+	"valheim-easy-server/internal/jetkvm/fakekvm"
 	"valheim-easy-server/internal/mods/modstest"
 	"valheim-easy-server/internal/platform"
 	"valheim-easy-server/internal/steamcmd"
 	"valheim-easy-server/internal/wol"
 )
 
-// R2 registers one game, the legacy one (the R2 gate checks it).
+// R2 registers one game, the legacy one (the R2 gate checks it): a second
+// game wired into internal/games/all before the R2 cut fails here.
 func TestOneGameRegistered(t *testing.T) {
 	all := game.All()
 	if len(all) != 1 || !all[0].Info().Legacy || game.Legacy() != all[0] {
-		t.Fatalf("registered games: %d, legacy %v", len(all), game.Legacy())
+		var ids []string
+		for _, g := range all {
+			ids = append(ids, fmt.Sprintf("%s (legacy %v)", g.Info().ID, g.Info().Legacy))
+		}
+		t.Fatalf("registered games: %s; want only Valheim, the legacy game", strings.Join(ids, ", "))
 	}
 }
 
@@ -396,11 +411,71 @@ func TestStatusWhileThingsChange(t *testing.T) {
 	}
 }
 
-// The old panel follows one job (Status.job): the newer of the legacy
-// game's and the app's. The waker's install and removal aren't jobs, so they
-// never change it, and a finished Sleep job is still reported (spec 4.2).
-func TestStatusJobIsTheOldPanels(t *testing.T) {
+// Saving the settings while the server starts is safe: a save replaces the
+// legacy instance's folders (the owner can move the server and save
+// folders), and the start reads them to name its log file and to prune old
+// logs (run with -race).
+func TestSettingsSaveDuringStart(t *testing.T) {
 	env := setup(t)
+	m := env.m
+	install(t, m)
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		s := m.Settings()
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			s.ServerName = fmt.Sprintf("Viking Night %d", i%3) // the folders stay the same
+			if err := m.UpdateSettings(s); err != nil {
+				t.Error(err)
+				return
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				m.pruneLogs(m.legacy())
+				m.CurrentLogPath()
+			}
+		}
+	}()
+	if err := m.StartServer(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "server online", 20*time.Second, func() bool { return m.Status().State == StateOnline })
+	close(stop)
+	wg.Wait()
+	if got := m.CurrentLogPath(); filepath.Dir(got) != m.Paths().Logs {
+		t.Fatalf("log %s isn't in %s", got, m.Paths().Logs)
+	}
+}
+
+// The old panel follows one job (Status.job): the newer of the legacy
+// game's and the app's. The waker's install and removal and the firewall
+// fix aren't jobs, so they never change it, and a finished Sleep job is
+// still reported (spec 4.2 and 8.2's R2 gate).
+func TestStatusJobIsTheOldPanels(t *testing.T) {
+	// The waker goes on a stand-in JetKVM, which runs only on Linux (it
+	// runs the JetKVM's own start script). The rest of the test runs on
+	// every system.
+	var kvm *fakekvm.Server
+	if runtime.GOOS == "linux" {
+		kvm = fakekvm.New(t, nil)
+	}
+	hook := newFakeDiscord(t)
+	env := setup(t, wakerOptions(t, kvm, hook.URL,
+		platform.NetAdapter{Name: "Ethernet", MAC: "3C:07:54:5A:21:9F", IPv4: []string{"192.168.1.20"}, Wired: true, Connected: true}))
 	m := env.m
 	if err := m.BackupWorld("Nowhere"); err != nil {
 		t.Fatal(err)
@@ -409,11 +484,73 @@ func TestStatusJobIsTheOldPanels(t *testing.T) {
 	if backup.Kind != "backup" || backup.Game != m.legacyID {
 		t.Fatalf("job %+v", backup)
 	}
-	// (FixFirewall isn't called here: on a Mac it asks for an admin
-	// password, and it is a plain call, not a job, as before.)
-	m.RemoveWaker(true)
-	if j := m.Status().Job; j == nil || j.ID != backup.ID {
-		t.Fatalf("after taking the waker off: job %+v", j)
+	// unchanged runs fn while reading Status the way the panel does, and
+	// fails if Status.job is ever anything but the backup's, during fn or
+	// after it.
+	unchanged := func(what string, fn func()) {
+		t.Helper()
+		done := make(chan struct{})
+		seen := make(chan *Job, 1) // the first other job seen, if any
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				if j := m.Status().Job; j == nil || j.ID != backup.ID {
+					seen <- j
+					return
+				}
+				select {
+				case <-done:
+					return
+				case <-time.After(time.Millisecond):
+				}
+			}
+		}()
+		func() {
+			defer func() { close(done); wg.Wait() }()
+			fn()
+		}()
+		select {
+		case j := <-seen:
+			t.Fatalf("while %s: job %+v", what, j)
+		default:
+		}
+		if j := m.Status().Job; j == nil || j.ID != backup.ID {
+			t.Fatalf("after %s: job %+v", what, j)
+		}
+	}
+	if kvm != nil {
+		unchanged("installing the waker", func() {
+			key, _, _, _, err := ssh.ParseAuthorizedKey([]byte(m.WakerView(false).Key))
+			if err != nil {
+				t.Fatal(err)
+			}
+			kvm.Allow(key) // pasted in the JetKVM's Developer Mode
+			if err := m.InstallWaker(kvm.Addr, "secret", false); err != nil {
+				t.Fatal(err)
+			}
+		})
+		if !m.Settings().DiscordWake {
+			t.Fatal("the waker isn't on after its install")
+		}
+		unchanged("taking the waker off", func() {
+			if err := m.RemoveWaker(false); err != nil {
+				t.Fatal(err)
+			}
+		})
+	} else {
+		unchanged("taking the waker off", func() { m.RemoveWaker(true) })
+	}
+	// The firewall fix only here: on Linux it answers at once that it
+	// can't, while on Windows and macOS it would ask for an administrator's
+	// OK, which a test can't give.
+	if runtime.GOOS == "linux" {
+		unchanged("fixing the firewall", func() {
+			if err := m.FixFirewall(); !errors.Is(err, platform.ErrUnsupported) {
+				t.Fatalf("FixFirewall on Linux: %v", err)
+			}
+		})
 	}
 	if err := m.Hibernate(""); err != nil {
 		t.Fatal(err)

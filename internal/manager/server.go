@@ -182,6 +182,7 @@ func (m *Manager) doStart(ctx context.Context, j *jobCtl, inst *instance, world 
 		return errors.New("The server is already running.")
 	}
 	installed := m.installedLocked(inst)
+	logs := inst.dirs.Logs // a settings save may replace dirs once the lock is let go
 	m.mu.Unlock()
 	saved := inst.saved()
 	if world == "" {
@@ -203,7 +204,7 @@ func (m *Manager) doStart(ctx context.Context, j *jobCtl, inst *instance, world 
 	}
 	plan, err := inst.srv.Plan(ctx, game.PlanRequest{
 		World: world, Saved: saved, Update: saved.Server.Bool("updateOnStart"),
-		LogPath:     filepath.Join(inst.dirs.Logs, logPrefix(inst)+time.Now().Format("2006-01-02_15-04-05")+".log"),
+		LogPath:     filepath.Join(logs, logPrefix(inst)+time.Now().Format("2006-01-02_15-04-05")+".log"),
 		Step:        j.step,
 		Cancellable: j.setCancellable,
 	})
@@ -522,7 +523,7 @@ func (m *Manager) adopt(inst *instance, pi platform.ProcInfo, saved *game.Record
 		}
 	} else {
 		rec = game.Record{PID: pi.PID, Started: pi.Started, Launched: pi.Started, World: inst.saved().World,
-			LogPath: newestLog(inst), Exe: inst.srv.Program(), Played: game.Played{Mods: map[string]string{}}}
+			LogPath: newestLog(inst, m.dirsOf(inst).Logs), Exe: inst.srv.Program(), Played: game.Played{Mods: map[string]string{}}}
 	}
 	if rec.Launched.IsZero() {
 		rec.Launched = proc.StartTime()
@@ -849,9 +850,10 @@ func hasKind(evs []game.Event, kind string) bool {
 	return false
 }
 
-// pruneLogs keeps the instance's 30 newest server logs.
+// pruneLogs keeps the instance's 30 newest server logs. It runs without
+// m.mu, so it reads the folders through dirsOf.
 func (m *Manager) pruneLogs(inst *instance) {
-	matches, _ := filepath.Glob(filepath.Join(inst.dirs.Logs, logPrefix(inst)+"*.log"))
+	matches, _ := filepath.Glob(filepath.Join(m.dirsOf(inst).Logs, logPrefix(inst)+"*.log"))
 	sort.Strings(matches)
 	for i := 0; i < len(matches)-30; i++ {
 		os.Remove(matches[i])

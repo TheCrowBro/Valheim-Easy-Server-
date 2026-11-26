@@ -30,7 +30,7 @@ type instance struct {
 	g      game.Game
 	info   game.Info
 	srv    game.Server
-	dirs   game.Dirs
+	dirs   game.Dirs // guarded by m.mu: a settings save replaces the legacy instance's (dirsOf copies them)
 	legacy bool
 
 	run        *serverRun
@@ -163,9 +163,22 @@ func (inst *instance) exact(id, def string) string {
 // so this may be called with m.mu held.
 func (inst *instance) saved() game.Saved { return inst.srv.Store().Get() }
 
-// newestLog is the newest of the instance's server logs, or "".
-func newestLog(inst *instance) string {
-	matches, _ := filepath.Glob(filepath.Join(inst.dirs.Logs, logPrefix(inst)+"*.log"))
+// dirsOf is a copy of the instance's folders, for code that runs without
+// m.mu. A settings save replaces the legacy instance's folders under the
+// lock (the owner can move the server and save folders), so reading them
+// without it would be a data race, even when the save changed only the
+// server's name.
+func (m *Manager) dirsOf(inst *instance) game.Dirs {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return inst.dirs
+}
+
+// newestLog is the newest of the instance's server logs in the folder
+// logs, or "". Callers read that folder from inst.dirs with m.mu held, or
+// through dirsOf.
+func newestLog(inst *instance, logs string) string {
+	matches, _ := filepath.Glob(filepath.Join(logs, logPrefix(inst)+"*.log"))
 	sort.Strings(matches)
 	if len(matches) == 0 {
 		return ""
