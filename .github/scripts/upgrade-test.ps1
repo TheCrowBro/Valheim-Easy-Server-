@@ -133,7 +133,10 @@ function Publish([int]$build, [string]$file) {
 }
 
 function Get-Posts {
-	$p = @(Invoke-RestMethod "$stubDiscord/ci/posts" -TimeoutSec 5)
+	# PowerShell 7 hands a JSON list back as one object, so @(...) alone
+	# would make a list of one list. Sending it through the pipeline
+	# unpacks it into the posts themselves.
+	$p = @(Invoke-RestMethod "$stubDiscord/ci/posts" -TimeoutSec 5 | ForEach-Object { $_ })
 	return , $p
 }
 
