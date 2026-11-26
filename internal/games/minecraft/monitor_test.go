@@ -2,14 +2,18 @@ package minecraft
 
 import (
 	"encoding/json"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"valheim-easy-server/internal/game"
+	"valheim-easy-server/internal/rcon"
 )
 
 // The logs in testdata are real: 26.3's were captured from Mojang's
@@ -292,6 +296,102 @@ func TestMonitorOnlineMode(t *testing.T) {
 		if len(r.find("allow_list_on")) != 0 {
 			t.Errorf("record %v: the allow list was turned on", rec.Extra)
 		}
+	}
+}
+
+// TestMonitorTakeoverReplay: a copy of the app that takes over a running
+// server reads its whole log again, through a Monitor made from the run
+// record, which still says the allow list was off at the start. When the
+// list was turned on earlier in the run (State has allowListOn), the old
+// login from the internet must send nothing: the owner may have taken that
+// player off the list since. When it never went on (the earlier copy
+// couldn't reach RCON), it goes on once the log has been read, with
+// whoever is playing then, not whoever was playing back then.
+func TestMonitorTakeoverReplay(t *testing.T) {
+	lines := strings.Split(strings.TrimRight(readFile(t, filepath.Join("testdata", "online-1.8-mc78020.log")), "\n"), "\n")
+	for _, c := range []struct {
+		name   string
+		state  game.Values
+		replay bool             // the manager says it is reading back (Replaying)
+		end    func(m *monitor) // how the Monitor learns the log has been read
+		want   []string         // what reaches RCON
+	}{
+		{"turned on earlier", game.Values{stateAllowListOn: "2026-11-26T05:40:43Z"}, true,
+			func(m *monitor) {
+				m.Replaying(false)
+				m.Line("[06:30:00] [Server thread/INFO]: Stopping server", time.Now())
+			}, nil},
+		{"turned on earlier, without the hook", game.Values{stateAllowListOn: "2026-11-26T05:40:43Z"}, false,
+			func(m *monitor) {}, nil},
+		{"never turned on", game.Values{}, true,
+			func(m *monitor) { m.Tick(time.Now()) }, []string{"whitelist on"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var mu sync.Mutex
+			var got []string
+			srv, err := rcon.NewTestServer("127.0.0.1:0", "pw", func(cmd string) string {
+				mu.Lock()
+				got = append(got, cmd)
+				mu.Unlock()
+				return ""
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { srv.Close() })
+			_, port, _ := net.SplitHostPort(srv.Addr)
+			rec := planned(allowOff, allowAuto)
+			rec.Ports[roleRCON], _ = strconv.Atoi(port)
+			rec.Secrets[roleRCON] = "pw"
+
+			s := Game{}.New(testEnv(t)).(*server)
+			s.store.Save(func(sv *game.Saved) error { sv.State = c.state.Clone(); return nil })
+			m := s.Watch(rec, nil).(*monitor)
+			calls := make(chan []string, 4)
+			turnOn := m.turnOn // the real one, over RCON
+			m.turnOn = func(r game.Record, playing []string) { turnOn(r, playing); calls <- playing }
+
+			now := time.Date(2026, 11, 26, 23, 0, 0, 0, time.Local)
+			for _, l := range lines {
+				if c.replay {
+					m.Replaying(true) // as the manager does before each line
+				}
+				m.Line(l, now)
+			}
+			if c.replay {
+				select {
+				case p := <-calls:
+					t.Errorf("the allow list was turned on (%q) while the old log was read", p)
+				case <-time.After(50 * time.Millisecond):
+				}
+			}
+			if st := m.State(); st.Extra[extraAllowList] != allowOn {
+				t.Errorf("after the login from the internet, State().Extra = %v, want the list on", st.Extra)
+			}
+			c.end(m)
+			select {
+			case p := <-calls:
+				if c.replay && len(p) != 0 {
+					t.Errorf("turnOn asked for %q; that player left long ago", p)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("the allow list was never turned on")
+			}
+			m.Tick(now) // once is enough
+			select {
+			case p := <-calls:
+				t.Errorf("turned on a second time (%q)", p)
+			case <-time.After(50 * time.Millisecond):
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if !slices.Equal(got, c.want) {
+				t.Errorf("RCON got %q, want %q", got, c.want)
+			}
+			if s.store.Get().State[stateAllowListOn] == "" {
+				t.Errorf("State[allowListOn] isn't set afterwards")
+			}
+		})
 	}
 }
 

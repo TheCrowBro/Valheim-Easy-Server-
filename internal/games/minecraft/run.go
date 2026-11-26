@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -87,28 +88,42 @@ func (s *server) ExitHint(tail []string) string {
 }
 
 // Join says how friends join: by address, in Minecraft's server list. The
-// port is left out when it's Minecraft's own (25565), as friends then
-// needn't type it.
+// port is the running server's (a port changed in Settings only counts
+// after a restart), else the saved one. The address friends outside type
+// leaves the port out when it's Minecraft's own (25565), as they needn't
+// type it then (spec 5.2); the home addresses always have it.
+//
+// The manager calls Join with its lock held, also for every Status, so it
+// reads nothing from disk: the version is the running server's, or the
+// one the last Build() found.
 func (s *server) Join(in game.JoinInput) game.Join {
 	port := in.Saved.Ports[roleGame]
-	hostPort := func(host string) string {
-		if port == 0 || port == defaultPort {
+	if in.Rec != nil && in.Rec.Port != 0 {
+		port = in.Rec.Port
+	}
+	withPort := func(host string) string {
+		if port == 0 {
 			return host
 		}
-		return fmt.Sprintf("%s:%d", host, port)
+		return net.JoinHostPort(host, strconv.Itoa(port))
 	}
-	j := game.Join{How: "address", Port: port, Public: true, Router: true, LAN: []string{}}
+	// Public is false: Minecraft has no public server list to be shown in
+	// (in Valheim, Public means listed in the game's own list).
+	j := game.Join{How: "address", Port: port, Public: false, Router: true, LAN: []string{}}
 	for _, ip := range in.LAN {
-		j.LAN = append(j.LAN, hostPort(ip))
+		j.LAN = append(j.LAN, withPort(ip))
 	}
 	if in.PublicIP != "" {
-		j.Address = hostPort(in.PublicIP)
+		j.Address = in.PublicIP
+		if port != defaultPort {
+			j.Address = withPort(in.PublicIP)
+		}
 	}
 	version := ""
 	if in.State != nil && in.State.Version != "" {
 		version = in.State.Version
-	} else if b, ok := s.Build(); ok {
-		version = b.Version
+	} else {
+		version = s.installedVersion()
 	}
 	where := j.Address
 	if where == "" {

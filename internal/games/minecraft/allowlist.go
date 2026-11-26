@@ -117,8 +117,16 @@ func publicAddr(ip string) bool {
 // came in from the internet with it off: everyone on now goes on the list
 // first (nobody playing is thrown out), then "whitelist on". It runs on its
 // own goroutine, because the Monitor that notices is called with the
-// manager's lock held and must not wait for the network.
+// manager's lock held and must not wait for the network (and so it may
+// read the Store here).
 func (s *server) turnOnAllowList(rec game.Record, playing []string) {
+	// Already done: the app turned the list on earlier in this run and a
+	// copy of the app that took the server over has read the same login
+	// again. The list is the owner's since then, so adding the players of
+	// back then would undo the owner's removals.
+	if s.store.Get().State[stateAllowListOn] != "" {
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	addr, pw, err := rconAddr(&rec)

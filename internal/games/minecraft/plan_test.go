@@ -7,11 +7,14 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"valheim-easy-server/internal/game"
+	"valheim-easy-server/internal/install"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files in testdata/golden")
@@ -236,14 +239,17 @@ func TestProperties(t *testing.T) {
 	}
 }
 
-// TestJoin: friends join by address; the port shows only when it isn't
-// Minecraft's own.
+// TestJoin: friends join by address; the address outside leaves the port
+// out only when it is Minecraft's own, the home addresses always have it,
+// and the port is the running server's. Minecraft has no public server
+// list, so Public is false (spec 4.9).
 func TestJoin(t *testing.T) {
 	s, _ := installed(t)
 	sv := defaults(s, "Forest")
 	j := s.Join(game.JoinInput{Saved: sv, PublicIP: "203.0.113.7", LAN: []string{"192.168.1.20"}, Router: map[string]string{roleGame: "open"},
 		State: &game.RunState{Version: "26.3", Extra: map[string]string{extraAllowList: allowOn}}})
-	if j.How != "address" || j.Address != "203.0.113.7" || j.LAN[0] != "192.168.1.20" || !j.Router || j.Problem != "" {
+	if j.How != "address" || j.Address != "203.0.113.7" || !slices.Equal(j.LAN, []string{"192.168.1.20:25565"}) ||
+		j.Port != 25565 || j.Public || !j.Router || j.Problem != "" {
 		t.Errorf("join = %+v", j)
 	}
 	if !strings.Contains(strings.Join(j.Steps, " "), "Minecraft 26.3") || !strings.Contains(j.Hint, "203.0.113.7") {
@@ -251,8 +257,124 @@ func TestJoin(t *testing.T) {
 	}
 	sv.Ports[roleGame] = 25566
 	j = s.Join(game.JoinInput{Saved: sv, PublicIP: "203.0.113.7", Router: map[string]string{roleGame: "failed"}})
-	if j.Address != "203.0.113.7:25566" || j.Problem == "" {
+	if j.Address != "203.0.113.7:25566" || !strings.Contains(j.Problem, "25566") {
 		t.Errorf("join on 25566 with the router failed = %+v", j)
+	}
+	// Running on 25567, with 25566 saved for the next start: friends need
+	// the port the server is on now.
+	j = s.Join(game.JoinInput{Saved: sv, Rec: &game.Record{Port: 25567}, State: &game.RunState{}, PublicIP: "2001:db8::7", LAN: []string{"192.168.1.20"}})
+	if j.Port != 25567 || j.Address != "[2001:db8::7]:25567" || !slices.Equal(j.LAN, []string{"192.168.1.20:25567"}) {
+		t.Errorf("join while running on 25567 = %+v", j)
+	}
+}
+
+// TestJoinReadsNoFiles: the manager calls Join with its lock held, also
+// for every Status, so a stopped server's version comes from what Build()
+// found last, not from the files.
+func TestJoinReadsNoFiles(t *testing.T) {
+	s, env := installed(t)
+	sv := defaults(s, "Forest")
+	if j := s.Join(game.JoinInput{Saved: sv}); strings.Contains(strings.Join(j.Steps, " "), "Minecraft 2") {
+		t.Errorf("a version before Build() ever ran: %q", j.Steps)
+	}
+	if err := install.WriteBuild(env.Dirs.Server, game.Build{Version: "26.3"}); err != nil {
+		t.Fatal(err)
+	}
+	if b, ok := s.Build(); !ok || b.Version != "26.3" {
+		t.Fatalf("Build() = %+v, %v", b, ok)
+	}
+	os.RemoveAll(env.Dirs.Server) // Join mustn't notice: it doesn't look
+	if j := s.Join(game.JoinInput{Saved: sv}); !strings.Contains(strings.Join(j.Steps, " "), "Minecraft 26.3") {
+		t.Errorf("stopped, after Build(): steps %q", j.Steps)
+	}
+	if _, ok := s.Build(); ok {
+		t.Fatal("Build() without the files")
+	}
+	if j := s.Join(game.JoinInput{Saved: sv}); strings.Contains(strings.Join(j.Steps, " "), "26.3") {
+		t.Errorf("after Build() found nothing: steps %q", j.Steps)
+	}
+}
+
+// updating makes an instance with 26.2 installed on Java 21, and Mojang's
+// stand-in offering 26.3 on Java 25. The Java "install" puts nothing new
+// in place (the old placeholder stands in for the new Java) and its check
+// gives javaErr.
+func updating(t *testing.T, javaErr error) (*server, game.Env, game.Saved, *mojang) {
+	t.Helper()
+	s, env := installed(t)
+	m := newMojang(t, nil)
+	s.env.HTTP = m.srv.Client()
+	if err := install.WriteBuild(env.Dirs.Server, game.Build{Version: "26.2"}); err != nil {
+		t.Fatal(err)
+	}
+	sv := defaults(s, "Forest")
+	sv.State[stateJava] = "21"
+	s.store.Save(func(x *game.Saved) error { *x = sv.Clone(); return nil })
+	oldInstall, oldCheck := installJava, checkJava
+	installJava = func(ctx context.Context, major int, dir string, step func(game.Progress)) (string, error) {
+		if major != 25 {
+			t.Errorf("asked for Java %d, want 25", major)
+		}
+		return s.Program(), nil
+	}
+	checkJava = func(context.Context, string) error { return javaErr }
+	t.Cleanup(func() { installJava, checkJava = oldInstall, oldCheck })
+	return s, env, sv, m
+}
+
+// TestUpdateOnStart: a newer release is installed before the start, with
+// the Java it needs.
+func TestUpdateOnStart(t *testing.T) {
+	s, _, sv, m := updating(t, nil)
+	if _, err := s.Plan(context.Background(), game.PlanRequest{World: "Forest", Saved: sv, Update: true}); err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	if b, ok := s.Build(); !ok || b.Version != "26.3" || m.jarCalls.Load() != 1 {
+		t.Errorf("after the update: %+v %v, %d jar downloads", b, ok, m.jarCalls.Load())
+	}
+	if got := s.store.Get().State[stateJava]; got != "25" {
+		t.Errorf("State[java] = %q, want 25", got)
+	}
+}
+
+// TestUpdateJavaDoesntStart: the new Minecraft needs a Java that doesn't
+// start here. install.Temurin has already replaced the old Java by then,
+// so the start is refused (it must not go on with "the version that's
+// installed", whose Java is the one that failed), the failed Java is
+// removed so Minecraft shows as not installed, and on macOS it becomes
+// "Needs Windows" (the owner's answer to Q6).
+func TestUpdateJavaDoesntStart(t *testing.T) {
+	s, env, sv, _ := updating(t, errors.New("dyld: Symbol not found: _SecTrustCopyCertificateChain"))
+	var steps []string
+	step := func(text string, _ float64) { steps = append(steps, text) }
+	_, err := s.Plan(context.Background(), game.PlanRequest{World: "Forest", Saved: sv, Update: true, Step: step})
+	var je *javaError
+	if !errors.As(err, &je) || !strings.Contains(err.Error(), "Java 25") {
+		t.Fatalf("Plan = %v, want the Java's failure", err)
+	}
+	for _, st := range steps {
+		if strings.Contains(st, "Starting the version that's installed") {
+			t.Errorf("went on with the old version: %q", st)
+		}
+	}
+	if _, ok := s.Build(); ok || fileExists(env.Dirs.Runtime) {
+		t.Errorf("the Java that doesn't start is still installed")
+	}
+	saved := s.store.Get()
+	if saved.State[stateJava] != "" {
+		t.Errorf("State[java] = %q after the Java was removed", saved.State[stateJava])
+	}
+	if mac := runtime.GOOS == "darwin"; (saved.State[stateUnsupported] == macTooOld) != mac {
+		t.Errorf("State[unsupported] = %q on %s", saved.State[stateUnsupported], runtime.GOOS)
+	}
+	// The next start without updating doesn't run anything either.
+	_, err = s.Plan(context.Background(), game.PlanRequest{World: "Forest", Saved: saved})
+	if runtime.GOOS == "darwin" {
+		if err == nil || !strings.Contains(err.Error(), "Needs Windows") {
+			t.Errorf("next start on macOS: %v", err)
+		}
+	} else if !errors.Is(err, errNotInstalled) {
+		t.Errorf("next start: %v", err)
 	}
 }
 

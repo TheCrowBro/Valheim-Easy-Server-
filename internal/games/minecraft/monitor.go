@@ -54,6 +54,13 @@ type monitor struct {
 	accounts map[string]string // name -> account id, from "UUID of player" lines
 	allowOn  bool              // the allow list is on now
 	mode     string            // the owner's setting this run started with: auto, on or off
+
+	// replaying is true while the app reads back the log of a server it
+	// took over (the manager says so through Replaying). A login from the
+	// internet found then happened earlier, so turning the list on waits
+	// (pending) until the log has been read to its end.
+	replaying bool
+	pending   bool
 }
 
 // Watch starts following a run. rec is the run record (also after a
@@ -201,19 +208,59 @@ func (m *monitor) loggedIn(who, ip string, at time.Time) []game.Event {
 	if m.allowOn || m.mode != allowAuto || !publicAddr(ip) {
 		return nil
 	}
+	// The list can only go from off to on during a run (the setting waits
+	// for a restart), so from here on it is on, or about to be.
 	m.allowOn = true
 	m.state.Extra[extraAllowList] = allowOn
-	playing := []string{who}
-	for _, p := range m.state.Players {
-		if p.Name != who {
-			playing = append(playing, p.Name)
+	if m.replaying {
+		// An old login, read back after a takeover: the app that saw it
+		// most likely turned the list on then, and the owner may have
+		// changed the list since. So nothing is sent now; once the log is
+		// read to its end, turnOnAllowList checks whether it is on already
+		// and otherwise adds whoever is playing by then.
+		m.pending = true
+	} else {
+		playing := []string{who}
+		for _, p := range m.state.Players {
+			if p.Name != who {
+				playing = append(playing, p.Name)
+			}
 		}
-	}
-	if m.turnOn != nil {
-		go m.turnOn(m.rec, playing)
+		m.startTurnOn(playing)
 	}
 	return []game.Event{{Kind: "allow_list_on", Time: at, Name: who,
 		Text: "Minecraft's allow list is now on: " + who + " came in from the internet. Everyone playing now was added to it; add other friends on the Players tab."}}
+}
+
+func (m *monitor) startTurnOn(playing []string) {
+	if m.turnOn != nil {
+		go m.turnOn(m.rec, playing)
+	}
+}
+
+// Replaying is the manager's optional hook (manager.replayer): before each
+// line it says whether the app is still reading back the log of a server
+// it took over.
+func (m *monitor) Replaying(on bool) {
+	m.replaying = on
+	if !on {
+		m.flushPending()
+	}
+}
+
+// flushPending turns the list on for a login from the internet found while
+// reading back the log, now that the log has been read: with whoever is
+// playing now, not whoever was playing back then.
+func (m *monitor) flushPending() {
+	if !m.pending {
+		return
+	}
+	m.pending = false
+	playing := []string{}
+	for _, p := range m.state.Players {
+		playing = append(playing, p.Name)
+	}
+	m.startTurnOn(playing)
 }
 
 func (m *monitor) join(who string, at time.Time, text string) []game.Event {
@@ -237,9 +284,16 @@ func (m *monitor) leave(who string, at time.Time) []game.Event {
 	return []game.Event{{Kind: "leave", Time: at, Name: who, Account: p.Account, Text: who + " left."}}
 }
 
-// Tick has nothing to do: the server always writes "Done", and the probe
-// is the fallback when a future version words it differently.
-func (m *monitor) Tick(now time.Time) []game.Event { return nil }
+// Tick has nothing to read: the server always writes "Done", and the probe
+// is the fallback when a future version words it differently. The manager
+// doesn't tick while it reads back a taken-over server's log, so a tick
+// means that is done: a pending allow list goes on now rather than waiting
+// for the next line (Minecraft can be quiet for a long time). Were a tick
+// ever early, turnOnAllowList still does nothing when the list is on.
+func (m *monitor) Tick(now time.Time) []game.Event {
+	m.flushPending()
+	return nil
+}
 
 // Probed folds in RCON's "list", which is authoritative: names it lists
 // that the log missed join, names it doesn't list leave. RCON only opens

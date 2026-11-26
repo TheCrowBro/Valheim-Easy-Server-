@@ -25,6 +25,7 @@ package minecraft
 import (
 	"path/filepath"
 	"runtime"
+	"sync/atomic"
 
 	"valheim-easy-server/internal/game"
 	"valheim-easy-server/internal/install"
@@ -108,6 +109,12 @@ type server struct {
 	env    game.Env
 	store  game.Store
 	worlds game.Worlds
+
+	// installed is the version Build() found last ("" for none), for
+	// Join: the manager calls Join with its lock held, also from Status,
+	// so Join must not read files (spec 2.2 and 4.8). Build() runs from
+	// the manager's checks and the install job, which keep this fresh.
+	installed atomic.Pointer[string]
 }
 
 // Interfaces this adapter implements beyond game.Server.
@@ -157,7 +164,20 @@ func (s *server) jarPath() string { return filepath.Join(s.env.Dirs.Server, "ser
 func (s *server) Build() (game.Build, bool) {
 	b, ok := install.ReadBuild(s.env.Dirs.Server)
 	if !ok || !isFile(s.jarPath()) || !isFile(s.Program()) {
+		s.setInstalled("")
 		return game.Build{}, false
 	}
+	s.setInstalled(b.Version)
 	return b, true
+}
+
+func (s *server) setInstalled(version string) { s.installed.Store(&version) }
+
+// installedVersion is the version Build() found last, without reading
+// anything.
+func (s *server) installedVersion() string {
+	if v := s.installed.Load(); v != nil {
+		return *v
+	}
+	return ""
 }

@@ -78,26 +78,50 @@ func (s *server) install(ctx context.Context, repair bool, progress func(game.Pr
 	return s.installRelease(ctx, rel, repair, true, progress)
 }
 
-// installRelease installs one release. Java goes first, so a Java that
-// can't be installed (or can't start on this Mac) leaves the old jar, which
-// still runs on the old Java. withJava false keeps the Java that's there,
-// when the release needs the same major version.
+// installJava and checkJava install a Java and prove it starts; tests
+// replace them, as they need neither Adoptium nor a real Java.
+var (
+	installJava = install.Temurin
+	checkJava   = javaStarts
+)
+
+// javaError is an install that stopped because the new Java doesn't start.
+// A start must then not go on with "the version that's installed": the
+// Java it would run is the one that just failed.
+type javaError struct{ text string }
+
+func (e *javaError) Error() string { return e.text }
+
+// installRelease installs one release, Java first. A Java that can't be
+// downloaded or unpacked leaves the old Java and jar, which still run.
+// But install.Temurin switches the instance to the new Java, and removes
+// the old one, before the app can check that the new one starts; so a new
+// Java that doesn't start leaves nothing that can run. That Java is then
+// removed too, so Minecraft shows as not installed (Repair) rather than
+// installed with a Java that can't start, and the error is a javaError, so
+// the start is refused. On macOS that is the owner's decided "Needs
+// Windows" case (spec 10.2 Q6). withJava false keeps the Java that's
+// there, when the release needs the same major version.
 func (s *server) installRelease(ctx context.Context, rel release, repair, withJava bool, progress func(game.Progress)) error {
 	if withJava {
 		if err := os.MkdirAll(s.env.Dirs.Runtime, 0o755); err != nil {
 			return err
 		}
-		java, err := install.Temurin(ctx, rel.Java, s.env.Dirs.Runtime, progress)
+		java, err := installJava(ctx, rel.Java, s.env.Dirs.Runtime, progress)
 		if err != nil {
 			return err
 		}
 		progress(game.Progress{Step: "Checking that Java starts…", Percent: -1})
-		if err := javaStarts(ctx, java); err != nil {
+		if err := checkJava(ctx, java); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err() // cancelled, which says nothing about this Java
+			}
+			s.removeJava()
 			if runtime.GOOS == "darwin" {
 				s.saveState(stateUnsupported, macTooOld)
-				return fmt.Errorf("%s (Java %d doesn't start on this Mac: %v).", macTooOld, rel.Java, err)
+				return &javaError{fmt.Sprintf("%s (Java %d doesn't start on this Mac: %v).", macTooOld, rel.Java, err)}
 			}
-			return fmt.Errorf("The Java %d the app installed for Minecraft doesn't start (%v). Try Repair.", rel.Java, err)
+			return &javaError{fmt.Sprintf("The Java %d the app installed for Minecraft doesn't start (%v). Click Repair to install it again.", rel.Java, err)}
 		}
 		s.saveState(stateJava, strconv.Itoa(rel.Java))
 		s.saveState(stateUnsupported, "")
@@ -105,7 +129,21 @@ func (s *server) installRelease(ctx context.Context, rel release, repair, withJa
 	if err := s.installJar(ctx, rel, repair, progress); err != nil {
 		return err
 	}
-	return install.WriteBuild(s.env.Dirs.Server, game.Build{Version: rel.Version, Date: rel.Released.UTC()})
+	if err := install.WriteBuild(s.env.Dirs.Server, game.Build{Version: rel.Version, Date: rel.Released.UTC()}); err != nil {
+		return err
+	}
+	s.setInstalled(rel.Version)
+	return nil
+}
+
+// removeJava removes the instance's Java (its runtime folder holds nothing
+// else) and forgets which one it was, so the next install fetches it again.
+func (s *server) removeJava() {
+	if err := os.RemoveAll(s.env.Dirs.Runtime); err != nil && s.env.Log != nil {
+		s.env.Log.Printf("minecraft: couldn't remove the Java that doesn't start: %v", err)
+	}
+	s.saveState(stateJava, "")
+	s.setInstalled("")
 }
 
 // installJar downloads the release's server.jar, checked against Mojang's

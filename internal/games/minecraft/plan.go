@@ -56,6 +56,12 @@ func (s *server) Plan(ctx context.Context, req game.PlanRequest) (game.Plan, err
 			if ctx.Err() != nil {
 				return game.Plan{}, ctx.Err()
 			}
+			// A new Java that doesn't start has replaced the old one, so
+			// "the version that's installed" can't run either.
+			var je *javaError
+			if errors.As(err, &je) {
+				return game.Plan{}, err
+			}
 			if _, ok := s.Build(); !ok {
 				return game.Plan{}, err
 			}
