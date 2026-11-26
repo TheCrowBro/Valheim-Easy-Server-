@@ -79,9 +79,10 @@ func (s *server) Schema() game.Schema {
 	}
 }
 
-// Validate checks the settings for a start of world. Keys are the
-// schema's own; the manager adds the scope.
+// Validate checks the settings for a start of world ("" is the selected
+// world). Keys are the schema's own; the manager adds the scope.
 func (s *server) Validate(sv game.Saved, world string) game.FieldErrors {
+	world = worldFor(sv, world)
 	errs := game.FieldErrors{}
 	name := s.value(sv, "serverName")
 	switch {
@@ -113,6 +114,18 @@ func (s *server) Validate(sv game.Saved, world string) game.FieldErrors {
 		errs["world"] = p
 	}
 	return errs
+}
+
+// worldFor is the world a call is about. The manager passes "" to mean
+// the selected world: it checks the settings that way before every start
+// and on every status, and asks for the fingerprint that way to tell
+// whether a running server needs a restart. Read literally, "" would be a
+// world with no name, and every start would be refused.
+func worldFor(sv game.Saved, world string) string {
+	if world == "" {
+		return sv.World
+	}
+	return world
 }
 
 // lineSafe says whether a value can go into the server's settings file

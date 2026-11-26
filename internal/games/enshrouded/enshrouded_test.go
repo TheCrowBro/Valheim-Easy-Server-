@@ -487,6 +487,56 @@ func TestFingerprint(t *testing.T) {
 	}
 }
 
+// The manager passes world "" to mean the selected world: it checks the
+// settings that way before every start and on every status, and compares a
+// running server's fingerprint with Fingerprint(saved, ""). Read as a
+// world with no name, every start would be refused and a running server
+// would always need a restart.
+func TestSelectedWorld(t *testing.T) {
+	s := installed(t)
+	sv := defaultSaved()
+	sv.World = "Crow's Rest"
+	sv.Worlds["Crow's Rest"] = game.Values{"difficulty": "hard"}
+	if errs := s.Validate(sv, ""); len(errs) != 0 {
+		t.Errorf("Validate(saved, \"\") with a world selected: %v", errs)
+	}
+	bad := sv.Clone()
+	bad.Worlds["Crow's Rest"] = game.Values{"difficulty": "nightmare"}
+	if errs := s.Validate(bad, ""); errs["difficulty"] == "" {
+		t.Error("Validate(saved, \"\") didn't check the selected world's difficulty")
+	}
+	none := sv.Clone()
+	none.World = ""
+	if errs := s.Validate(none, ""); errs["world"] == "" {
+		t.Error("no world selected passed")
+	}
+
+	if s.Fingerprint(sv, "") != s.Fingerprint(sv, "Crow's Rest") {
+		t.Error("Fingerprint(saved, \"\") isn't the selected world's")
+	}
+	p, err := s.Plan(t.Context(), game.PlanRequest{World: "Crow's Rest", New: true, Saved: sv})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Fingerprint(sv, ""); got != p.Fingerprint {
+		t.Errorf("Fingerprint(saved, \"\") = %s, the plan's is %s: a running server would always say restart to apply", got, p.Fingerprint)
+	}
+	other := sv.Clone()
+	other.World = "Main"
+	if s.Fingerprint(other, "") == p.Fingerprint {
+		t.Error("selecting another world kept the fingerprint")
+	}
+
+	// A Plan for "" starts the selected world, in its own folder.
+	p, err = s.Plan(t.Context(), game.PlanRequest{Saved: sv})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Fingerprint != s.Fingerprint(sv, "Crow's Rest") {
+		t.Error("a Plan for \"\" didn't start the selected world")
+	}
+}
+
 func TestJoin(t *testing.T) {
 	s := Game{}.New(testEnv(t)).(*server)
 	sv := defaultSaved()
@@ -534,7 +584,10 @@ func TestExitHint(t *testing.T) {
 		{[]string{"Internal Error: user groups passwords must be unique"}, "user groups passwords must be unique"},
 		{[]string{"[I 00:00:01,035] [online] Server failed to connected to Steam 3"}, "Steam"},
 		{[]string{"[E 00:00:02,000] [server] Failed to load Server Save Game"}, "backups"},
-		{[]string{"[I 01:00:00,000] [app] Trigger gameflow shutdown, exit: SaveDataIssue"}, "couldn't save"},
+		// A server that gives up saving: the retries, then (with players on)
+		// the message it sends them. Its strings; no posted log has these.
+		{[]string{"[E 03:00:00,000] [server] Failed to Save. Retry 3", "[I 03:00:05,000] [game_server] Switching state from Run to Shutdown after 10805.00 s"}, "couldn't save"},
+		{[]string{"[I 03:00:05,000] [server] Send Save Data Error Shutdown Message to Player 'Ash'"}, "couldn't save"},
 	}
 	for _, c := range cases {
 		if got := s.ExitHint(c.tail); !strings.Contains(got, c.want) {
@@ -543,6 +596,11 @@ func TestExitHint(t *testing.T) {
 	}
 	if got := s.ExitHint([]string{"[I 00:12:22,566] [app] Trigger gameflow shutdown, exit: Ctrl_C"}); got != "" {
 		t.Errorf("a normal stop has a hint: %q", got)
+	}
+	// The server says goodbye to its players at every stop; only the
+	// save-error goodbye means it couldn't save.
+	if got := s.ExitHint([]string{"[I 00:12:22,570] [server] Send Shutdown Message to Player 'Ash'"}); got != "" {
+		t.Errorf("a normal goodbye to a player has a hint: %q", got)
 	}
 }
 

@@ -42,9 +42,8 @@ var (
 	rePeerAccepted = regexp.MustCompile(`^\[online\] Session accepted with peer \(\s*(?:id )?(\d{5,20})\s*\)`)
 	rePeerRemoved  = regexp.MustCompile(`(?i)^\[online\] Removed peer (\S+?)\.?$`)
 	reFull         = regexp.MustCompile(`^\[online\] Session rejected with peer because it is full`)
-	// A stop, and why: "Ctrl_C" is the app's (or anyone's) Ctrl+C,
-	// "Ctrl_Break", "Close", "Logoff" and "Shutdown" are Windows asking it
-	// to quit. Anything else is the server stopping by itself.
+	// A stop, and why. The reasons are the names the program gives the
+	// console events it handles (see requested).
 	reShutdown = regexp.MustCompile(`^\[app\] Trigger gameflow shutdown, exit: (\S+)`)
 	// The server's world thread has begun shutting down, which saves the
 	// world on the way out.
@@ -53,6 +52,17 @@ var (
 	// 2024's servers logged every autosave; 1.0 logs none (FACTS.md).
 	reSaved      = regexp.MustCompile(`^\[server\] Saved\b`)
 	reSaveFailed = regexp.MustCompile(`^\[server\] (Failed to save .*|Failed to Save\. Retry .*)$`)
+	// A save failed and the server tries again: what it writes on its way
+	// to giving up ("On dedicated servers, the server will shut down
+	// automatically in case many consecutive attempts to save were
+	// unsuccessful", Keen's Hotfix 6).
+	reSaveRetry = regexp.MustCompile(`^\[server\] Failed to Save\. Retry `)
+	// The server telling each player it is shutting down because it can't
+	// save. The program sends players a reason when it drops them, and
+	// "SaveDataIssue" is one of those reasons, not a reason the server
+	// logs for its own exit (FACTS.md, "Saving and stopping"). With nobody
+	// on, there is no such line, only the retries before it.
+	reSaveQuit   = regexp.MustCompile(`^\[server\] Send Save Data Error Shutdown Message to Player '`)
 	reLoadFailed = regexp.MustCompile(`^\[server\] Failed to load Server Save Game|^\[ecs.\] Could not deserialize savegame`)
 	reBadSocket  = regexp.MustCompile(`^\[online\] Couldn't (?:create|bind) dedicated server socket`)
 	reNoSteam    = regexp.MustCompile(`^\[online\] Server failed to connected? to Steam`)
@@ -63,8 +73,17 @@ var (
 )
 
 // requested are the shutdown reasons that mean someone asked the server to
-// stop, so its end isn't a crash.
-var requested = []string{"Ctrl_C", "Ctrl_Break", "Close", "Logoff", "Shutdown"}
+// stop, so its end isn't a crash. They are the program's names for the
+// console events it handles: Ctrl_C is the app's (or anyone's) Ctrl+C,
+// Ctrl_Break is Ctrl+Break, Close is its console being closed and Logoff is
+// the user signing out of Windows. Its strings hold these four names and,
+// right after them, "[%u]", which most likely prints any other event as a
+// number. A number, or any other word, is not taken as a stop someone
+// asked for: a server that stopped by itself must look like one, so the
+// manager can say so (and start it again, if the owner wants that). The
+// cost is small: a stop for a reason nobody has seen is reported as a
+// crash.
+var requested = []string{"Ctrl_C", "Ctrl_Break", "Close", "Logoff"}
 
 // noise is what the Log page hides: start-up details, the half-minute
 // session dumps and the engine's busy work, which say nothing to the owner.
@@ -112,6 +131,7 @@ type monitor struct {
 	stopping   bool      // a stop someone asked for
 	shutdown   bool      // the world thread began shutting down (it saves)
 	saveBad    bool      // the save system said it couldn't save
+	saveQuit   bool      // the server told players it's quitting over saves
 }
 
 type peer struct{ handle, account string }
@@ -224,19 +244,19 @@ func (m *monitor) Line(raw string, now time.Time) game.Line {
 			Text: "A player couldn't join: the server is full. Raise \"Most players at once\" in Enshrouded's settings to let more in."})
 
 	case reShutdown.MatchString(text):
-		why := reShutdown.FindStringSubmatch(text)[1]
-		switch {
-		case slices.Contains(requested, why):
-			if !m.stopping {
-				m.stopping = true
-				m.state.Stopping = true
-				m.state.StoppingAt = at
-				add(game.Event{Kind: "stopping"})
-			}
-		case why == "SaveDataIssue":
-			// The server gives up after saves failed again and again.
-			m.saveBad = true
-			add(game.Event{Kind: "save_failed", Text: "The server stopped because it couldn't save the world."})
+		if why := reShutdown.FindStringSubmatch(text)[1]; slices.Contains(requested, why) && !m.stopping {
+			m.stopping = true
+			m.state.Stopping = true
+			m.state.StoppingAt = at
+			add(game.Event{Kind: "stopping"})
+		}
+
+	case reSaveQuit.MatchString(text):
+		// One line per player: say it once.
+		m.saveBad = true
+		if !m.saveQuit {
+			m.saveQuit = true
+			add(game.Event{Kind: "save_failed", Text: "The server is shutting down because it couldn't save the world."})
 		}
 
 	case reShutdownState.MatchString(text):

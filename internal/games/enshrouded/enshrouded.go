@@ -216,8 +216,10 @@ func (s *server) ExitHint(tail []string) string {
 		return "The Enshrouded server couldn't connect to Steam. Check that this computer is online, then start it again."
 	case find(reLoadFailed) != nil:
 		return "The Enshrouded server couldn't load the world. Restore one of its backups on the Worlds page, then start it again."
-	case find(reShutdown) != nil && find(reShutdown)[1] == "SaveDataIssue":
-		return "The Enshrouded server stopped because it couldn't save the world. Check that the disk isn't full, then start it again."
+	case find(reSaveQuit) != nil || find(reSaveRetry) != nil:
+		// The server gives up after saves fail again and again; with
+		// nobody on, its retries are the only sign of it.
+		return "The Enshrouded server stopped after it couldn't save the world. Check that the disk isn't full and that no other program (a backup or antivirus program, for example) is holding its saves folder, then start it again."
 	}
 	return ""
 }

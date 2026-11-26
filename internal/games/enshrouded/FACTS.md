@@ -67,6 +67,8 @@ Hosting projects (source code read from git clones on 2026-11-26) and hosting gu
 
 - `enshrouded_server.exe` is a **console program**: its PE optional header has subsystem 3 (`IMAGE_SUBSYSTEM_WINDOWS_CUI`), x86-64 [X]. Keen: "Can the server be run headless? Yes, but there is a DOS window." [K2]. A console program gets a console of its own from CREATE_NO_WINDOW, so the app's Ctrl+C can reach it (spec 2.7).
 - It imports `SetConsoleCtrlHandler` and handles console events by name: its strings include `Ctrl_C`, `Ctrl_Break`, `Close`, `Logoff` and "[app] Trigger gameflow shutdown, exit: %s" [X]. Real logs show "[app] Trigger gameflow shutdown, exit: Ctrl_C" after a SIGINT under Wine or Proton [L3][H1][H2].
+- Those four names sit together in its strings, followed by `[%u]`, most likely how it prints any other event, by number [X]. They are the only exit reasons the program names. Windows shutting down has no name of its own among them.
+- `Shutdown` and `SaveDataIssue` are in its strings too, but not as exit reasons. They are values of `GameMessageLoginErrors` (`Authentication`, `Version`, `Full`, `Shutdown`, `SaveDataIssue`, `Generic`): the reason the server gives a player it drops or turns away. They go with its lines "[server] Send Shutdown Message to Player '%k'" and "[server] Send Save Data Error Shutdown Message to Player '%k'" [X]. No source shows "exit: Shutdown" or "exit: SaveDataIssue".
 - It is the server itself, not a launcher [S], so the app starts it directly (spec 2.4) with no arguments, in its own folder.
 - It reads `enshrouded_server.json` from "the same folder as the enshrouded_server.exe" [R]. Crash dumps also go there [K2]. Its strings include a `--config` option [X]. The adapter doesn't use it, because nothing documents it.
 
@@ -113,9 +115,10 @@ All of them are in the 1.0 program's strings [X], unless the entry says otherwis
 | the player's Steam account | 1.0: `[online] Added peer 0(1) (steamid:76561198039777309)` before the login; 2024: `[online] Session accepted with peer ( id 76561198196714077 ).` then `[online] Added Peer #0.` | [L1], [L2]; [X] (`[online] Added peer %k (%s)`, `[online] Session accepted with peer (%llu)`) |
 | connection gone | `[online] Removed peer 0(1)` (2024: `Removed Peer #0.`) | [L1], [L2] |
 | server full | `[online] Session rejected with peer because it is full (%llu)` | [X] |
-| stop asked | `[app] Trigger gameflow shutdown, exit: Ctrl_C` | [L3] (1.0); [H1][H2] |
+| stop asked | `[app] Trigger gameflow shutdown, exit: Ctrl_C`; the other console events give `Ctrl_Break`, `Close` or `Logoff` | [L3] (1.0); [H1][H2]; [X] |
 | world shutting down | `[game_server] Switching state from Run to Shutdown after 730.20 s` | [L3]; [X] |
 | couldn't save | `Shutting down Server Save System with pending changes`, `Error while shutting down Server Save System`, `[server] Failed to save %k`, `[server] Failed to Save. Retry %k` | [X] |
+| quitting because it can't save | `[server] Send Save Data Error Shutdown Message to Player '%k'`, once per player on (a normal stop sends `[server] Send Shutdown Message to Player '%k'`) | [X]; no real log |
 | port in use | `[online] Couldn't create dedicated server socket. error='%s'`, `[online] Couldn't bind dedicated server socket. error='%s'` | [X] |
 | Steam | `[online] Server failed to connected to Steam %u`, `[online] Server lost connection to Steam` | [X]; jsknnr issue 16 (2024-01-25: "Server failed to connected to Steam 3") |
 | settings refused | `Internal Error: …`, `Config Error: Failed to parse Ip '%k'` | [X] |
@@ -138,7 +141,9 @@ All of them are in the 1.0 program's strings [X], unless the entry says otherwis
 - **1.0 logs no line when it saves.** The 2024 lines `(server) Start Saving` and `(server) Saved` [L4] are not in the 1.0 program, and neither is any other "Saved" or "Saving" line [X]. The Monitor still counts a `[server] Saved` line if one comes, but in 1.0 the only save it can know of is the one at a clean stop. After a stop someone asked for, once the world thread has switched to Shutdown and nothing said the save failed, the end of the process counts as the save.
 - **Ctrl+C saves the world and exits.** The server handles Ctrl+C [X][L3]. It "lets the game save" and stopped 2 to 3 s after SIGINT under Proton [H1, pull request 66]. Hosting tools stop it with SIGINT for that reason [H1][H2][H4]. [H6]: "The dir stays empty until the first autosave tick (log `[server] Saved`) or a graceful stop". CompaBot's Windows stop script "saves it with Ctrl+C" [L1]. **verify, real check:** that Ctrl+C on Windows changes the world's files, also after a takeover (Conformance checks the files changed; `TestRealServer/facts` checks again after a takeover).
 - The server has no console commands, no RCON, no telnet and no web API [G1] ("accepts no input at all"). Ctrl+C is its only gentle stop. The stop chain: interrupt, wait 4 minutes, send again every 90 seconds (spec 5.7).
-- After repeated failed saves, the server shuts itself down ("On dedicated servers, the server will shut down automatically in case many consecutive attempts to save were unsuccessful", Hotfix 6, quoted in [L4]). Its program has `SaveDataIssue` among its shutdown reasons [X]. The Monitor doesn't treat that as a requested stop, so the manager sees the failure.
+- After repeated failed saves, the server shuts itself down ("On dedicated servers, the server will shut down automatically in case many consecutive attempts to save were unsuccessful", Hotfix 6, quoted in [L4]). No posted log shows that shutdown, so its lines come from the program's strings [X]. Each failed attempt logs `[server] Failed to Save. Retry %k`. Then the server tells each player on why they are dropped: `[server] Send Save Data Error Shutdown Message to Player '%k'`. With nobody on, only the retries are left to show it. Whether an `[app] Trigger gameflow shutdown, exit:` line follows, and with what reason, nobody knows: the program names only the four console events (section 2).
+- So the Monitor warns on every failed save and once on the save-error message. It takes only the four console events as a stop someone asked for, so a server that stopped by itself looks like a crash to the manager, which says so (and starts it again when "Start it again if it crashes" is on). The exit hint says the server couldn't save when the end of its log has a retry or the save-error message. A stop for a reason nobody has seen (Windows shutting down, if it prints a number) is also reported as a crash; that costs little.
+- **Not settled by any check:** the real lines and their order when the server gives up saving. The real-server check can't make its saves fail. If an owner's log ever shows it, copy those lines into `testdata/real/` and check the Monitor and the exit hint against them.
 
 ## 9. Worlds
 
@@ -170,7 +175,8 @@ The adapter writes its own texts: the Help lines in the schema, the Join steps, 
 | ready lines | settled as spec says | [K2][L1][L2] |
 | saves every 5 minutes | Keen's figure; 10 measured by one host; 1.0 logs no save line | [K2][G3][X] |
 | Probe: A2S on the query port (verify it answers) | it answers, with the count | [H3][H2][H5][L1]; **real check** prints the answer |
-| Stop: Ctrl+C should reach it (verify it saves) | a console program that handles Ctrl+C and saves on the way out | [X][L3][H1][H6][L1]; **real check** checks the files |
+| Stop: Ctrl+C should reach it (verify it saves) | a console program that handles Ctrl+C and saves on the way out. Its log names the stop's reason: `Ctrl_C`, `Ctrl_Break`, `Close` or `Logoff`, the only reasons the program names (`Shutdown` and `SaveDataIssue` are reasons it gives players, section 2) | [X][L3][H1][H6][L1]; **real check** checks the files |
+| (not in 5.7) the server stopping by itself when it can't save | read from its retries and its save-error message to players, not from an exit reason; no real log shows it (section 8) | [L4][X]; no check can make it happen |
 | import no (verify) | no | [G3][K2] |
 | friends can't type an address | they can search the list by address (press T); Steam favourites stay as the fallback | [G4][K5] |
 
@@ -190,6 +196,8 @@ The adapter writes its own texts: the Help lines in the schema, the Join steps, 
 - the lines that show the second start loaded the world;
 - whether the server touched the owner's own `Saved Games\Enshrouded`;
 - what standard output holds when it goes to a file, and the exit code after Ctrl+C.
+
+The real check can't settle the lines of a server that gives up saving (section 8). Its log after Ctrl+C does show the reason the program gives for that stop (it should be `Ctrl_C`).
 
 ## 14. Where the adapter departs from spec 5.7
 

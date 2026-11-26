@@ -33,8 +33,10 @@ const (
 // read, so these are only for someone looking at the server's own files).
 const keepGameLogs = 10
 
-// values are the settings the server is started with for a world.
+// values are the settings the server is started with for a world ("" is
+// the selected world).
 func (s *server) values(sv game.Saved, world string) configValues {
+	world = worldFor(sv, world)
 	return configValues{
 		name:      s.value(sv, "serverName"),
 		saveDir:   s.worlds.saveDir(world),
@@ -50,7 +52,9 @@ func (s *server) values(sv game.Saved, world string) configValues {
 
 // Fingerprint covers what the server reads from its settings file when it
 // starts and keeps until it stops: everything the Plan writes there. The
-// folders are the instance's own and only change with the world.
+// folders are the instance's own and only change with the world. World ""
+// is the selected world (values sees to that), which is how the manager
+// asks when it compares a running server with the settings.
 func (s *server) Fingerprint(sv game.Saved, world string) string {
 	c := s.values(sv, world)
 	h := sha256.New()
@@ -66,6 +70,7 @@ func (s *server) Fingerprint(sv game.Saved, world string) string {
 // req.Update it first lets SteamCMD fetch a newer build, if Steam has one;
 // a start never waits for another game's download (spec 2.3).
 func (s *server) Plan(ctx context.Context, req game.PlanRequest) (game.Plan, error) {
+	req.World = worldFor(req.Saved, req.World)
 	step := req.Step
 	if step == nil {
 		step = func(string, float64) {}

@@ -133,14 +133,31 @@ func TestMonitorRealCtrlC(t *testing.T) {
 
 // A server that stops by itself is no stop someone asked for, so the
 // manager sees the crash; nor does its end count as a save.
+//
+// The lines of a server that gives up saving are its program's strings
+// (FACTS.md, "Saving and stopping"): no posted log has one. Where its
+// "exit:" line would come, and what reason it would give, nobody knows, so
+// the test gives one the program has no name for.
 func TestMonitorStopsByItself(t *testing.T) {
 	m := Game{}.New(testEnv(t)).Watch(game.Record{}, nil).(*monitor)
 	now := time.Now()
 	m.Line("[I 00:00:01,284] [Session] 'HostOnline' (up)!", now)
-	l := m.Line("[I 03:00:00,000] [app] Trigger gameflow shutdown, exit: SaveDataIssue", now)
-	m.Line("[I 03:00:00,010] [game_server] Switching state from Run to Shutdown after 10800.00 s", now)
-	if m.State().Stopping || len(l.Events) != 1 || l.Events[0].Kind != "save_failed" {
-		t.Errorf("a stop by the server itself: events %q, state %+v", kinds(l.Events), m.State())
+	m.Line("[I 00:30:00,000] [server] Player 'Legiterately' logged in with Permissions:", now)
+	m.Line("[I 00:31:00,000] [server] Player 'Ash' logged in with Permissions:", now)
+	if l := m.Line("[E 03:00:00,000] [server] Failed to Save. Retry 3", now); len(l.Events) != 1 || l.Events[0].Kind != "save_failed" {
+		t.Errorf("a failed save: events %q", kinds(l.Events))
+	}
+	var quit []game.Event
+	for _, p := range []string{"Legiterately", "Ash"} {
+		quit = append(quit, m.Line("[I 03:00:05,000] [server] Send Save Data Error Shutdown Message to Player '"+p+"'", now).Events...)
+	}
+	if len(quit) != 1 || quit[0].Kind != "save_failed" || !strings.Contains(quit[0].Text, "couldn't save") {
+		t.Errorf("the server quitting over saves, told to two players: events %+v", quit)
+	}
+	m.Line("[I 03:00:05,100] [app] Trigger gameflow shutdown, exit: [9]", now)
+	m.Line("[I 03:00:05,110] [game_server] Switching state from Run to Shutdown after 10805.11 s", now)
+	if m.State().Stopping {
+		t.Errorf("a stop by the server itself counted as one someone asked for: %+v", m.State())
 	}
 	m.End(now)
 	if !m.State().LastSave.IsZero() {
@@ -151,7 +168,7 @@ func TestMonitorStopsByItself(t *testing.T) {
 	m = Game{}.New(testEnv(t)).Watch(game.Record{}, nil).(*monitor)
 	m.Line("[I 00:12:22,566] [app] Trigger gameflow shutdown, exit: Ctrl_C", now)
 	m.Line("[I 00:12:22,580] [game_server] Switching state from Run to Shutdown after 730.20 s", now)
-	l = m.Line("[E 00:12:23,000] Error while shutting down Server Save System ", now)
+	l := m.Line("[E 00:12:23,000] Error while shutting down Server Save System ", now)
 	if len(l.Events) != 1 || l.Events[0].Kind != "save_failed" {
 		t.Errorf("the save system's error: %q", kinds(l.Events))
 	}
@@ -160,12 +177,23 @@ func TestMonitorStopsByItself(t *testing.T) {
 		t.Error("a stop whose save failed counted as saved")
 	}
 
-	// Windows closing the console, or shutting down, is a stop too.
-	for _, why := range []string{"Close", "Logoff", "Shutdown", "Ctrl_Break"} {
+	// The program's other console events are stops someone asked for too:
+	// Ctrl+Break, its console closed, the user signing out.
+	for _, why := range []string{"Close", "Logoff", "Ctrl_Break"} {
 		m = Game{}.New(testEnv(t)).Watch(game.Record{}, nil).(*monitor)
 		m.Line("[I 00:12:22,566] [app] Trigger gameflow shutdown, exit: "+why, now)
 		if !m.State().Stopping {
 			t.Errorf("exit: %s isn't a stop", why)
+		}
+	}
+	// "Shutdown" and "SaveDataIssue" are reasons the server gives players
+	// it drops, not names of console events; a reason the program has no
+	// name for is no stop someone asked for either.
+	for _, why := range []string{"Shutdown", "SaveDataIssue", "[6]"} {
+		m = Game{}.New(testEnv(t)).Watch(game.Record{}, nil).(*monitor)
+		m.Line("[I 00:12:22,566] [app] Trigger gameflow shutdown, exit: "+why, now)
+		if m.State().Stopping {
+			t.Errorf("exit: %s counted as a stop someone asked for", why)
 		}
 	}
 }
