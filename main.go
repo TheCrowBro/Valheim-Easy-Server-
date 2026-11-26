@@ -47,6 +47,19 @@ var (
 
 const appName = "Valheim Easy Server"
 
+// Where the app keeps its files. Copies that are already installed look for
+// their data in these folders, so the names never change, even when the
+// name people see does (main_identity_test.go checks them).
+const (
+	// dataFolderName is the data folder on a Mac (in Application Support)
+	// and in the user's local app data when the program's own folder can't
+	// be used.
+	dataFolderName = "ValheimEasyServer"
+	// legacyFolderName is the data folder made next to the program when
+	// it's run from Downloads or the Desktop.
+	legacyFolderName = "Valheim Easy Server"
+)
+
 func main() {
 	dataFlag := flag.String("data", "", "folder for settings, server files, worlds and logs (default: next to this program)")
 	background := flag.Bool("background", false, "start without opening the control panel window (used when starting with Windows)")
@@ -453,13 +466,13 @@ func resolveDataDir(flagValue, exe string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		dir := filepath.Join(base, "ValheimEasyServer")
+		dir := filepath.Join(base, dataFolderName)
 		return dir, os.MkdirAll(dir, 0o755)
 	}
 	dir := filepath.Dir(exe)
 	switch strings.ToLower(filepath.Base(dir)) {
 	case "downloads", "desktop":
-		dir = filepath.Join(dir, appName)
+		dir = filepath.Join(dir, legacyFolderName)
 	}
 	if inTempDir(dir) {
 		dir = "" // running from a temp folder (e.g. straight out of a zip)
@@ -476,7 +489,7 @@ func resolveDataDir(flagValue, exe string) (string, error) {
 			base = local
 		}
 	}
-	dir = filepath.Join(base, "ValheimEasyServer")
+	dir = filepath.Join(base, dataFolderName)
 	return dir, os.MkdirAll(dir, 0o755)
 }
 

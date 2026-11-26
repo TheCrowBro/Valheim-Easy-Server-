@@ -9,6 +9,12 @@ import (
 
 const blockedMsg = "This request was blocked for safety. Reload the page and try again."
 
+// panelHeader is the header the control panel adds to every change it asks
+// for (see guard). An open panel page keeps working across an app update,
+// and the update tests send it too, so its name never changes
+// (web_identity_test.go checks it).
+const panelHeader = "X-VES"
+
 // guard lets in only the control panel on this computer. Anyone sitting at
 // the computer may use it, so there's no password; what it keeps out is
 // other websites open in a browser here:
@@ -76,7 +82,7 @@ func loopbackHost(host string) bool {
 // can't add our custom header without permission, and if the browser sends
 // an Origin it must be this panel.
 func sameOrigin(r *http.Request) bool {
-	if r.Header.Get("X-VES") != "1" {
+	if r.Header.Get(panelHeader) != "1" {
 		return false
 	}
 	origin := r.Header.Get("Origin")

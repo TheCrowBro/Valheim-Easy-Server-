@@ -1,0 +1,895 @@
+[
+  {
+    "method": "GET",
+    "path": "/",
+    "status": 200,
+    "type": "text/html"
+  },
+  {
+    "method": "GET",
+    "path": "/assets/app.js",
+    "status": 200
+  },
+  {
+    "method": "GET",
+    "path": "/api/status",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.activity": "array",
+      "$.app": "object",
+      "$.app.build": "number",
+      "$.app.version": "string",
+      "$.canHibernate": "bool",
+      "$.checklist": "object",
+      "$.checklist.firewall": "bool",
+      "$.checklist.freeDiskGB": "number",
+      "$.checklist.hibernate": "bool",
+      "$.checklist.installed": "bool",
+      "$.checklist.launchOnLogin": "bool",
+      "$.checklist.wakeOnLan": "bool",
+      "$.checklist.wired": "bool",
+      "$.hibernate": "object",
+      "$.hibernate.available": "bool",
+      "$.installed": "bool",
+      "$.join": "object",
+      "$.join.crossplay": "bool",
+      "$.join.lanAddrs": "array",
+      "$.join.lanAddrs[]": "string",
+      "$.join.password": "string",
+      "$.join.port": "number",
+      "$.join.public": "bool",
+      "$.live": "object",
+      "$.live.cores": "number",
+      "$.live.cpu": "number",
+      "$.live.cpuSys": "number",
+      "$.live.gpu": "number",
+      "$.live.gpuOk": "bool",
+      "$.live.gpus": "null",
+      "$.live.mem": "number",
+      "$.live.memSys": "number",
+      "$.live.memTotal": "number",
+      "$.live.netDown": "number",
+      "$.live.netOk": "bool",
+      "$.live.netUp": "number",
+      "$.live.players": "number",
+      "$.live.running": "bool",
+      "$.live.t": "number",
+      "$.machine": "object",
+      "$.machine.cpu": "string",
+      "$.machine.gpus": "null",
+      "$.machine.hostname": "string",
+      "$.machine.memTotal": "number",
+      "$.machine.os": "string",
+      "$.machine.threads": "number",
+      "$.needsRestart": "bool",
+      "$.network": "array",
+      "$.network[]": "object",
+      "$.network[].connected": "bool",
+      "$.network[].description": "string",
+      "$.network[].ipv4": "array",
+      "$.network[].ipv4[]": "string",
+      "$.network[].mac": "string",
+      "$.network[].name": "string",
+      "$.network[].wakeArmed": "bool",
+      "$.network[].wired": "bool",
+      "$.now": "string",
+      "$.platform": "string",
+      "$.players": "array",
+      "$.restMode": "string",
+      "$.runningWorld": "string",
+      "$.serverName": "string",
+      "$.sleep": "object",
+      "$.sleep.available": "bool",
+      "$.state": "string",
+      "$.warnings": "array",
+      "$.world": "string"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/server/start",
+    "status": 400,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.action": "string",
+      "$.error": "string"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/server/stop",
+    "status": 400,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.error": "string"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/server/force-stop",
+    "status": 400,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.error": "string"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/server/restart",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/job/cancel",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/power/keep-awake",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/power/enable-hibernate",
+    "status": 400,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.action": "string",
+      "$.error": "string"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/worlds",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.folder": "string",
+      "$.mods": "array",
+      "$.mods[]": "object",
+      "$.mods[].author": "string",
+      "$.mods[].group": "string",
+      "$.mods[].id": "string",
+      "$.mods[].name": "string",
+      "$.mods[].newPlaces": "bool",
+      "$.mods[].newWorlds": "bool",
+      "$.mods[].package": "string",
+      "$.mods[].players": "string",
+      "$.mods[].short": "string",
+      "$.mods[].summary": "string",
+      "$.mods[].url": "string",
+      "$.options": "object",
+      "$.orphans": "array",
+      "$.running": "string",
+      "$.selected": "string",
+      "$.worlds": "array"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/worlds/create",
+    "body": "{\"name\":\"Asgard\",\"options\":{\"preset\":\"hard\"},\"restart\":false}",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/worlds/options",
+    "body": "{\"name\":\"Asgard\",\"options\":{\"preset\":\"casual\",\"modifiers\":{\"combat\":\"hard\"}}}",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/worlds/mods",
+    "body": "{\"name\":\"Asgard\",\"mods\":[\"planteverything\"]}",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/worlds/select",
+    "body": "{\"name\":\"Midgard\",\"restart\":false}",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/uploads",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.id": "string"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/uploads/{id}/files",
+    "body": "(a world folder, as multipart form data)",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.files": "number"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/uploads/{id}/scan",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.candidates": "array",
+      "$.candidates[]": "object",
+      "$.candidates[].exists": "bool",
+      "$.candidates[].format": "string",
+      "$.candidates[].id": "string",
+      "$.candidates[].modified": "string",
+      "$.candidates[].name": "string",
+      "$.candidates[].renamable": "bool",
+      "$.candidates[].seed": "string",
+      "$.candidates[].size": "number"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/uploads/{id}/import",
+    "body": "{\"choices\":[{\"id\":\"{candidate}\",\"action\":\"import\"}]}",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.job": "number",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/uploads",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.id": "string"
+    }
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/uploads/{id}",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/worlds",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.folder": "string",
+      "$.mods": "array",
+      "$.mods[]": "object",
+      "$.mods[].author": "string",
+      "$.mods[].group": "string",
+      "$.mods[].id": "string",
+      "$.mods[].name": "string",
+      "$.mods[].newPlaces": "bool",
+      "$.mods[].newWorlds": "bool",
+      "$.mods[].package": "string",
+      "$.mods[].players": "string",
+      "$.mods[].short": "string",
+      "$.mods[].summary": "string",
+      "$.mods[].url": "string",
+      "$.options": "object",
+      "$.options.Asgard": "object",
+      "$.options.Asgard.modifiers": "object",
+      "$.options.Asgard.modifiers.combat": "string",
+      "$.options.Asgard.mods": "array",
+      "$.options.Asgard.mods[]": "string",
+      "$.options.Asgard.preset": "string",
+      "$.orphans": "array",
+      "$.running": "string",
+      "$.selected": "string",
+      "$.worlds": "array",
+      "$.worlds[]": "object",
+      "$.worlds[].backups": "array",
+      "$.worlds[].format": "string",
+      "$.worlds[].modified": "string",
+      "$.worlds[].name": "string",
+      "$.worlds[].seed": "string",
+      "$.worlds[].size": "number"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/worlds/backup",
+    "body": "{\"name\":\"Vanaheim\"}",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/worlds/backup-download?name=Vanaheim&id={backup}",
+    "status": 200,
+    "type": "application/zip"
+  },
+  {
+    "method": "GET",
+    "path": "/api/worlds/download?name=Vanaheim",
+    "status": 200,
+    "type": "application/zip"
+  },
+  {
+    "method": "POST",
+    "path": "/api/worlds/restore",
+    "body": "{\"name\":\"Vanaheim\",\"backupId\":\"{backup}\"}",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/worlds/rename",
+    "body": "{\"name\":\"Vanaheim\",\"newName\":\"Jotunheim\"}",
+    "status": 400,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.error": "string"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/worlds/delete",
+    "body": "{\"name\":\"Vanaheim\"}",
+    "status": 400,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.error": "string"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/worlds/select",
+    "body": "{\"name\":\"Midgard\",\"restart\":false}",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/worlds/delete",
+    "body": "{\"name\":\"Vanaheim\"}",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/worlds/download?name=Nowhere",
+    "status": 400,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.error": "string"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/worlds/backup-download?name=Midgard&id=gone",
+    "status": 400,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.error": "string"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/local-worlds",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.candidates": "array"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/local-worlds/import",
+    "body": "{\"choices\":[]}",
+    "status": 400,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.error": "string"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/settings",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.keys": "array",
+      "$.keys[]": "string",
+      "$.launchOnLogin": "bool",
+      "$.modifierOrder": "array",
+      "$.modifierOrder[]": "string",
+      "$.modifiers": "object",
+      "$.modifiers.combat": "array",
+      "$.modifiers.combat[]": "string",
+      "$.modifiers.deathpenalty": "array",
+      "$.modifiers.deathpenalty[]": "string",
+      "$.modifiers.portals": "array",
+      "$.modifiers.portals[]": "string",
+      "$.modifiers.raids": "array",
+      "$.modifiers.raids[]": "string",
+      "$.modifiers.resources": "array",
+      "$.modifiers.resources[]": "string",
+      "$.paths": "object",
+      "$.paths.backups": "string",
+      "$.paths.data": "string",
+      "$.paths.logs": "string",
+      "$.paths.save": "string",
+      "$.paths.server": "string",
+      "$.paths.serverExe": "string",
+      "$.paths.settings": "string",
+      "$.paths.staging": "string",
+      "$.paths.steamcmd": "string",
+      "$.paths.steamcmdExe": "string",
+      "$.paths.worlds": "string",
+      "$.presets": "array",
+      "$.presets[]": "string",
+      "$.settings": "object",
+      "$.settings.autoRestart": "bool",
+      "$.settings.autoUpdate": "bool",
+      "$.settings.backupLongMinutes": "number",
+      "$.settings.backupShortMinutes": "number",
+      "$.settings.backups": "number",
+      "$.settings.crossplay": "bool",
+      "$.settings.discord": "bool",
+      "$.settings.discordDaily": "bool",
+      "$.settings.discordPassword": "bool",
+      "$.settings.discordStopped": "bool",
+      "$.settings.discordWake": "bool",
+      "$.settings.idleHibernate": "bool",
+      "$.settings.idleMinutes": "number",
+      "$.settings.password": "string",
+      "$.settings.port": "number",
+      "$.settings.public": "bool",
+      "$.settings.restMode": "string",
+      "$.settings.saveIntervalMinutes": "number",
+      "$.settings.serverName": "string",
+      "$.settings.startAfterWake": "bool",
+      "$.settings.startWithApp": "bool",
+      "$.settings.updateOnStart": "bool",
+      "$.settings.world": "string",
+      "$.settings.worldOptions": "object",
+      "$.settings.worldOptions.Asgard": "object",
+      "$.settings.worldOptions.Asgard.modifiers": "object",
+      "$.settings.worldOptions.Asgard.modifiers.combat": "string",
+      "$.settings.worldOptions.Asgard.mods": "array",
+      "$.settings.worldOptions.Asgard.mods[]": "string",
+      "$.settings.worldOptions.Asgard.preset": "string",
+      "$.version": "string"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/settings",
+    "body": "{the settings, as GET gave them}",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/discord/test",
+    "body": "{\"webhook\":\"https://discord.com/api/webhooks/123/abc\"}",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/discord/test",
+    "body": "{\"webhook\":\"https://discord.com/channels/1/2\"}",
+    "status": 400,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.error": "string",
+      "$.fields": "object",
+      "$.fields.discordWebhook": "string"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/jetkvm",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.address": "string",
+      "$.busy": "bool",
+      "$.canPost": "bool",
+      "$.guild": "bool",
+      "$.key": "string",
+      "$.missing": "string",
+      "$.on": "bool",
+      "$.token": "bool"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/jetkvm/install",
+    "body": "{\"address\":\"\",\"token\":\"\",\"trust\":false}",
+    "status": 400,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.error": "string",
+      "$.fields": "object",
+      "$.fields.botToken": "string",
+      "$.fields.jetkvm": "string"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/jetkvm/remove",
+    "body": "{\"force\":true}",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/jetkvm/post",
+    "body": "{\"what\":\"invite\"}",
+    "status": 400,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.error": "string"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/app/update",
+    "body": "{\"install\":false}",
+    "status": 400,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.error": "string"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/lists",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.admins": "array",
+      "$.banned": "array",
+      "$.permitted": "array"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/lists",
+    "body": "{\"kind\":\"admins\",\"ids\":[\"76561198000000001\"]}",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/players",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.players": "array"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/records?period=week",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.from": "string",
+      "$.players": "array",
+      "$.records": "array",
+      "$.to": "string"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/records?period=forever",
+    "status": 400,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.error": "string"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/records",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.from": "string",
+      "$.players": "array",
+      "$.records": "array",
+      "$.to": "string"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/stats?range=1h",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.byPlayers": "object",
+      "$.byPlayers.buckets": "array",
+      "$.byPlayers.since": "string",
+      "$.machine": "object",
+      "$.machine.cpu": "string",
+      "$.machine.gpus": "null",
+      "$.machine.hostname": "string",
+      "$.machine.memTotal": "number",
+      "$.machine.os": "string",
+      "$.machine.threads": "number",
+      "$.rangeSeconds": "number",
+      "$.runningSeconds": "number",
+      "$.samples": "array"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/stats/reset",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/logs?after=0",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.last": "number",
+      "$.lines": "array"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/logs/download",
+    "status": 404,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.error": "string"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/system/open-folder",
+    "body": "{\"which\":\"nowhere\"}",
+    "status": 400,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.error": "string"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/server/install",
+    "body": "{\"repair\":false}",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/status",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.activity": "array",
+      "$.activity[]": "object",
+      "$.activity[].kind": "string",
+      "$.activity[].seq": "number",
+      "$.activity[].text": "string",
+      "$.activity[].time": "string",
+      "$.app": "object",
+      "$.app.build": "number",
+      "$.app.version": "string",
+      "$.build": "string",
+      "$.buildDate": "string",
+      "$.canHibernate": "bool",
+      "$.checklist": "object",
+      "$.checklist.firewall": "bool",
+      "$.checklist.freeDiskGB": "number",
+      "$.checklist.hibernate": "bool",
+      "$.checklist.installed": "bool",
+      "$.checklist.launchOnLogin": "bool",
+      "$.checklist.wakeOnLan": "bool",
+      "$.checklist.wired": "bool",
+      "$.hibernate": "object",
+      "$.hibernate.available": "bool",
+      "$.installed": "bool",
+      "$.job": "object",
+      "$.job.cancellable": "bool",
+      "$.job.finished": "string",
+      "$.job.id": "number",
+      "$.job.kind": "string",
+      "$.job.message": "string",
+      "$.job.percent": "number",
+      "$.job.result": "string",
+      "$.job.started": "string",
+      "$.job.title": "string",
+      "$.join": "object",
+      "$.join.crossplay": "bool",
+      "$.join.lanAddrs": "array",
+      "$.join.lanAddrs[]": "string",
+      "$.join.password": "string",
+      "$.join.port": "number",
+      "$.join.public": "bool",
+      "$.live": "object",
+      "$.live.cores": "number",
+      "$.live.cpu": "number",
+      "$.live.cpuSys": "number",
+      "$.live.gpu": "number",
+      "$.live.gpuOk": "bool",
+      "$.live.gpus": "null",
+      "$.live.mem": "number",
+      "$.live.memSys": "number",
+      "$.live.memTotal": "number",
+      "$.live.netDown": "number",
+      "$.live.netOk": "bool",
+      "$.live.netUp": "number",
+      "$.live.players": "number",
+      "$.live.running": "bool",
+      "$.live.t": "number",
+      "$.machine": "object",
+      "$.machine.cpu": "string",
+      "$.machine.gpus": "null",
+      "$.machine.hostname": "string",
+      "$.machine.memTotal": "number",
+      "$.machine.os": "string",
+      "$.machine.threads": "number",
+      "$.needsRestart": "bool",
+      "$.network": "array",
+      "$.network[]": "object",
+      "$.network[].connected": "bool",
+      "$.network[].description": "string",
+      "$.network[].ipv4": "array",
+      "$.network[].ipv4[]": "string",
+      "$.network[].mac": "string",
+      "$.network[].name": "string",
+      "$.network[].wakeArmed": "bool",
+      "$.network[].wired": "bool",
+      "$.now": "string",
+      "$.platform": "string",
+      "$.players": "array",
+      "$.restMode": "string",
+      "$.runningWorld": "string",
+      "$.serverName": "string",
+      "$.sleep": "object",
+      "$.sleep.available": "bool",
+      "$.state": "string",
+      "$.warnings": "array",
+      "$.world": "string"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/power/hibernate",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/system/quit",
+    "body": "{\"stopServer\":false}",
+    "status": 200,
+    "type": "application/json",
+    "shape": {
+      "$": "object",
+      "$.ok": "bool"
+    }
+  }
+]

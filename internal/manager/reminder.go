@@ -24,8 +24,14 @@ type played struct {
 	Password string            `json:"password,omitempty"` // a hash, enough to notice a change
 }
 
+// reminderSalt starts what's hashed to note the password. lastplayed.json
+// keeps the hash an older copy of the app made, so a different salt would
+// tell everyone to use a new password that hasn't changed
+// (manager_identity_test.go checks it).
+const reminderSalt = "valheim-easy-server:"
+
 func hashPassword(pw string) string {
-	sum := sha256.Sum256([]byte("valheim-easy-server:" + pw))
+	sum := sha256.Sum256([]byte(reminderSalt + pw))
 	return hex.EncodeToString(sum[:8])
 }
 

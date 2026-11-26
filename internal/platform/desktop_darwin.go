@@ -14,9 +14,6 @@ import (
 // OpenAppWindow opens the control panel in the default browser.
 func OpenAppWindow(url string) error { return OpenURL(url) }
 
-// launchLabel names the app's login item for launchd.
-const launchLabel = "com.thecrowbro.valheimeasyserver"
-
 func launchAgentPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

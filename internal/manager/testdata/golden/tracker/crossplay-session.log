@@ -1,0 +1,17 @@
+11/20/2026 19:00:00: Valheim version: l-0.219.16 (network version 34)
+11/20/2026 19:00:05: Game server connected
+11/20/2026 19:00:30: Opened PlayFab server
+11/20/2026 19:00:30: New session server "Viking Night" that has join code , now 0 player(s)
+11/20/2026 19:00:33: Session "Viking Night" registered with join code 604510
+11/20/2026 19:00:34: Session "Viking Night" with join code 604510 and IP 203.0.113.4:2456 is active with 0 player(s)
+11/20/2026 19:05:00: PlayFab socket with remote ID playfab/AAAA received local Platform ID Xbox_2535416401464117
+11/20/2026 19:05:01: Got handshake from client playfab/AAAA
+11/20/2026 19:05:09: Got character ZDOID from Freydis : 999:1
+11/20/2026 19:06:00: PlayFab socket with remote ID playfab/BBBB received local Platform ID Steam_76561198000000003
+11/20/2026 19:06:01: Got handshake from client playfab/BBBB
+11/20/2026 19:06:09: Got character ZDOID from Sigrid : 1001:1
+11/20/2026 19:10:00: Session "Viking Night" with join code 604510 and IP 203.0.113.4:2456 is active with 2 player(s)
+11/20/2026 19:40:00: Closing socket playfab/AAAA
+11/20/2026 19:41:00: Session "Viking Night" registered with join code 777777
+11/20/2026 19:50:00: Closing socket playfab/BBBB
+11/20/2026 19:55:00: Shuting down
