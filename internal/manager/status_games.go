@@ -17,6 +17,8 @@ package manager
 // (spec 4.8): no disk, process or network.
 
 import (
+	"fmt"
+
 	"valheim-easy-server/internal/game"
 )
 
@@ -58,6 +60,11 @@ type GameStatus struct {
 	Discord  *GameDiscordStatus `json:"discord"`  // discord.go (D); null when the game doesn't post
 	Reminder []string           `json:"reminder"` // what players need to do before joining
 	Warnings []string           `json:"warnings"`
+	// ConsoleInUse: a running console game someone plays, or may (its
+	// presence isn't known or not yet proven). An automatic app update waits
+	// for it; a manual one would leave it without its console until its next
+	// start, which the panel says before it updates (spec 2.11).
+	ConsoleInUse bool `json:"consoleInUse,omitempty"`
 }
 
 // PortStatus is one of a game's ports as it stands.
@@ -107,11 +114,11 @@ type gameView struct {
 // caches (spec 4.8), so this is M3's to finish for them.
 func (m *Manager) gameViewLocked(inst *instance, lan []string) gameView {
 	v := gameView{saved: inst.saved(), state: m.instStateLocked(inst), installed: m.installedLocked(inst),
-		build: inst.cache.build, hasBuild: inst.cache.hasBuild}
+		build: inst.cache.build, hasBuild: inst.cache.hasBuild && inst.cache.installed}
 	if r := inst.run; r != nil {
 		rs := r.state()
 		v.runState, v.rec = &rs, &r.rec
-		v.needsRestart = r.rec.ArgsKey != "" && r.rec.ArgsKey != inst.srv.Fingerprint(v.saved, "")
+		v.needsRestart = r.rec.ArgsKey != "" && r.rec.ArgsKey != inst.srv.Fingerprint(v.saved, selectedWorld(inst, v.saved))
 	}
 	v.join = inst.srv.Join(game.JoinInput{Rec: v.rec, State: v.runState, Saved: v.saved, PublicIP: m.net.public,
 		LAN: lan, Router: m.routerStatusLocked(inst)})
@@ -146,6 +153,18 @@ func (m *Manager) gameStatusLocked(inst *instance, v gameView) GameStatus {
 			gs.Reminder = rem
 		}
 	}
+	if !inst.legacy {
+		gs.Warnings = m.gameWarningsLocked(inst, v)
+	}
+	if inst.run != nil && m.isHiddenLocked(inst) {
+		// It was removed from the panel, yet its server runs: started by an
+		// older version of the app after going back to it (which knows
+		// nothing of hiding, spec 3.6) or outside the app, then taken over.
+		// It shows, unstarred, until it stops; it can be stopped but not
+		// started or restarted.
+		gs.Warnings = append(gs.Warnings, inst.short()+" was removed from the panel, but its server is running, so it shows here until it stops. To keep it, add it again with Add a game.")
+	}
+	gs.ConsoleInUse = m.consoleInUseOfLocked(inst)
 	// One hook per stream.
 	router := m.routerStatusLocked(inst) // N
 	for _, p := range info.Ports {
@@ -174,7 +193,14 @@ func (m *Manager) gamesStatusLocked(st *Status, lan []string, legacy gameView) {
 	for _, id := range m.order {
 		inst := m.instances[id]
 		if inst.srv == nil {
-			continue // a foreign instance: M3 shows it from its run record
+			st.Games = append(st.Games, m.foreignStatusLocked(inst))
+			continue
+		}
+		if m.isHiddenLocked(inst) && inst.run == nil {
+			// Removed from the panel (I1): only Add a game offers it again.
+			// While its server runs it is shown all the same (gameStatusLocked
+			// says why), so a hidden Valheim never runs unseen.
+			continue
 		}
 		v := legacy
 		if !inst.legacy {
@@ -193,4 +219,43 @@ func (m *Manager) gamesStatusLocked(st *Status, lan []string, legacy gameView) {
 	st.Sidebar = SidebarStatus{ActiveOpen: m.servers.App.ActiveListOpen(), InactiveOpen: m.servers.App.InactiveListOpen()}
 	st.Router = m.routerSummaryLocked() // N
 	st.SafeMode = m.safeMode
+}
+
+// gameWarningsLocked are a non-legacy game's own warnings, from memory:
+// settings to fix, a probe that keeps failing, a takeover still catching
+// up with its log, its drive almost full.
+func (m *Manager) gameWarningsLocked(inst *instance, v gameView) []string {
+	out := []string{}
+	if errs := inst.srv.Validate(v.saved, selectedWorld(inst, v.saved)); len(errs) > 0 {
+		out = append(out, "Some settings need fixing before the server can start: "+errs.Error())
+	}
+	if w := m.probeWarningLocked(inst); w != "" {
+		out = append(out, w)
+	}
+	if r := inst.run; r != nil && r.replaying {
+		out = append(out, "Catching up with the server log…")
+	}
+	if c := inst.cache; c.freeDiskOK && c.freeDisk < 2<<30 {
+		out = append(out, "The drive with the worlds is almost full. "+inst.short()+" may stop saving when it runs out of space: free up some room.")
+	}
+	return out
+}
+
+// foreignStatusLocked is a foreign instance as the panel shows it: its
+// name and why this version can't run it, and whether its server is
+// running (its run file names a live process, foreign.go).
+func (m *Manager) foreignStatusLocked(inst *instance) GameStatus {
+	info := inst.info
+	gs := GameStatus{ID: inst.id, Game: info.ID, Name: info.Name, Short: info.Short, Letter: info.Letter, Color: info.Color,
+		Stage: info.Stage, Starred: m.isStarredLocked(inst), Foreign: inst.foreign, Disabled: m.isDisabledLocked(inst),
+		CanRun: game.CantRun, State: StateStopped, Players: []game.Player{}, Count: -1, MaxPlayers: info.MaxPlayers,
+		Presence: game.Unknown, Join: game.Join{LAN: []string{}, Steps: []string{}}, Ports: []PortStatus{},
+		Reminder: []string{}, Warnings: []string{}}
+	for _, f := range m.foreign {
+		if f.id == inst.id {
+			gs.State = StateOnline
+			gs.Warnings = append(gs.Warnings, fmt.Sprintf("%s is running, started by a newer version of the app; this version can't control it.", f.name))
+		}
+	}
+	return gs
 }

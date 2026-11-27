@@ -3,9 +3,10 @@
 // sleep and waking. The web control panel and the tray icon both drive it.
 //
 // It knows no game itself: each game's adapter (internal/games/<id>, found
-// through internal/game's registry) says everything game-specific. This
-// release runs one game, the legacy one (Valheim), with its data where
-// older builds keep it.
+// through internal/game's registry) says everything game-specific. The
+// legacy game (Valheim) keeps its data where older builds keep it; every
+// other game is an instance in servers.json with its files under
+// games/<id> (spec 3).
 package manager
 
 import (
@@ -71,6 +72,17 @@ type Options struct {
 	Relaunch        func() // closes the app and starts the program at AppExe, after an update
 	SampleInterval  time.Duration
 	RestartDelay    time.Duration // wait before restarting after a crash
+
+	// Games are more games, for tests: an instance's game is looked up here
+	// before the registry's, so a test can run a made-up game (the
+	// gametest demo) without adding it to the registry the app ships.
+	Games []game.Game
+	// Fake installs and runs every game but the legacy one as the
+	// stand-in server (spec 7.1). Tests set it; when it is nil, the
+	// EGS_DEV_FAKE_SERVERS environment variable (the path of a built
+	// cmd/fakeserver) sets it for development. The legacy game keeps
+	// Installer and --dev-fake-server.
+	Fake *game.Fake
 }
 
 // Manager is the heart of the app. All methods are safe to call from
@@ -82,13 +94,29 @@ type Manager struct {
 	awake   *platform.KeepAwake
 	machine platform.MachineInfo
 
-	// The instances, by id, and their order. Made in New and never
-	// changed afterwards in this release, so they are read without m.mu.
-	// (In R3, adding and removing a game change them: M3 decides how they
-	// are guarded then.)
-	instances map[string]*instance
-	order     []string
-	legacyID  string
+	// The instances, by id, and their order. Adding and removing a game
+	// change them, under m.mu, and only ever by replacing the map and the
+	// slice with new ones (addInstanceLocked, removeInstanceLocked), never
+	// by changing them in place. Code holding m.mu may read these fields;
+	// code without it reads the same lists through insts (eachInstance,
+	// instanceByID), which is swapped at the same time.
+	instances  map[string]*instance
+	order      []string
+	insts      atomic.Pointer[instList]
+	legacyID   string
+	legacyInst *instance // never changes: the legacy instance always exists
+
+	// servers.json as last read or written (spec 3.2), published for the
+	// instances' settings stores (serversStore), which read it without
+	// m.mu. Each value is never changed once published: updateServers
+	// makes and publishes a new one. m.servers below is the same list,
+	// for code that holds m.mu.
+	serversSnap atomic.Pointer[servers.File]
+	serversMu   sync.Mutex // updateServers, one change at a time
+	fake        *game.Fake // fake mode: every non-legacy game is the stand-in (Options.Fake)
+	allStages   bool       // EGS_DEV_ALL_STAGES=1: hidden games run as previews
+	serversNote string     // the warning servers.json's loading gave, for the activity feed
+	found       []string   // instances rebuilt from games/ folders: their ports are still to pick
 
 	history   *stats.History   // the machine and the legacy instance (history.json)
 	byPlayers *stats.ByPlayers // the legacy instance's usage by players (stats.json)
@@ -246,10 +274,17 @@ func New(opt Options) (*Manager, error) {
 		return nil, errors.New("no legacy game is registered: the program must import internal/games/all")
 	}
 	inst := m.newLegacyInstance(g)
-	m.instances = map[string]*instance{inst.id: inst}
-	m.order = []string{inst.id}
-	m.legacyID = inst.id
+	m.legacyID, m.legacyInst = inst.id, inst
+	m.setInstancesLocked(map[string]*instance{inst.id: inst}, []string{inst.id})
 	m.observers = newObservers(m)
+	m.fake = opt.Fake
+	if m.fake == nil {
+		m.fake = fakeFromEnv()
+	}
+	m.allStages = os.Getenv("EGS_DEV_ALL_STAGES") == "1"
+	// servers.json: the other games (spec 3.4). It reads that file only, and
+	// makes each instance without touching its folder, so New stays quick.
+	m.openServers(time.Now())
 	if b, err := stats.Load(filepath.Join(opt.DataDir, "stats.json")); err == nil {
 		m.byPlayers = b
 	} else {
@@ -257,6 +292,12 @@ func New(opt Options) (*Manager, error) {
 	}
 	m.loadHistory()
 	m.loadActivity()
+	if m.serversNote != "" {
+		m.addActivity("warning", "", m.serversNote)
+	}
+	// Only the legacy instance's files are read here; the other games'
+	// (games/<id>/players.json and the rest) are read by Start, so New
+	// reads nothing in their folders (I5).
 	m.loadKnown(inst)
 	m.loadPlayed(inst)
 	m.loadRecords(inst)
@@ -271,41 +312,43 @@ func New(opt Options) (*Manager, error) {
 func (m *Manager) Start() {
 	m.ctx, m.cancel = context.WithCancel(context.Background())
 	m.sys = platform.NewSysSampler()
-	inst := m.legacy()
-	m.awake = platform.NewKeepAwake(inst.short() + " server is running")
-	inst.srv.Worlds().CleanStaging(time.Hour)
+	m.awake = platform.NewKeepAwake("A game server is running")
 	updated := m.canUpdate() && m.noteUpdate()
-	m.eachInstance(m.adoptRunning)
+	// The other games' saved data, what is installed, and ports for any
+	// instance rebuilt from its folder, before anything can start them.
+	m.prepareInstances()
+	m.eachInstance(func(i *instance) {
+		if i.srv != nil {
+			i.srv.Worlds().CleanStaging(time.Hour)
+			m.adoptRunning(i)
+		}
+	})
 	m.scanForeign()
 	m.go_(m.sampleLoop)
 	m.go_(m.checksLoop)
 	m.go_(m.discordLoop)
 	m.go_(m.updateLoop)
-	m.go_(m.backfillRecords)
+	m.go_(func() {
+		// Every game this version runs; a foreign one's files are never read.
+		m.eachInstance(func(i *instance) {
+			if i.srv != nil {
+				m.backfillRecordsFor(i)
+			}
+		})
+	})
 	m.go_(m.dailyLoop)
 	m.go_(m.wakerLoop)
 	m.syncWakeListener()
 
-	m.mu.Lock()
-	autoStart := m.settings.StartWithApp && inst.run == nil && m.installedLocked(inst)
-	m.mu.Unlock()
-	if autoStart && updated {
-		// Nobody opened the app: it restarted to update. A server that was
-		// stopped stays stopped (one that was running is taken over).
-		m.log.Printf("not starting the server: the app restarted after an update")
-		autoStart = false
-	}
-	if autoStart {
-		m.addActivity("info", "", "Starting the server because \"Start the server when the app opens\" is on.")
-		if err := m.StartServer(); err != nil {
-			m.log.Printf("auto start: %v", err)
-		}
-	}
+	m.startWithApp(updated)
 }
 
 // Close stops background work and saves data. Running servers keep
-// running; the app finds them again next time.
+// running; the app finds them again next time. A console game is told to
+// save first (its save line), because the copy of the app that takes it
+// over can't type on its console (spec 2.11).
 func (m *Manager) Close() {
+	m.saveConsoles(consoleSaveWait)
 	m.mu.Lock()
 	m.closing = true
 	m.mu.Unlock()
@@ -334,6 +377,7 @@ func (m *Manager) Close() {
 	if m.sys != nil {
 		m.sys.Close()
 	}
+	m.closeConsoles()
 }
 
 // go_ runs fn in a goroutine that is waited for on Close and never takes
@@ -375,6 +419,21 @@ func (m *Manager) addActivity(kind, name, text string) {
 
 func (m *Manager) addActivityAt(at time.Time, kind, name, text string) {
 	m.addGameActivityAt(nil, at, kind, name, text)
+}
+
+// instActivity adds a feed entry about an instance: the legacy game's as
+// it always has (no "game" key, so activity.json and the old panel see
+// exactly what older builds wrote), any other game's with its instance
+// (addGameActivity). Like addActivity it never takes m.mu.
+func (m *Manager) instActivity(inst *instance, kind, name, text string) {
+	m.instActivityAt(inst, time.Now(), kind, name, text)
+}
+
+func (m *Manager) instActivityAt(inst *instance, at time.Time, kind, name, text string) {
+	if inst == nil || inst.legacy {
+		inst = nil
+	}
+	m.addGameActivityAt(inst, at, kind, name, text)
 }
 
 // addGameActivity adds a feed entry about one instance (its "game" in
@@ -432,7 +491,7 @@ func (m *Manager) CurrentLogPath() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if inst.run != nil {
-		return inst.run.rec.LogPath
+		return inst.run.logFile()
 	}
 	return newestLog(inst, inst.dirs.Logs)
 }
@@ -450,6 +509,28 @@ func (m *Manager) instFile(inst *instance, name string) string {
 	return filepath.Join(m.opt.DataDir, "games", inst.id, name)
 }
 
+// saveKnown writes the instance's players.json. Another game's is written
+// only once someone has played it, so a game nobody played leaves no file.
+func (m *Manager) saveKnown(inst *instance) {
+	if inst.srv == nil {
+		return // a foreign instance: this version never touches its files
+	}
+	m.mu.Lock()
+	list := make([]*KnownPlayer, 0, len(inst.known))
+	for _, p := range inst.known {
+		cp := *p
+		list = append(list, &cp)
+	}
+	m.mu.Unlock()
+	if len(list) == 0 && !inst.legacy {
+		return
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].LastSeen.After(list[j].LastSeen) })
+	if b, err := json.MarshalIndent(list, "", "  "); err == nil {
+		config.WriteFileAtomic(m.instFile(inst, "players.json"), b, 0o644)
+	}
+}
+
 func (m *Manager) loadKnown(inst *instance) {
 	b, err := os.ReadFile(m.instFile(inst, "players.json"))
 	if err != nil {
@@ -464,18 +545,7 @@ func (m *Manager) loadKnown(inst *instance) {
 }
 
 func (m *Manager) saveData() {
-	inst := m.legacy()
-	m.mu.Lock()
-	list := make([]*KnownPlayer, 0, len(inst.known))
-	for _, p := range inst.known {
-		cp := *p
-		list = append(list, &cp)
-	}
-	m.mu.Unlock()
-	sort.Slice(list, func(i, j int) bool { return list[i].LastSeen.After(list[j].LastSeen) })
-	if b, err := json.MarshalIndent(list, "", "  "); err == nil {
-		config.WriteFileAtomic(m.instFile(inst, "players.json"), b, 0o644)
-	}
+	m.eachInstance(m.saveKnown)
 	if b, err := json.Marshal(m.byPlayers); err == nil {
 		config.WriteFileAtomic(m.dataFile("stats.json"), b, 0o644)
 	}
@@ -557,7 +627,7 @@ func (m *Manager) notePlayerLocked(inst *instance, a game.Event, since time.Time
 	}
 	if a.Account != "" {
 		if a.Kind == "join" && p.PlatformID != "" && p.PlatformID != a.Account {
-			m.addActivity("warning", a.Name, fmt.Sprintf("%s joined from a different account than before (%s, before %s). Anyone can pick any name, so check it's really them before making them an admin.", a.Name, a.Account, p.PlatformID))
+			m.instActivity(inst, "warning", a.Name, fmt.Sprintf("%s joined from a different account than before (%s, before %s). Anyone can pick any name, so check it's really them before making them an admin.", a.Name, a.Account, p.PlatformID))
 		}
 		p.PlatformID = a.Account
 	}

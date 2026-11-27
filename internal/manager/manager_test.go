@@ -101,7 +101,15 @@ func setup(t *testing.T, change ...func(*Options)) *testEnv {
 	env.m.Start()
 	t.Cleanup(func() {
 		if env.m.ForceStop() == nil {
-			waitFor(t, "forced stop", 10*time.Second, func() bool { return env.m.Status().State != StateOnline })
+			// Until the process has exited and its exit is wrapped up, not
+			// only until it stops showing as online: a server still starting
+			// would otherwise outlive the test and write into its folder.
+			waitFor(t, "forced stop", 20*time.Second, func() bool {
+				m := env.m
+				m.mu.Lock()
+				defer m.mu.Unlock()
+				return m.legacy().run == nil
+			})
 		}
 		env.m.Close()
 	})

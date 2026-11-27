@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"valheim-easy-server/internal/game"
 	"valheim-easy-server/internal/worlds"
 )
 
@@ -40,8 +41,10 @@ func (m *Manager) ExportBackup(w io.Writer, name, id string) error {
 }
 
 // NewUpload starts an upload of world files for the legacy game.
-func (m *Manager) NewUpload() (*worlds.Upload, error) {
-	inst := m.legacy()
+func (m *Manager) NewUpload() (*worlds.Upload, error) { return m.newUploadFor(m.legacy()) }
+
+// newUploadFor starts an upload of world files for an instance.
+func (m *Manager) newUploadFor(inst *instance) (*worlds.Upload, error) {
 	inst.srv.Worlds().CleanStaging(2 * time.Hour)
 	m.mu.Lock()
 	staging := inst.dirs.Staging
@@ -68,8 +71,11 @@ func (m *Manager) NewUpload() (*worlds.Upload, error) {
 
 // FinishUpload scans an upload for worlds.
 func (m *Manager) FinishUpload(id string) ([]worlds.Candidate, error) {
-	inst := m.legacy()
-	u, err := m.upload(id)
+	return m.finishUploadFor(m.legacy(), id)
+}
+
+func (m *Manager) finishUploadFor(inst *instance, id string) ([]worlds.Candidate, error) {
+	u, err := m.uploadFor(inst, id)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +84,7 @@ func (m *Manager) FinishUpload(id string) ([]worlds.Candidate, error) {
 	u.Candidates = cands
 	m.mu.Unlock()
 	if len(cands) == 0 {
-		m.DiscardUpload(id)
+		m.discardUploadFor(inst, id)
 		return nil, errors.New(inst.exact("no_worlds", fmt.Sprintf("No %s worlds were found in that.", inst.short())))
 	}
 	m.markInUse(inst, cands)
@@ -95,10 +101,12 @@ func (m *Manager) markInUse(inst *instance, cands []worlds.Candidate) {
 	}
 }
 
-func (m *Manager) upload(id string) (*worlds.Upload, error) {
+func (m *Manager) upload(id string) (*worlds.Upload, error) { return m.uploadFor(m.legacy(), id) }
+
+func (m *Manager) uploadFor(inst *instance, id string) (*worlds.Upload, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	u, ok := m.legacy().uploads[id]
+	u, ok := inst.uploads[id]
 	if !ok {
 		return nil, errors.New("That upload has expired. Please upload the world again.")
 	}
@@ -106,8 +114,9 @@ func (m *Manager) upload(id string) (*worlds.Upload, error) {
 }
 
 // DiscardUpload deletes an upload that won't be imported.
-func (m *Manager) DiscardUpload(id string) {
-	inst := m.legacy()
+func (m *Manager) DiscardUpload(id string) { m.discardUploadFor(m.legacy(), id) }
+
+func (m *Manager) discardUploadFor(inst *instance, id string) {
 	m.mu.Lock()
 	u, ok := inst.uploads[id]
 	delete(inst.uploads, id)
@@ -120,19 +129,26 @@ func (m *Manager) DiscardUpload(id string) {
 // ImportUpload puts the chosen worlds from an upload on the server and
 // returns the job doing it.
 func (m *Manager) ImportUpload(id string, choices []worlds.Choice) (int, error) {
-	u, err := m.upload(id)
+	return m.importUploadFor(m.legacy(), id, choices)
+}
+
+func (m *Manager) importUploadFor(inst *instance, id string, choices []worlds.Choice) (int, error) {
+	u, err := m.uploadFor(inst, id)
 	if err != nil {
 		return 0, err
 	}
 	m.mu.Lock()
 	cands := u.Candidates
 	m.mu.Unlock()
-	return m.startImport(m.legacy(), cands, choices, true, func() { m.DiscardUpload(id) })
+	return m.startImport(inst, cands, choices, true, func() { m.discardUploadFor(inst, id) })
 }
 
 // LocalWorlds finds worlds saved by the legacy game on this computer.
-func (m *Manager) LocalWorlds() []worlds.Candidate {
-	inst := m.legacy()
+func (m *Manager) LocalWorlds() []worlds.Candidate { return m.localWorldsFor(m.legacy()) }
+
+// localWorldsFor finds worlds saved by the owner's own copy of an
+// instance's game on this computer.
+func (m *Manager) localWorldsFor(inst *instance) []worlds.Candidate {
 	cands := inst.srv.Worlds().Local()
 	m.markInUse(inst, cands)
 	m.mu.Lock()
@@ -147,7 +163,10 @@ func (m *Manager) LocalWorlds() []worlds.Candidate {
 // ImportLocal copies chosen worlds from this computer's game saves and
 // returns the job doing it.
 func (m *Manager) ImportLocal(choices []worlds.Choice) (int, error) {
-	inst := m.legacy()
+	return m.importLocalFor(m.legacy(), choices)
+}
+
+func (m *Manager) importLocalFor(inst *instance, choices []worlds.Choice) (int, error) {
 	m.mu.Lock()
 	cands := inst.localCands
 	m.mu.Unlock()
@@ -209,13 +228,13 @@ func (m *Manager) startImport(inst *instance, cands []worlds.Candidate, choices 
 		var added []string
 		for _, p := range done {
 			if p.Replaced {
-				m.addActivity("import", "", fmt.Sprintf("The world %q was replaced with a new copy. The old one is kept as a backup.", p.Name))
+				m.instActivity(inst, "import", "", fmt.Sprintf("The world %q was replaced with a new copy. The old one is kept as a backup.", p.Name))
 			} else {
-				m.addActivity("import", "", fmt.Sprintf("The world %q was added.", p.Name))
+				m.instActivity(inst, "import", "", fmt.Sprintf("The world %q was added.", p.Name))
 				added = append(added, p.Name)
 			}
 		}
-		if serr := m.clearWorldOptions(added); serr != nil {
+		if serr := m.clearWorldSettings(inst, added); serr != nil {
 			m.log.Printf("clearing the options of added worlds: %v", serr)
 		}
 		for _, p := range done {
@@ -224,7 +243,7 @@ func (m *Manager) startImport(inst *instance, cands []worlds.Candidate, choices 
 			}
 			// The world is now saved under the new copy's spelling: the
 			// selection and its options follow, as with a rename.
-			if serr := m.moveWorldSettings(p.Was, p.Name); serr != nil {
+			if serr := m.moveWorldSettingsOf(inst, p.Was, p.Name); serr != nil {
 				m.log.Printf("moving %q's settings to %q: %v", p.Was, p.Name, serr)
 			}
 			if running == p.Was {
@@ -232,7 +251,7 @@ func (m *Manager) startImport(inst *instance, cands []worlds.Candidate, choices 
 			}
 		}
 		if restart {
-			j.step("Starting the server again…", -1)
+			j.step("Starting "+inst.serverObject()+" again…", -1)
 			if serr := m.doStart(ctx, j, inst, running); serr != nil {
 				if err == nil {
 					return fmt.Errorf("%s But the server didn't start again: %w", importResult(done), serr)
@@ -249,11 +268,47 @@ func (m *Manager) startImport(inst *instance, cands []worlds.Candidate, choices 
 		}
 		// On a new server, the first world added is the one to play.
 		if len(before) == 0 && len(done) == 1 && !m.serverRunning(inst) {
-			if err := m.SelectWorld(done[0].Name, false); err == nil {
+			if err := m.SelectWorldGame(inst.id, done[0].Name, false); err == nil {
 				msg += " It's now the world the server plays."
 			}
 		}
 		j.result(msg)
+		return nil
+	})
+}
+
+// clearWorldSettings forgets the values saved for worlds that were just
+// added (the legacy game's in settings.json, clearWorldOptions; another's
+// in servers.json): they belonged to an earlier world of the same name.
+func (m *Manager) clearWorldSettings(inst *instance, names []string) error {
+	if inst.legacy {
+		return m.clearWorldOptions(names)
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	return inst.srv.Store().Save(func(s *game.Saved) error {
+		for _, name := range names {
+			delete(s.Worlds, name)
+		}
+		return nil
+	})
+}
+
+// moveWorldSettingsOf moves the selection and the values of a world from
+// one name to another, when its name changes on import.
+func (m *Manager) moveWorldSettingsOf(inst *instance, from, to string) error {
+	if inst.legacy {
+		return m.moveWorldSettings(from, to)
+	}
+	return inst.srv.Store().Save(func(s *game.Saved) error {
+		if s.World == from {
+			s.World = to
+		}
+		if w, ok := s.Worlds[from]; ok {
+			delete(s.Worlds, from)
+			s.Worlds[to] = w
+		}
 		return nil
 	})
 }
