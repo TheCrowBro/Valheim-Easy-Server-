@@ -1,0 +1,13 @@
+<root>/runtime/java/bin/java
+-Xms512M
+-Xmx2048M
+-jar
+<root>/server/server.jar
+--nogui
+--universe
+<root>/saves
+--world
+Forest
+--port
+25565
+dir <root>/server

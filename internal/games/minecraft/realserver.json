@@ -1,0 +1,7 @@
+{
+  "os": ["windows-latest", "macos-15-intel"],
+  "onDemand": false,
+  "timeoutMinutes": 45,
+  "package": "./internal/games/minecraft/",
+  "run": "TestRealServer"
+}
