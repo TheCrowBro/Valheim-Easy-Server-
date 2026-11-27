@@ -13,7 +13,7 @@ import (
 // TestOneGameRegistered, which allowed only Valheim.
 func TestRegisteredGames(t *testing.T) {
 	want := []string{"valheim", "minecraft", "terraria", "necesse", "vintagestory", "zomboid",
-		"enshrouded", "corekeeper", "palworld", "satisfactory"}
+		"enshrouded", "corekeeper", "palworld", "satisfactory", "windrose"}
 	var got []string
 	for _, g := range game.All() {
 		info := g.Info()
