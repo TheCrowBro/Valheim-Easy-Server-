@@ -151,6 +151,9 @@ func (m *Manager) UpdateGameSettings(id string, ch GameSettingsChange) error {
 		if err != nil {
 			return err
 		}
+		if ch.Disabled != nil {
+			m.starsChanged() // a turned-off game has no Discord command (6.4)
+		}
 	}
 	if ch.StartWithApp != nil && inst.legacy {
 		m.mu.Lock()

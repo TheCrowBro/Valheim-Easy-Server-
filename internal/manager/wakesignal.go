@@ -88,19 +88,11 @@ func (m *Manager) hearWakeSignals(conn net.PacketConn) {
 var wakePacketGame = wol.GameOf
 
 // startFromRequest starts a game for a Discord request: stream A's
-// startFromWake (resume.go), which starts only that game and cancels a
-// resume still to come. Tests replace it.
+// startFromWake (resume.go), which starts only that game through the one
+// start path (startGameWith, with its memory check) and cancels a resume
+// still to come. Tests replace it.
 var startFromRequest = func(m *Manager, id, tag string) error {
-	err := m.startFromWake(id, tag)
-	if errors.Is(err, errNotYet) {
-		// Stream A's start isn't built into this copy yet: the legacy game
-		// starts the way it always did from a wake signal, so /valheim
-		// keeps working meanwhile.
-		if inst, _ := m.instanceByID(id); inst != nil && inst.legacy {
-			return m.StartServer()
-		}
-	}
-	return err
+	return m.startFromWake(id, tag)
 }
 
 // wakeRepeats is how long after a request's first packet its repeats may
@@ -223,6 +215,14 @@ func (m *Manager) askedLocked(inst *instance) {
 		m.wk.asked = map[string]bool{}
 	}
 	m.wk.asked[inst.id] = true
+	// A start quick enough to be ready before this mark was made posts its
+	// online message now (announceLocked posts it once).
+	if run := inst.run; run != nil && run.ready {
+		if post, ok := m.announceLocked(run); ok {
+			m.queueDiscord(post)
+			go m.saveRunInfo(run)
+		}
+	}
 }
 
 // startForRequest starts inst for the request tag. last is the try after
@@ -248,6 +248,16 @@ func (m *Manager) startForRequest(inst *instance, tag string, last bool) {
 		m.wakeTags = map[string]string{}
 	}
 	switch {
+	case err == nil && inst.job == before && inst.run != nil && !inst.run.stopping:
+		// startFromWake found it up already and started nothing (it came
+		// up while the request was kept): met, as a repeat would be.
+		m.wakeTags[inst.id] = tag
+		online = m.metLocked(inst, &post)
+		m.mu.Unlock()
+		if online {
+			m.queueDiscord(post)
+		}
+		return
 	case err == nil:
 		m.wakeTags[inst.id] = tag
 		if j := inst.job; j != before && j != nil && j.Kind == "start" && j.Finished != nil && inst.run == nil {
@@ -316,12 +326,13 @@ func (m *Manager) keepRequest(inst *instance, tag string) {
 	if armed || ctx == nil {
 		return
 	}
+	last := time.After(wakeRepeats) // read here, by the caller, not in the goroutine (tests change it)
 	go func() {
 		defer m.recoverPanic()
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(wakeRepeats):
+		case <-last:
 		}
 		m.mu.Lock()
 		open := m.wk.kept[inst.id] == tag && m.wakeTags[inst.id] != tag

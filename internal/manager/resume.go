@@ -244,13 +244,7 @@ func (m *Manager) resumeNamesLocked(ids []string) string {
 			names = append(names, id)
 		}
 	}
-	switch len(names) {
-	case 0:
-		return ""
-	case 1:
-		return names[0]
-	}
-	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+	return andList(names)
 }
 
 // runResume waits for the network and the 30 s after it (unless told to

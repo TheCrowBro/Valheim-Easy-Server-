@@ -43,13 +43,6 @@ func (p *presence) away() {
 	p.cause.Store(int32(platform.WakeByTimer))
 }
 
-// set replaces a setting of the app's for a test.
-func set[T any](t *testing.T, v *T, to T) {
-	old := *v
-	*v = to
-	t.Cleanup(func() { *v = old })
-}
-
 // here: someone is using the computer.
 func (p *presence) here() {
 	p.idle.Store(0)

@@ -132,11 +132,11 @@ func (m *Manager) Hibernate(reason string) error {
 }
 
 // stopForRest stops the running games before the computer rests, each
-// through its stop chain, all at the same time (spec 4.2), so several
-// games save in the time one takes. One game stops exactly as before, with
-// its steps shown in the sleep job; with several, the job says which are
-// stopping. A game that doesn't stop is left running: resting keeps
-// everything in memory, so nothing is lost.
+// through its stop chain, all at the same time (spec 2.7, stopInstances),
+// so several games save in the time one takes. One game stops exactly as
+// before, with its steps shown in the sleep job; with several, the job says
+// which are stopping. A game that doesn't stop is left running: resting
+// keeps everything in memory, so nothing is lost.
 func (m *Manager) stopForRest(ctx context.Context, j *jobCtl, running []*instance) {
 	if len(running) == 1 {
 		if err := m.doStop(ctx, j, running[0]); err != nil {
@@ -144,31 +144,9 @@ func (m *Manager) stopForRest(ctx context.Context, j *jobCtl, running []*instanc
 		}
 		return
 	}
-	if len(running) == 0 {
-		return
+	for id, err := range m.stopInstances(ctx, j, running) {
+		m.log.Printf("stopping %s before resting: %v", id, err)
 	}
-	ids := make([]string, len(running))
-	for i, inst := range running {
-		ids[i] = inst.id
-	}
-	m.mu.Lock()
-	names := m.resumeNamesLocked(ids)
-	m.mu.Unlock()
-	j.step("Saving the worlds and stopping "+names+"… Please don't turn off the computer.", -1)
-	var wg sync.WaitGroup
-	for _, inst := range running {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer m.recoverPanic()
-			// Its own steps go to a job nobody sees: the sleep job says it.
-			own := &jobCtl{m: m, job: &Job{Kind: "stop", Game: inst.id}}
-			if err := m.doStop(ctx, own, inst); err != nil {
-				m.log.Printf("stopping %s before resting: %v", inst.id, err)
-			}
-		}()
-	}
-	wg.Wait()
 }
 
 // resumableLocked says whether a game running as the computer goes to rest
@@ -340,6 +318,9 @@ func (m *Manager) sample(now time.Time, gap time.Duration) {
 // kept busy) and memory since the last reading, and keeps them on the run.
 // Nothing is known (zeros) when the system won't say.
 func (m *Manager) runUsage(run *serverRun, now time.Time) (cpu, cores float64, mem uint64) {
+	if run.proc == nil {
+		return 0, 0, 0 // a run without a process (only tests make one) uses nothing
+	}
 	used, rss, err := run.proc.Usage()
 	if err != nil {
 		return 0, 0, 0

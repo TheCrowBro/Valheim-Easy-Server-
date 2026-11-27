@@ -22,6 +22,9 @@ import (
 )
 
 func TestRealServer(t *testing.T) {
+	// Before New: the crossplay-off part checks the runner's real router
+	// (spec 5.1), which every other test is kept away from.
+	useRealRouter(t)
 	data := t.TempDir()
 	m, err := New(Options{DataDir: data, NoPublicIP: true, Logger: log.New(os.Stdout, "app: ", log.Ltime)})
 	if err != nil {
@@ -149,6 +152,9 @@ func TestRealServer(t *testing.T) {
 	if st := m.Status(); st.Join.Code != "" {
 		t.Errorf("a join code without crossplay: %q", st.Join.Code)
 	}
+	// Without crossplay Valheim gets router ports (decided); the check is
+	// skipped when no router answers, as on GitHub's runners.
+	checkRealRouter(t, m)
 	stop()
 	dumpLog(t, m)
 	if now, err := os.Stat(bep); err == nil && bepInfo != nil && !now.ModTime().Equal(bepInfo.ModTime()) {

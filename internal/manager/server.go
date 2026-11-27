@@ -509,7 +509,7 @@ func (m *Manager) stopInstances(ctx context.Context, j *jobCtl, insts []*instanc
 	for i, inst := range insts {
 		names[i] = inst.short()
 	}
-	j.step("Saving and stopping "+strings.Join(names, ", ")+"… Please don't turn off the computer.", -1)
+	j.step("Saving the worlds and stopping "+andList(names)+"… Please don't turn off the computer.", -1)
 	type result struct {
 		id  string
 		err error
@@ -517,11 +517,15 @@ func (m *Manager) stopInstances(ctx context.Context, j *jobCtl, insts []*instanc
 	results := make(chan result, len(insts))
 	for _, inst := range insts {
 		go func() {
+			// The result is sent even if the chain panics, so the wait
+			// below always ends.
+			err := errStopPanicked
+			defer func() { results <- result{inst.id, err} }()
 			defer m.recoverPanic()
 			// Each chain reports its steps to a job of its own that no slot
 			// shows, so the chains don't overwrite each other's words.
 			own := &jobCtl{m: m, job: &Job{Game: inst.id, Kind: "stop", Percent: -1}}
-			results <- result{inst.id, m.doStop(ctx, own, inst)}
+			err = m.doStop(ctx, own, inst)
 		}()
 	}
 	errs := map[string]error{}
@@ -535,6 +539,22 @@ func (m *Manager) stopInstances(ctx context.Context, j *jobCtl, insts []*instanc
 		return nil
 	}
 	return errs
+}
+
+// errStopPanicked is a stop chain's answer when it failed in a way the app
+// didn't expect (recoverPanic logs the details).
+var errStopPanicked = errors.New("Stopping it failed unexpectedly.")
+
+// andList joins names for people: "Valheim", "Valheim and Minecraft",
+// "Valheim, Minecraft and Terraria".
+func andList(names []string) string {
+	switch len(names) {
+	case 0:
+		return ""
+	case 1:
+		return names[0]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
 }
 
 // sendStop sends one stop step to the server: a line on its console (the

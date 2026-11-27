@@ -124,17 +124,19 @@ func TestWakerInstall(t *testing.T) {
 		json.Unmarshal(data, &c)
 		return c
 	}
-	want := waker.Config{Token: "secret", MAC: "3C:07:54:5A:21:9F", Query: net.JoinHostPort("192.168.1.20", strconv.Itoa(s.Port+1)), Name: s.ServerName, Guild: "g1"}
 	m.mu.Lock()
 	r2 := m.wakerR2Locked()
 	m.mu.Unlock()
-	if !r2 {
-		// With servers.json (R3), Valheim starred: its command, in the
-		// join-code channel, which is the main one.
-		want = waker.Config{Token: "secret", MAC: "3C:07:54:5A:21:9F", Guild: "g1", Games: &[]waker.GameCommand{{
-			ID: m.legacyID, Command: "valheim", Description: "Wake the server computer and start Valheim",
-			Name: s.ServerName, Channel: "2", Query: want.Query}}}
+	if r2 {
+		t.Fatal("the waker is set up as R2 does, though the list of games (servers.json) is in use")
 	}
+	// With servers.json (R3), Valheim starred: its command, in the
+	// join-code channel, which is the main one. (Safe mode's R2 settings,
+	// /valheim alone, are TestWakerPlanGames' and
+	// TestWakerPlanR2BrokenMainLink's.)
+	want := waker.Config{Token: "secret", MAC: "3C:07:54:5A:21:9F", Guild: "g1", Games: &[]waker.GameCommand{{
+		ID: m.legacyID, Command: "valheim", Description: "Wake the server computer and start Valheim",
+		Name: s.ServerName, Channel: "2", Query: net.JoinHostPort("192.168.1.20", strconv.Itoa(s.Port+1))}}}
 	if c := readCfg(); !reflect.DeepEqual(c, want) {
 		t.Fatalf("the waker's settings = %+v, want %+v", c, want)
 	}

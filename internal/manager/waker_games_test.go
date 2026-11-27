@@ -31,7 +31,6 @@ import (
 	"valheim-easy-server/internal/servers"
 	"valheim-easy-server/internal/waker"
 	"valheim-easy-server/internal/wol"
-	"valheim-easy-server/internal/worlds"
 )
 
 // fakeChannels stands in for Discord's webhooks, each in its own channel:
@@ -82,9 +81,6 @@ func newFakeChannels(t *testing.T) *fakeChannels {
 	return f
 }
 
-// hookLink is the webhook link of the stand-in channel id.
-func hookLink(id string) string { return "https://discord.com/api/webhooks/" + id + "/tok" + id }
-
 func (f *fakeChannels) in(id string) []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -104,16 +100,25 @@ func (f *fakeChannels) wait(t *testing.T, id, text string) {
 }
 
 // setupGames starts a manager like setup, with an instance of each of the
-// games ids beside the legacy one, made before it starts (in this build
-// only the legacy instance is made by New; servers.json comes with R3's
-// manager). Their server names are "<Short>'s server".
+// registered games ids beside the legacy one, added before it starts as
+// Add a game adds one. Their server names are "<Short>'s server".
 func setupGames(t *testing.T, ids []string, change ...func(*Options)) *testEnv {
 	t.Helper()
 	env := &testEnv{data: t.TempDir()}
 	m := newTestManager(t, env.data, env, change...)
 	env.m = m
 	for _, id := range ids {
-		addTestGame(t, m, id)
+		g, ok := game.Get(id)
+		if !ok {
+			t.Fatalf("no game %q is registered", id)
+		}
+		inst := addTestGame(t, m, g, nil)
+		if err := inst.srv.Store().Save(func(s *game.Saved) error {
+			s.Server = game.Values{"serverName": g.Info().Short + "'s server"}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	s := m.Settings()
 	s.Port = 20000 + rand.Intn(20000)
@@ -132,74 +137,41 @@ func setupGames(t *testing.T, ids []string, change ...func(*Options)) *testEnv {
 	return env
 }
 
-// addTestGame adds an instance of the registered game id, as R3's manager
-// makes one for a servers.json entry, with its folders under games/<id>.
-func addTestGame(t *testing.T, m *Manager, id string) *instance {
-	t.Helper()
-	g, ok := game.Get(id)
-	if !ok {
-		t.Fatalf("no game %q is registered", id)
-	}
-	info := g.Info()
-	root := filepath.Join(m.opt.DataDir, "games", id)
-	dirs := game.Dirs{Root: root, Server: filepath.Join(root, "server"), Saves: filepath.Join(root, "saves"),
-		Backups: filepath.Join(root, "backups"), Logs: filepath.Join(root, "logs"), Runtime: filepath.Join(root, "runtime"),
-		Staging: filepath.Join(root, "staging"), SteamCMD: filepath.Join(m.opt.DataDir, "steamcmd")}
-	inst := &instance{id: id, g: g, info: info, dirs: dirs, known: map[string]*KnownPlayer{},
-		uploads: map[string]*worlds.Upload{}, logs: newRing[LogLine](100)}
-	inst.srv = g.New(game.Env{Instance: id, Data: m.opt.DataDir, Dirs: dirs, Log: m.log, Store: &testStore{}})
-	if err := inst.srv.Store().Save(func(s *game.Saved) error {
-		s.Server = game.Values{"serverName": info.Short + "'s server"}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	m.instances[id] = inst
-	m.order = append(m.order, id)
-	return inst
-}
-
-// testStore keeps a test game's settings in memory, as servers.json would.
-type testStore struct {
-	mu sync.Mutex
-	s  game.Saved
-}
-
-func (s *testStore) Get() game.Saved {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.s.Clone()
-}
-
-func (s *testStore) Save(change func(*game.Saved) error) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	next := s.s.Clone()
-	if err := change(&next); err != nil {
-		return err
-	}
-	s.s = next
-	return nil
-}
-
 // useServers gives the manager a list of games as R3's manager reads it
 // from servers.json: the stars, the games turned off, and each game's own
 // channel (a stand-in webhook id, "" for the main channel).
 func useServers(m *Manager, stars, off []string, own map[string]string) {
 	f := servers.New(m.legacyID, time.Now())
 	f.App.Stars, f.App.DisabledGames = append([]string{}, stars...), off
-	for _, id := range m.order[1:] {
-		in := servers.Instance{ID: id, Game: id, Added: time.Now()}
-		if hook := own[id]; hook != "" {
+	m.eachInstance(func(inst *instance) {
+		if inst.legacy {
+			return
+		}
+		in := servers.Instance{ID: inst.id, Game: inst.id, Added: time.Now()}
+		if hook := own[inst.id]; hook != "" {
 			d := servers.DefaultDiscord()
 			d.Webhook = hookLink(hook)
 			in.Discord = &d
 		}
 		f.Instances = append(f.Instances, in)
-	}
+	})
 	m.mu.Lock()
-	m.servers = f
+	m.publishServersLocked(f)
 	m.mu.Unlock()
+}
+
+// valheimOnly puts the manager in Valheim-only safe mode (spec 8.3), or
+// takes it out again (its list of games is then whatever was published
+// last). It is the one time this build has no list of games to set the
+// waker up from, so it sets it up as R2 does: /valheim alone.
+func valheimOnly(m *Manager, on bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if on {
+		m.enterSafeModeLocked(time.Now(), "Only Valheim runs: a test.")
+		return
+	}
+	m.safeMode = ""
 }
 
 // setMain sets the main Discord channel; posts tells whether Valheim's own
@@ -234,14 +206,16 @@ func TestWakerPlanGames(t *testing.T) {
 	port := m.Settings().Port
 	ctx := context.Background()
 
-	// No list of games (a copy without servers.json): /valheim alone, as R2
-	// sets it up, but in the main channel's Discord server all the same.
+	// No list of games to use (Valheim-only safe mode): /valheim alone, as
+	// R2 sets it up, but in the main channel's Discord server all the same.
+	valheimOnly(m, true)
 	cfg, setup, err := m.wakerPlan(ctx, "secret")
 	query := net.JoinHostPort("192.168.1.20", strconv.Itoa(port+1))
 	want := waker.Config{Token: "secret", MAC: "3C:07:54:5A:21:9F", Query: query, Name: m.Settings().ServerName, Guild: "g1"}
 	if err != nil || !reflect.DeepEqual(cfg, want) || setup.Games != "" || setup.Guild != "g1" {
 		t.Fatalf("without a list of games: %+v %+v %v", cfg, setup, err)
 	}
+	valheimOnly(m, false)
 
 	useServers(m, []string{"valheim", "minecraft", "terraria", "corekeeper"}, []string{"corekeeper"},
 		map[string]string{"minecraft": "2", "terraria": "9"})
@@ -332,7 +306,8 @@ func TestWakerPlanNoCommands(t *testing.T) {
 	}
 }
 
-// With no list of games (/valheim alone, as R2 sets it up) and Valheim's
+// With no list of games (Valheim-only safe mode: /valheim alone, as R2
+// sets it up) and Valheim's
 // own posts off, nobody posts to the main link: a deleted one, or a Discord
 // out of reach, never stops the waker being installed or kept up, and it
 // keeps the Discord server it answers in now. With the posts on, the plan
@@ -347,6 +322,7 @@ func TestWakerPlanR2BrokenMainLink(t *testing.T) {
 		defer ch.mu.Unlock()
 		ch.gone["1"] = on
 	}
+	valheimOnly(m, true)
 	setMain(t, m, "1", false)
 	gone(true)
 	cfg, setup, err := m.wakerPlan(ctx, "secret")
@@ -384,8 +360,8 @@ func TestWakerPlanR2BrokenMainLink(t *testing.T) {
 // leaves it with no commands, and a star change while the app is busy with
 // the JetKVM is tried again later.
 func TestWakerFollowsStars(t *testing.T) {
-	setVar(t, &commandsDelay, 300*time.Millisecond)
-	setVar(t, &commandsRetry, 500*time.Millisecond)
+	set(t, &commandsDelay, 300*time.Millisecond)
+	set(t, &commandsRetry, 500*time.Millisecond)
 	kvm := fakekvm.New(t, nil)
 	ch := newFakeChannels(t)
 	env := setupGames(t, []string{"minecraft"}, wakerOptions(t, kvm, ch.URL, wired()))
@@ -462,12 +438,6 @@ func TestWakerFollowsStars(t *testing.T) {
 	})
 }
 
-func setVar[T any](t *testing.T, v *T, to T) {
-	old := *v
-	*v = to
-	t.Cleanup(func() { *v = old })
-}
-
 // requests records the starts that Discord requests asked for, and answers
 // each with what answer says.
 type requests struct {
@@ -495,7 +465,7 @@ func (r *requests) list() []string {
 }
 
 func useRequests(t *testing.T, r *requests) {
-	setVar(t, &startFromRequest, r.start)
+	set(t, &startFromRequest, r.start)
 }
 
 // A request for one game starts only that game, once however often the
@@ -602,7 +572,7 @@ func TestWakeTurnedOffOrHidden(t *testing.T) {
 // it can; if none could by the time the repeats are over, the app tries
 // once more and says why in the channel.
 func TestWakeWhileBusy(t *testing.T) {
-	setVar(t, &wakeRepeats, 400*time.Millisecond)
+	set(t, &wakeRepeats, 400*time.Millisecond)
 	ch := newFakeChannels(t)
 	env := setupGames(t, []string{"minecraft"}, wakerOptions(t, nil, ch.URL))
 	m := env.m
@@ -755,6 +725,68 @@ func TestWakeAlreadyOnline(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	if hook.count("is already online") != 1 || currentJobID(m) != jobs {
 		t.Fatalf("posts %q, job %d then %d", hook.all(), jobs, currentJobID(m))
+	}
+}
+
+// A game a Discord request started posts its online message in the
+// channel the request came from, even with its own posts off, because
+// someone asked there (spec 6.4); only once, however often the waker
+// repeats the request. The real start runs here (no stand-in).
+func TestWakeStartPostsOnline(t *testing.T) {
+	ch := newFakeChannels(t)
+	env := setup(t, wakerOptions(t, nil, ch.URL))
+	m := env.m
+	install(t, m)
+	setMain(t, m, "1", false) // Valheim's own posts are off
+	m.wakeGame(m.legacyID, "vh0001")
+	ch.wait(t, "1", "is online")
+	m.wakeGame(m.legacyID, "vh0001") // the waker's repeat
+	waitFor(t, "the start job to end", 20*time.Second, func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return !running(m.legacy().job)
+	})
+	time.Sleep(500 * time.Millisecond)
+	if posts := ch.in("1"); len(posts) != 1 || !strings.HasPrefix(posts[0], "🟢 **") {
+		t.Fatalf("posts in the request's channel: %q", posts)
+	}
+}
+
+// A request kept while its game was busy, whose game someone started
+// meanwhile, is met at the last try: the channel hears it is already
+// online, and nothing claims the request started it.
+func TestWakeKeptRequestFindsItOnline(t *testing.T) {
+	set(t, &wakeRepeats, time.Hour) // the test makes the last try itself, below
+	ch := newFakeChannels(t)
+	env := setup(t, wakerOptions(t, nil, ch.URL))
+	m := env.m
+	install(t, m)
+	setMain(t, m, "1", true)
+	inst := m.legacy()
+	release := make(chan struct{})
+	if err := m.runInstJob(inst, "backup", "Backing up", false, func(context.Context, *jobCtl) error {
+		<-release
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	m.wakeGame(m.legacyID, "vh0001") // busy: kept
+	close(release)
+	waitFor(t, "the backup job", 10*time.Second, func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return !running(inst.job)
+	})
+	startOnline(t, m) // the owner starts it from the panel
+	waitFor(t, "the start job to end", 20*time.Second, func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return !running(inst.job)
+	})
+	m.startForRequest(inst, "vh0001", true) // the try once the waker's repeats are over
+	ch.wait(t, "1", "✅ **Valheim** is already online.")
+	if hasText(m, "info", "Starting the server: someone asked for it from Discord") {
+		t.Fatal("the request is reported as having started the server")
 	}
 }
 

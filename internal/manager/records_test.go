@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"valheim-easy-server/internal/game"
 	"valheim-easy-server/internal/records"
 )
 
@@ -338,5 +339,35 @@ func TestDamagedRecords(t *testing.T) {
 	}
 	if kept, _ := filepath.Glob(filepath.Join(data, recordsFile+".damaged-*")); len(kept) != 1 {
 		t.Fatalf("the damaged file wasn't kept: %v", kept)
+	}
+}
+
+// A game that writes its own log (GameLog) gives it the same name every
+// run, so each run's events are kept under the app's own copy of that run's
+// log (logFile), never under the game's file name: two runs are two
+// entries, and the running one isn't counted twice.
+func TestGameLogRunsKeptByTheirCopy(t *testing.T) {
+	inst := &instance{id: "g", recs: recordsData{Runs: map[string][]records.Event{}}}
+	m := &Manager{}
+	gameFile := filepath.Join("games", "g", "server", "logs", "game_server.log")
+	var runs []*serverRun
+	for i, launched := range []string{"2026-11-20_18-00-00", "2026-11-21_18-00-00"} {
+		at := time.Date(2026, 11, 20+i, 18, 30, 0, 0, time.Local).Unix()
+		run := &serverRun{inst: inst, rec: game.Record{LogPath: gameFile}, gameLog: true,
+			ownLog: filepath.Join("games", "g", "logs", logPrefix(inst)+launched+".log"),
+			events: []records.Event{{T: at, Kind: records.Join, Name: "Alex"}, {T: at + 600, Kind: records.Leave, Name: "Alex"}}}
+		runs = append(runs, run)
+		if !m.archiveRunLocked(run) {
+			t.Fatalf("run %d wasn't kept", i)
+		}
+	}
+	want := []string{"g-2026-11-20_18-00-00.log", "g-2026-11-21_18-00-00.log"}
+	if len(inst.recs.Runs) != 2 || inst.recs.Runs[want[0]] == nil || inst.recs.Runs[want[1]] == nil {
+		t.Fatalf("runs kept: %v, want them under %v", inst.recs.Runs, want)
+	}
+	inst.run = runs[1] // still running: its events are counted once
+	sum := m.recordsBetween(inst, time.Time{}, time.Now().AddDate(1, 0, 0), time.Now())
+	if len(sum.Players) != 1 || sum.Players[0].Visits != 2 || sum.Players[0].PlaySeconds != 1200 {
+		t.Fatalf("players = %+v, want Alex with 2 visits of 10 minutes", sum.Players)
 	}
 }

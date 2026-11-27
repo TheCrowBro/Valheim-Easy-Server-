@@ -131,9 +131,11 @@ func (m *Manager) addInstanceLocked(inst *instance) {
 }
 
 func (m *Manager) removeInstanceLocked(id string) {
-	if _, ok := m.instances[id]; !ok || id == m.legacyID {
+	gone, ok := m.instances[id]
+	if !ok || id == m.legacyID {
 		return
 	}
+	delete(m.disc.recsRead, gone) // D's note of its records file; a game added again is read again
 	byID := make(map[string]*instance, len(m.instances))
 	for k, i := range m.instances {
 		if k != id {

@@ -566,29 +566,6 @@ type storeServer struct {
 
 func (s storeServer) Store() game.Store { return s.st }
 
-type testStore struct {
-	mu    sync.Mutex
-	saved game.Saved
-	saves int
-}
-
-func (s *testStore) Get() game.Saved {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.saved.Clone()
-}
-
-func (s *testStore) Save(change func(*game.Saved) error) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	c := s.saved.Clone()
-	if err := change(&c); err != nil {
-		return err
-	}
-	s.saved, s.saves = c, s.saves+1
-	return nil
-}
-
 // noteNAT writes State["cgnat"] for every non-legacy instance (Minecraft's
 // allow list reads it, 5.2), only when it changes, and never touches the
 // legacy game's settings.
@@ -597,10 +574,7 @@ func TestNoteNAT(t *testing.T) {
 	m := newTestManager(t, env.data, env)
 	st := &testStore{saved: game.Saved{State: game.Values{"allowListOn": "true"}}}
 	inst := &instance{id: "other", srv: storeServer{st: st}}
-	m.mu.Lock()
-	m.instances[inst.id] = inst
-	m.order = append(m.order, inst.id)
-	m.mu.Unlock()
+	putInstance(t, m, inst, nil)
 	before := m.Settings()
 
 	m.noteNAT("cgnat")

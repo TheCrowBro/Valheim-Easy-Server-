@@ -128,10 +128,9 @@ type Manager struct {
 	wg     sync.WaitGroup
 	exits  sync.WaitGroup // servers that have exited, being wrapped up
 
-	discordQ       chan discordPost // messages for the Discord channel
-	discordPending atomic.Int32     // queued or being posted
-	keyMu          sync.Mutex       // the app's key for the JetKVM is made once
-	runFileMu      sync.Mutex       // run records, written by saveRunInfo
+	discordPending atomic.Int32 // queued or being posted
+	keyMu          sync.Mutex   // the app's key for the JetKVM is made once
+	runFileMu      sync.Mutex   // run records, written by saveRunInfo
 
 	// The legacy game's settings and folders as immutable snapshots, swapped
 	// by saveSettingsLocked, so its adapter can read them without m.mu
@@ -153,11 +152,8 @@ type Manager struct {
 	keepAwakeUntil   time.Time
 	wakeHold         time.Time      // after waking up, Windows is kept awake until then
 	wakeConn         net.PacketConn // hears Wake-on-LAN signals, with wake on
-	wakeStart        time.Time      // when an untagged wake signal last started the server
-	wakeTag          string         // the last request a tagged wake signal came with
 	wk               wakerState     // the waker on the JetKVM
-	resumeOnWake     bool
-	closing          bool // Close was called: exits are no longer waited for
+	closing          bool           // Close was called: exits are no longer waited for
 	net              netInfo
 	checks           checkCache
 	lastPlayed       *played   // what the legacy game's players last played with; nil until someone has
@@ -220,7 +216,6 @@ func New(opt Options) (*Manager, error) {
 		logs:     newRing[LogLine](3000),
 		activity: newRing[Activity](300),
 		history:  stats.NewHistory(int(24 * time.Hour / opt.SampleInterval)),
-		discordQ: make(chan discordPost, 16),
 		// Job numbers carry on from the clock, so they never repeat after the
 		// app restarts: an open control panel tells jobs apart by number.
 		jobSeq: int(time.Now().UnixMilli()),

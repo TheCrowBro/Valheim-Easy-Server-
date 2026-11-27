@@ -41,9 +41,15 @@ func (m *Manager) UpdateSettings(in config.Settings) error {
 	if next.IdleHibernate && !cur.IdleHibernate {
 		m.machineIdleSince = timeNow() // start counting from now
 	}
+	// The channel Valheim's posts go to: its own (servers.json) if it has
+	// one, else the main channel. Only a change of that channel posts the
+	// join code again, so a new main channel doesn't repost it in Valheim's
+	// own channel.
+	linkBefore := m.gameLinkLocked(inst)
 	if err := m.saveSettingsLocked(next); err != nil {
 		return err
 	}
+	linkAfter := m.gameLinkLocked(inst)
 	// The waker on the JetKVM names the server, asks whether it's up at its
 	// port, and answers only in the join-code channel's Discord server.
 	if cur.DiscordWake && (next.ServerName != cur.ServerName || next.Port != cur.Port ||
@@ -52,7 +58,7 @@ func (m *Manager) UpdateSettings(in config.Settings) error {
 	}
 	// Turned on, or moved to another channel: post the join code there now.
 	// Likewise when the password is to be included, so friends get it.
-	if run := inst.run; run != nil && next.Discord && (!cur.Discord || next.DiscordWebhook != cur.DiscordWebhook ||
+	if run := inst.run; run != nil && next.Discord && (!cur.Discord || linkBefore != linkAfter ||
 		next.DiscordPassword && !cur.DiscordPassword) {
 		run.rec.Announced = ""
 		if post, ok := m.announceLocked(run); ok {

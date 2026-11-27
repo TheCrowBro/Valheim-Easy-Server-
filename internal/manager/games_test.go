@@ -15,6 +15,9 @@ func TestStartGameTakesTheR3Path(t *testing.T) {
 	env := setup(t)
 	m := env.m
 	id := m.legacyID
+	m.mu.Lock()
+	m.legacy().info.MemoryMB = 0 // the start's memory check mustn't depend on how much memory the runner has free
+	m.mu.Unlock()
 
 	// The checks come before the memory step, so a game that isn't
 	// installed says so whatever the memory answer would be.

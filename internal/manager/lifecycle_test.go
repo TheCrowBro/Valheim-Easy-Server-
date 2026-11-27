@@ -131,30 +131,6 @@ func (s lifeLogArg) Plan(ctx context.Context, req game.PlanRequest) (game.Plan, 
 	return p, err
 }
 
-// lifeStore keeps a test instance's settings in memory, as servers.json
-// does for the app.
-type lifeStore struct {
-	mu    sync.Mutex
-	saved game.Saved
-}
-
-func (s *lifeStore) Get() game.Saved {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.saved.Clone()
-}
-
-func (s *lifeStore) Save(change func(*game.Saved) error) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	c := s.saved.Clone()
-	if err := change(&c); err != nil {
-		return err
-	}
-	s.saved = c
-	return nil
-}
-
 type lifeDemo struct {
 	id       string
 	presence game.Presence // "" = names
@@ -177,9 +153,10 @@ func lifeDemoPort(m *Manager) int {
 	}
 }
 
-// addDemo puts a Demo Game instance in m, as M3's instance store will:
-// its folders under games/<id>, its settings, the fake installer. It must
-// be called before m.Start.
+// lifeAddDemo puts a Demo Game instance in m, as Add a game does: its
+// folders under games/<id>, its settings, the fake installer. It has no
+// servers.json entry (a test that needs one sets the list itself), and it
+// must be called before m.Start.
 func lifeAddDemo(t *testing.T, m *Manager, o lifeDemo) *instance {
 	t.Helper()
 	if o.presence == "" {
@@ -190,15 +167,14 @@ func lifeAddDemo(t *testing.T, m *Manager, o lifeDemo) *instance {
 	}
 	g := lifeGame{Game: demo.Game{ID: o.id}, presence: o.presence, memMB: o.memMB}
 	dirs := m.gameDirs(o.id)
-	store := &lifeStore{saved: game.Saved{Server: game.Values{"serverName": "Demo " + o.id}, World: "Demo",
+	store := &testStore{saved: game.Saved{Server: game.Values{"serverName": "Demo " + o.id}, World: "Demo",
 		Worlds: map[string]game.Values{}, Ports: map[string]int{"game": lifeDemoPort(m)}}}
 	inst := &instance{id: o.id, g: g, info: g.Info(), dirs: dirs, known: map[string]*KnownPlayer{},
 		uploads: map[string]*worlds.Upload{}, logs: newRing[LogLine](3000), recs: recordsData{Runs: map[string][]records.Event{}}}
 	inst.srv = g.New(game.Env{Instance: o.id, Data: m.opt.DataDir, Dirs: dirs, Log: m.log, Store: store,
 		Fake: &game.Fake{Program: gametest.BuildFakeserver(t), Script: o.script, Speed: 4},
 		Note: func(kind, text string) { m.addGameActivity(inst, kind, "", text) }})
-	m.instances[o.id] = inst
-	m.order = append(m.order, o.id)
+	putInstance(t, m, inst, nil)
 	return inst
 }
 
@@ -241,12 +217,11 @@ func setupLife(t *testing.T, o lifeOpts) (*testEnv, map[string]*instance) {
 	}
 	m.Start()
 	t.Cleanup(func() {
-		for _, id := range m.order {
-			inst := m.instances[id]
+		m.eachInstance(func(inst *instance) {
 			if m.forceStopGame(inst) == nil {
-				waitFor(t, "forced stop of "+id, 10*time.Second, func() bool { return !lifeRuns(m, inst) })
+				waitFor(t, "forced stop of "+inst.id, 10*time.Second, func() bool { return !lifeRuns(m, inst) })
 			}
-		}
+		})
 		m.Close()
 	})
 	return env, insts
@@ -325,10 +300,10 @@ func TestPortsAvoidValheimAndOtherInstances(t *testing.T) {
 	busy := map[string]bool{"udp/7103": true} // another program
 	set(t, &portInUse, func(proto string, port int) (bool, int) { return busy[fmt.Sprintf("%s/%d", proto, port)], 4242 })
 	m.mu.Lock()
-	m.servers = servers.File{Schema: servers.Schema, Instances: []servers.Instance{
+	m.publishServersLocked(servers.File{Schema: servers.Schema, Instances: []servers.Instance{
 		{ID: m.legacyID, Game: m.legacyID, Legacy: true},
 		{ID: "othergame", Game: "othergame", Ports: map[string]int{"game": 7102}}, // a game this build doesn't know keeps its port
-	}}
+	}})
 	info := lifeGame{Game: demo.Game{ID: "demoapi", API: true}}.Info() // game 7100, rest = game+1
 	ports, err := m.pickPortsLocked(info, nil)
 	m.mu.Unlock()
@@ -382,7 +357,7 @@ func TestStartPortClash(t *testing.T) {
 	}
 
 	m.mu.Lock()
-	m.servers = servers.File{Schema: servers.Schema, Instances: []servers.Instance{{ID: "demo", Game: "demo", PortsChosen: []string{"game"}}}}
+	m.publishServersLocked(servers.File{Schema: servers.Schema, Instances: []servers.Instance{{ID: "demo", Game: "demo", PortsChosen: []string{"game"}}}})
 	m.mu.Unlock()
 	if err := m.checkPorts(inst); !errors.As(err, &ae) || ae.Action != "settings" || !strings.Contains(ae.Msg, "change it in Settings") {
 		t.Fatalf("clash of a chosen port = %#v", err)
@@ -542,7 +517,7 @@ func TestAutoStopAfterMinutes(t *testing.T) {
 	v := m.legacy()
 	thirty := 30
 	m.mu.Lock()
-	m.servers = servers.File{Schema: servers.Schema, Instances: []servers.Instance{{ID: v.id, Game: v.id, Legacy: true, AutoStopMinutes: &thirty}}}
+	m.publishServersLocked(servers.File{Schema: servers.Schema, Instances: []servers.Instance{{ID: v.id, Game: v.id, Legacy: true, AutoStopMinutes: &thirty}}})
 	m.mu.Unlock()
 	install(t, m)
 	for _, d := range insts {
@@ -1231,8 +1206,7 @@ func TestDiscordRequestWhileBusy(t *testing.T) {
 }
 
 // Removing Valheim only hides it: it is stopped and its files stay where
-// they are (I1). Until servers.json can be written (M3), nothing changes
-// at all.
+// they are (I1).
 func TestRemoveLegacyOnlyHides(t *testing.T) {
 	env, _ := setupLife(t, lifeOpts{sample: time.Hour})
 	m := env.m
@@ -1249,10 +1223,7 @@ func TestRemoveLegacyOnlyHides(t *testing.T) {
 		t.Fatalf("Valheim's server is gone: %v", err)
 	}
 	if job.Error != "" {
-		if !lifeOnline(m, v) {
-			t.Fatalf("the hide failed (%s) but stopped Valheim", job.Error)
-		}
-		return
+		t.Fatalf("the hide failed: %s", job.Error)
 	}
 	m.mu.Lock()
 	hidden, starred := m.isHiddenLocked(v), m.isStarredLocked(v)
@@ -1273,8 +1244,8 @@ func TestHiddenLegacyNeverStarted(t *testing.T) {
 	install(t, m)
 	hide := func(on bool) {
 		m.mu.Lock()
-		m.servers = servers.File{Schema: servers.Schema, App: servers.App{Stars: []string{}},
-			Instances: []servers.Instance{{ID: v.id, Game: v.id, Legacy: true, Hidden: on}}}
+		m.publishServersLocked(servers.File{Schema: servers.Schema, App: servers.App{Stars: []string{}},
+			Instances: []servers.Instance{{ID: v.id, Game: v.id, Legacy: true, Hidden: on}}})
 		m.mu.Unlock()
 	}
 	hide(true)
@@ -1369,7 +1340,7 @@ func TestGameFirewallRules(t *testing.T) {
 // 6.1, 6.2).
 func TestCatalogAndAddChecks(t *testing.T) {
 	env := &testEnv{data: t.TempDir()}
-	m := newTestManager(t, env.data, env)
+	m := newTestManager(t, env.data, env, fakeInstalls(t))
 	cat := m.Catalog()
 	byID := map[string]CatalogGame{}
 	for _, c := range cat {
@@ -1425,11 +1396,45 @@ func TestCatalogAndAddChecks(t *testing.T) {
 		t.Fatalf("adding Valheim again = %v", err)
 	}
 
-	// A right request gets as far as the instance store (M3's).
-	_, err = m.AddGame(AddGameRequest{Game: "minecraft", ServerName: "Friends", EULA: true, World: AddWorld{Mode: "new", Name: "Riverbend"}})
-	if err != nil && !errors.Is(err, errNotYet) {
-		t.Fatalf("a right request = %v", err)
+	// A right request is added: in servers.json, not starred (decided:
+	// "Star it" is unticked by default), with its install job.
+	added, err := m.AddGame(AddGameRequest{Game: "minecraft", ServerName: "Friends", EULA: true, World: AddWorld{Mode: "new", Name: "Riverbend"}})
+	if err != nil || added.ID != "minecraft" || added.Job == 0 {
+		t.Fatalf("a right request = %+v, %v", added, err)
 	}
+	waitAddInstall(t, m, added.ID)
+	m.mu.Lock()
+	entry, starred := m.servers.Instance(added.ID), slices.Contains(m.servers.App.Stars, added.ID)
+	m.mu.Unlock()
+	if entry == nil || entry.Settings["serverName"] != "Friends" || starred {
+		t.Fatalf("its servers.json entry = %+v, starred %v", entry, starred)
+	}
+	if _, err := m.AddGame(AddGameRequest{Game: "minecraft", ServerName: "Again", EULA: true, World: AddWorld{Mode: "new", Name: "Two"}}); err == nil || !strings.Contains(err.Error(), "added already") {
+		t.Fatalf("adding Minecraft twice = %v", err)
+	}
+}
+
+// fakeInstalls makes every game but the legacy one install and run the
+// stand-in server (cmd/fakeserver), as EGS_DEV_FAKE_SERVERS does, so an
+// added game's install job never downloads the real one.
+func fakeInstalls(t *testing.T) func(*Options) {
+	prog := gametest.BuildFakeserver(t)
+	return func(o *Options) { o.Fake = &game.Fake{Program: prog} }
+}
+
+// waitAddInstall waits for the install job of a game just added, so it
+// writes nothing into the test's folder once the test is over.
+func waitAddInstall(t *testing.T, m *Manager, id string) {
+	t.Helper()
+	inst, err := m.instanceByID(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the install job of "+id, 60*time.Second, func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return inst.job != nil && inst.job.Finished != nil
+	})
 }
 
 // Removing a game backs its worlds up before anything else, and deletes
@@ -1460,11 +1465,10 @@ func TestRemoveKeepsWorlds(t *testing.T) {
 	jobErr := d.job.Error
 	m.mu.Unlock()
 	if jobErr != "" {
-		// M3's servers.json isn't here yet: nothing may have been deleted.
-		if _, err := os.Stat(d.srv.Program()); err != nil {
-			t.Fatalf("the job failed (%s) but deleted the server", jobErr)
-		}
-		return
+		t.Fatalf("the remove job failed: %s", jobErr)
+	}
+	if _, err := m.instanceByID(d.id); err == nil {
+		t.Fatal("the removed game is still in the list of games")
 	}
 	if _, err := os.Stat(d.srv.Program()); err == nil {
 		t.Fatal("the server files are still there")
@@ -1498,7 +1502,8 @@ func TestFailedAddTakesBackTheImport(t *testing.T) {
 		t.Fatal(err)
 	}
 	env := &testEnv{data: t.TempDir()}
-	m := newTestManager(t, env.data, env)
+	fake := fakeInstalls(t)
+	m := newTestManager(t, env.data, env, fake)
 	root := m.gameDirs("terraria").Root
 	add := func() error {
 		t.Helper()
@@ -1519,20 +1524,50 @@ func TestFailedAddTakesBackTheImport(t *testing.T) {
 		return err == nil
 	}
 
-	// Until M3's instance store is here, every add fails after the import.
-	if err := add(); err != nil {
-		if _, serr := os.Stat(root); serr == nil {
-			t.Fatalf("a failed add (%v) left the game's folder", err)
+	// noList takes servers.json away, so the add fails after the import,
+	// at the last step (servers.Update refuses a missing list); it answers
+	// how to put it back.
+	noList := func(m *Manager) func() {
+		t.Helper()
+		path := filepath.Join(m.opt.DataDir, servers.FileName)
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
 		}
-	} else if !copied() {
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
+		return func() {
+			if err := os.WriteFile(path, b, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	putBack := noList(m)
+	if err := add(); err == nil {
+		t.Fatal("added a game with the list of games missing")
+	} else if _, serr := os.Stat(root); serr == nil {
+		t.Fatalf("a failed add (%v) left the game's folder", err)
+	}
+	if _, err := os.Stat(filepath.Join(own, "Forest.wld")); err != nil {
+		t.Fatalf("the owner's own world is gone: %v", err)
+	}
+	// With the list back, the same add goes through, with its world.
+	putBack()
+	if err := add(); err != nil {
+		t.Fatalf("adding with the list back: %v", err)
+	}
+	if !copied() {
 		t.Fatal("the game was added without its world")
 	}
+	waitAddInstall(t, m, "terraria")
 	if _, err := os.Stat(filepath.Join(own, "Forest.wld")); err != nil {
 		t.Fatalf("the owner's own world is gone: %v", err)
 	}
 
 	// The worlds of a game removed earlier are kept.
-	m2 := newTestManager(t, t.TempDir(), env)
+	m2 := newTestManager(t, t.TempDir(), env, fake)
 	root = m2.gameDirs("terraria").Root
 	kept := filepath.Join(root, "saves", "Old.wld")
 	if err := os.MkdirAll(filepath.Dir(kept), 0o755); err != nil {
@@ -1542,15 +1577,14 @@ func TestFailedAddTakesBackTheImport(t *testing.T) {
 		t.Fatal(err)
 	}
 	m = m2
-	if err := add(); err != nil {
-		if copied() {
-			t.Fatalf("a failed add (%v) left the copied world", err)
-		}
-		if _, serr := os.Stat(kept); serr != nil {
-			t.Fatalf("a failed add removed a world that was there before: %v", serr)
-		}
-	} else if !copied() {
-		t.Fatal("the game was added without its world")
+	noList(m)
+	if err := add(); err == nil {
+		t.Fatal("added a game with the list of games missing")
+	} else if copied() {
+		t.Fatalf("a failed add (%v) left the copied world", err)
+	}
+	if _, serr := os.Stat(kept); serr != nil {
+		t.Fatalf("a failed add removed a world that was there before: %v", serr)
 	}
 }
 

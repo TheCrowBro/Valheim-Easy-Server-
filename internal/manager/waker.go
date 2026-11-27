@@ -873,21 +873,10 @@ func (m *Manager) wakerPicksLocked() []wakerPick {
 
 // wakerLinkLocked is the webhook link of the game's channel: its own, else
 // the main one (spec 6.3), "" when it has neither. That rule is stream D's
-// gameLinkLocked; until D's is filled in, the same rule is applied here,
-// so the commands work whichever stream lands first.
+// gameLinkLocked, so a command, its replies and the game's posts all use
+// the same channel.
 func (m *Manager) wakerLinkLocked(inst *instance) string {
-	if link := m.gameLinkLocked(inst); link != "" {
-		return link
-	}
-	if in := m.servers.Instance(inst.id); in != nil {
-		if own := strings.TrimSpace(in.DiscordRules().Webhook); own != "" && discord.Problem(own) == "" {
-			return own
-		}
-	}
-	if main := strings.TrimSpace(m.settings.DiscordWebhook); discord.Problem(main) == "" {
-		return main
-	}
-	return ""
+	return m.gameLinkLocked(inst)
 }
 
 // wakerCommandsLocked are the commands the waker should register: the

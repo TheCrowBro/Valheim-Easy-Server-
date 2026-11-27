@@ -165,11 +165,23 @@ func noteEventsLocked(run *serverRun, evs []game.Event) {
 	}
 }
 
+// runName is the name a run's events are kept under in records.json: its
+// own log's file name (logFile). For a game that writes its own log
+// (GameLog), that is the copy the app keeps in the instance's logs folder,
+// named from the run's launch, because the game's own file has the same
+// name every run.
+func runName(run *serverRun) string {
+	if run == nil || run.logFile() == "" {
+		return ""
+	}
+	return filepath.Base(run.logFile())
+}
+
 // archiveRunLocked keeps a finished run's events; it reports whether
 // there's something to save.
 func (m *Manager) archiveRunLocked(run *serverRun) bool {
-	name := filepath.Base(run.rec.LogPath)
-	if run.rec.LogPath == "" || len(run.events) == 0 {
+	name := runName(run)
+	if name == "" || len(run.events) == 0 {
 		return false
 	}
 	// A game whose records file hasn't been read yet keeps the run here
@@ -217,7 +229,7 @@ func (m *Manager) backfillRecordsFor(inst *instance) {
 		name := filepath.Base(path)
 		m.mu.Lock()
 		_, known := inst.recs.Runs[name]
-		current := inst.run != nil && filepath.Base(inst.run.rec.LogPath) == name
+		current := inst.run != nil && runName(inst.run) == name
 		m.mu.Unlock()
 		if known || current {
 			continue
@@ -228,7 +240,7 @@ func (m *Manager) backfillRecordsFor(inst *instance) {
 			continue
 		}
 		m.mu.Lock()
-		if inst.run == nil || filepath.Base(inst.run.rec.LogPath) != name { // it may have started meanwhile
+		if inst.run == nil || runName(inst.run) != name { // it may have started meanwhile
 			inst.recs.Runs[name], changed = events, true
 		}
 		m.mu.Unlock()
@@ -311,7 +323,7 @@ func (m *Manager) recordsBetween(inst *instance, from, to, now time.Time) record
 	var events []records.Event
 	current := ""
 	if inst.run != nil {
-		current = filepath.Base(inst.run.rec.LogPath)
+		current = runName(inst.run)
 		events = append(events, inst.run.events...)
 	}
 	for name, run := range inst.recs.Runs {

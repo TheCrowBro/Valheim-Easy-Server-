@@ -87,10 +87,10 @@ func askGame(t *testing.T, api *standIn, clock *fakeClock, token string, d *serv
 	stops := &stopsSeen{}
 	var inst *instance
 	m := gamesManager(t, api, func(m *Manager) {
-		m.settings.DiscordWebhook = hookLink(1)
+		m.settings.DiscordWebhook = hookLink("1")
 		m.settings.DiscordBotToken = token
 		m.disc.now, m.disc.stop, stops.m = clock.Now, stops.stop, m
-		inst = addTestGame(t, m, seafarer, d)
+		inst = addTestGame(t, m, testGame{seafarer}, d)
 	})
 	return m, inst, stops
 }
@@ -117,7 +117,7 @@ func TestStillPlayingRule(t *testing.T) {
 	clock := newFakeClock()
 	api := newStandIn(t, clock.Now)
 	m, inst, stops := askGame(t, api, clock, "tok",
-		&servers.Discord{On: true, Webhook: hookLink(2), Stopped: true, Daily: true})
+		&servers.Discord{On: true, Webhook: hookLink("2"), Stopped: true, Daily: true})
 	start := clock.Now()
 	run := fakeRun(m, inst, "Sea Crew")
 	if posts := waitPosts(t, api, otherHook, 1); !strings.HasPrefix(posts[0], "🟢 **Sea Crew** is online") {
@@ -277,7 +277,7 @@ func TestStillPlayingCantRead(t *testing.T) {
 func TestStillPlayingNoBot(t *testing.T) {
 	clock := newFakeClock()
 	api := newStandIn(t, clock.Now)
-	m, inst, _ := askGame(t, api, clock, "", &servers.Discord{On: true, Webhook: hookLink(2)})
+	m, inst, _ := askGame(t, api, clock, "", &servers.Discord{On: true, Webhook: hookLink("2")})
 	fakeRun(m, inst, "Sea Crew")
 	a := waitAsk(t, m, inst, "the clock", func(a *AskStatus) bool { return true })
 	if a.CanRead || !strings.HasPrefix(a.Problem, "There's no Discord bot that can read") {
@@ -304,7 +304,7 @@ func TestStillPlayingNoChannel(t *testing.T) {
 	m := gamesManager(t, api, func(m *Manager) {
 		m.settings.DiscordBotToken = "tok"
 		m.disc.now, m.disc.stop, stops.m = clock.Now, stops.stop, m
-		inst = addTestGame(t, m, seafarer, nil)
+		inst = addTestGame(t, m, testGame{seafarer}, nil)
 	})
 	fakeRun(m, inst, "Sea Crew")
 	a := waitAsk(t, m, inst, "the clock", func(a *AskStatus) bool { return true })
@@ -328,7 +328,7 @@ func TestStillPlayingNoChannel(t *testing.T) {
 func TestStillPlayingOnlyWhenNeeded(t *testing.T) {
 	clock := newFakeClock()
 	api := newStandIn(t, clock.Now)
-	m, inst, stops := askGame(t, api, clock, "tok", &servers.Discord{On: false, Webhook: hookLink(2)})
+	m, inst, stops := askGame(t, api, clock, "tok", &servers.Discord{On: false, Webhook: hookLink("2")})
 	m.mu.Lock()
 	legacy := m.legacy()
 	legacy.run = &serverRun{inst: legacy, ready: true}
@@ -379,7 +379,7 @@ func TestStillPlayingJoinRestarts(t *testing.T) {
 func TestStillPlayingStopLeftOn(t *testing.T) {
 	clock := newFakeClock()
 	api := newStandIn(t, clock.Now)
-	m, inst, stops := askGame(t, api, clock, "", &servers.Discord{On: true, Webhook: hookLink(2)})
+	m, inst, stops := askGame(t, api, clock, "", &servers.Discord{On: true, Webhook: hookLink("2")})
 	hold := make(chan struct{})
 	stops.set(true, hold)
 	run := fakeRun(m, inst, "Sea Crew")

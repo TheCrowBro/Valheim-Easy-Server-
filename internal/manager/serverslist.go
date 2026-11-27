@@ -205,9 +205,13 @@ func (m *Manager) prepareInstances() {
 		// Under the lock: the control panel may already be asking.
 		m.mu.Lock()
 		m.loadKnown(inst)
-		m.loadPlayed(inst)
-		m.loadRecords(inst)
 		m.mu.Unlock()
+		// Discord's (D's) readers: a records file that can't be read now
+		// (another program has it open) isn't taken as empty, so it is
+		// never saved over; it is read again when next needed. What its
+		// players last played with is only a starting point.
+		m.ensurePlayed(inst)
+		m.ensureRecords(inst)
 		m.refreshCache(inst)
 	})
 	m.mu.Lock()

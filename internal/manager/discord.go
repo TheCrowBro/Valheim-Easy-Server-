@@ -147,6 +147,11 @@ func postServerNameLocked(inst *instance, run *serverRun) string {
 func (m *Manager) announceLocked(run *serverRun) (p discordPost, ok bool) {
 	inst := run.inst
 	r := m.discordRulesLocked(inst)
+	if m.askedFromDiscordLocked(inst) {
+		// Someone asked for it with its Discord command, in its channel:
+		// the online post goes there whatever its own posts say (6.4).
+		r.on = true
+	}
 	if !r.posts() || inst.run != run || !run.ready || run.stopping || run.replaying || run.afterPending {
 		return p, false // the game's work after the start (the mods code) comes within seconds
 	}
