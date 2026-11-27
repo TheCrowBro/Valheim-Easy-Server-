@@ -1,0 +1,85 @@
+// The pop-up that tells players which mods a world needs and where to
+// download them. Valheim can't send mods to players, so each player installs
+// them once on their own PC with a mod manager.
+//
+// Moved from the old panel's modshelp.js unchanged, apart from the imports
+// and the .vh class on the window (so the module's styles apply in it).
+
+import { h, icon, openModal, copyText } from '../../dom.js';
+import { scoped } from './common.js';
+
+const GALE = 'https://thunderstore.io/c/valheim/p/Kesomannen/GaleModManager/';
+const R2MODMAN = 'https://thunderstore.io/c/valheim/p/ebkr/r2modman/';
+
+const NEED = {
+  required: ['warn', 'Needed to join'],
+  recommended: ['', 'Recommended'],
+  players: ['accent', 'Just for your game'],
+};
+
+// address shows a web address people can read off the screen (through an
+// IP KVM a link opens on the server, not on their own PC), with a copy
+// button.
+function address(url, label) {
+  const shown = url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  return h('div', { class: 'address' },
+    label ? h('span', { class: 'muted' }, label) : null,
+    h('a', { class: 'mono', href: url, target: '_blank', rel: 'noopener' }, shown),
+    h('button', { class: 'btn btn-ghost btn-icon btn-sm', type: 'button', 'aria-label': `Copy ${shown}`, onclick: () => copyText(url, 'Address copied') }, icon('copy')));
+}
+
+const names = (list) => list.length > 1 ? list.slice(0, -1).map((m) => m.name).join(', ') + ' and ' + list[list.length - 1].name : list[0].name;
+
+// openModsHelp explains the mods in list (as the status and the worlds list
+// give them) to players. code, when there is one, imports them all at once.
+export function openModsHelp(list, code) {
+  if (!list || !list.length) return;
+  const many = list.length > 1;
+  const it = many ? 'them' : 'it';
+  const newWorlds = list.filter((m) => m.newWorlds);
+  const optional = list.filter((m) => m.players !== 'required');
+  const yours = list.filter((m) => m.players === 'players'); // just for players' own games
+  const needed = list.filter((m) => m.players !== 'players');
+  const extras = !needed.length;
+  scoped(openModal({
+    title: extras ? `${many ? 'Mods' : 'A mod'} for your own game` : many ? 'The mods you need to play' : 'The mod you need to play',
+    wide: true,
+    body: [
+      extras ? h('p', null, `${many ? 'These mods change' : 'This mod changes'} what you see in your own game. ${many ? 'They’re' : 'It’s'} optional: the server doesn’t need ${it}, and you can join with or without ${it}.`)
+        : h('p', null, `This world uses ${needed.length > 1 ? `${needed.length} mods` : 'a mod'}, so everyone who plays installs ${needed.length > 1 ? 'them' : 'it'} once in their own Valheim. `,
+        optional.length && optional.length < list.length ? 'You can’t join without the ones marked ' : '',
+        optional.length && optional.length < list.length ? h('b', null, 'Needed to join') : '',
+        optional.length && optional.length < list.length ? '. ' : '',
+        yours.length ? `${names(yours)} ${yours.length > 1 ? 'are' : 'is'} optional, just for your own game. ` : '',
+        'Xbox, PlayStation, Switch and Game Pass players can’t use mods.'),
+      list.map((m) => {
+        const [tone, need] = NEED[m.players] || NEED.required;
+        return h('div', { class: 'mod-box' },
+          h('div', { class: 'row', style: { gap: '8px' } },
+            h('b', { class: 'mod-name' }, m.name), h('span', { class: 'muted' }, `by ${m.author}`),
+            h('span', { class: 'spacer' }),
+            h('span', { class: `badge ${tone}` }, need),
+            m.version ? h('span', { class: 'badge' }, `The server has version ${m.version}`) : null),
+          h('p', null, m.summary),
+          address(m.url, 'Download page:'));
+      }),
+      h('h3', { class: 'mod-howto' }, `How to install ${it}`),
+      h('ol', { class: 'steps' },
+        h('li', null, 'Get a free mod manager, ', h('b', null, 'Gale'), ' or ', h('b', null, 'r2modman'), ':',
+          h('div', { class: 'managers' }, address(GALE, 'Gale'), address(R2MODMAN, 'r2modman'))),
+        code
+          ? h('li', null, 'Choose Valheim and import a new profile from this mods code. It installs ', many ? 'every mod' : 'the mod', ' this world uses, at the server’s versions, with everything ', many ? 'they need' : 'it needs', '. In r2modman: ',
+            h('b', null, 'Import / Update'), ' → ', h('b', null, 'From code'), ', paste the code, then ', h('b', null, 'Continue'), ' → ', h('b', null, 'Import'), ' → ',
+            h('b', null, 'Import new profile'), '. In Gale: import a profile from code.',
+            h('div', { class: 'address' }, h('span', { class: 'muted' }, 'Mods code:'), h('span', { class: 'mono' }, code),
+              h('button', { class: 'btn btn-ghost btn-icon btn-sm', type: 'button', 'aria-label': 'Copy the mods code', onclick: () => copyText(code, 'Mods code copied') }, icon('copy'))))
+          : h('li', null, 'Choose Valheim and make a new profile for this server. Search for ', h('b', null, many ? 'each mod' : `“${list[0].name}”`),
+            ' and install it. Anything else it needs, such as BepInEx, comes with it.'),
+        h('li', null, 'Start Valheim from the mod manager (', h('b', null, 'Launch game'), ' in Gale, ', h('b', null, 'Start modded'), ' in r2modman) and join as usual.')),
+      code ? h('p', { class: 'small text-2' }, 'Or make a profile yourself and search for ', many ? 'each mod' : `“${list[0].name}”`, ' in the mod manager.') : null,
+      newWorlds.length ? h('p', { class: 'small text-2' }, `Play other worlds with a different profile: with ${names(newWorlds)} on, worlds made without it won’t load.`) : null,
+      extras ? null : h('p', { class: 'small muted' }, 'If joining fails because the versions don’t match, update the mods in the mod manager.'),
+    ],
+    actions: [{ label: 'Close', kind: 'primary' }],
+  }));
+}

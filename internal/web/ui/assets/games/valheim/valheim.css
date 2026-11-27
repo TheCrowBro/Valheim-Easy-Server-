@@ -1,0 +1,259 @@
+/* Valheim's parts of the control panel (games/valheim.js). These are the
+   old panel's own rules for the Valheim-only pieces (world cards, mods,
+   the tutorial, adding a world, the join code), copied as they were and
+   put under .vh, the class the module's content carries. So they keep
+   looking as they do today whatever the shell's stylesheet becomes, and
+   they never change anything of the shell's. The colours and sizes come
+   from the shell's variables (app.css :root). */
+
+/* join card */
+.vh .join-code {
+  font: 600 40px/1.1 var(--font); letter-spacing: .08em; color: var(--text); font-variant-numeric: tabular-nums;
+}
+.vh .kv { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px 14px; align-items: center; }
+.vh .kv dt { color: var(--muted); font-size: 13.5px; }
+.vh .kv dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.vh .kv dd.mono { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vh .steps { margin: 12px 0 0; padding-left: 20px; color: var(--text-2); font-size: 14px; }
+.vh .steps li + li { margin-top: 3px; }
+.vh .mods-help, .vh .reminder { margin-bottom: 14px; }
+.vh.join-extras > .callout, .vh.join-extras > .mods-help { margin: 14px 0 0; }
+.vh .vh-guide { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.vh .mod-box { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: 12px; background: var(--bg-2); border: 1px solid var(--line); }
+.vh .mod-name { font-size: 16px; color: var(--text); }
+.vh .mod-howto { font-size: 15px; color: var(--text); margin-bottom: -6px; }
+.vh .address { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.vh .address a { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.vh .address .muted, .vh .address .btn { flex: none; }
+.vh .address .muted { font-size: 13px; }
+.vh .managers { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.vh .link-button { border: 0; padding: 0; background: none; color: var(--accent-2); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.vh p.discord-line { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
+.vh p.discord-line svg { width: 15px; height: 15px; flex: none; }
+.vh .callout.discord-line { margin-top: 14px; }
+.vh .discord-form { gap: 14px; margin-bottom: -12px; }
+.vh .discord-form details.where .steps { margin-top: 0; }
+.vh .pw { font-family: var(--mono); letter-spacing: .04em; }
+.vh .copyable { display: inline-flex; align-items: center; gap: 6px; }
+.vh kbd { font-family: var(--mono); font-size: 12px; background: var(--surface-3); border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; }
+
+/* worlds */
+.vh .world-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.vh .world { display: flex; flex-direction: column; gap: 12px; }
+.vh .world.selected { border-color: rgba(242, 163, 58, .55); box-shadow: 0 0 0 1px rgba(242, 163, 58, .25) inset; }
+.vh .world-name { font-size: 18px; font-weight: 650; overflow-wrap: anywhere; }
+.vh .world .meta { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 13.5px; }
+.vh .world .meta dt { color: var(--muted); }
+.vh .world .meta dd { margin: 0; color: var(--text-2); overflow-wrap: anywhere; }
+.vh .world .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; }
+.vh .world-mods { display: flex; align-items: center; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.vh .world-mods .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.vh .world-mods .title { font-weight: 600; font-size: 14px; }
+.vh .world-mods .help { color: var(--muted); font-size: 13px; }
+.vh .world-mods .link-button { font-size: 13px; }
+.vh .mod-group { border: 0; padding: 0; margin: 4px 0 6px; min-width: 0; }
+.vh .mod-group legend { padding: 0; margin-bottom: 8px; font-size: 12.5px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.vh .mod-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+.vh .mod-option {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2);
+}
+.vh .mod-option:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.vh .mod-option input { margin: 3px 0 0; accent-color: var(--accent); flex: none; }
+.vh .mod-option .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.vh .mod-option-name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-weight: 600; color: var(--text); }
+.vh .mod-option small { color: var(--text-2); font-size: 13px; }
+.vh .mod-option small.mod-option-players { color: var(--muted); font-size: 12.5px; }
+.vh .mod-warn { margin-top: 6px; padding: 8px 10px; gap: 8px; }
+.vh .mod-warn > svg { width: 16px; height: 16px; }
+.vh .new-world-mods { margin-top: 2px; }
+.vh .new-world-mods .mod-group:first-of-type { margin-top: 10px; }
+.vh .key-option { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+.vh .key-option input { margin: 4px 0 0; accent-color: var(--accent); }
+.vh .key-option small { display: block; color: var(--muted); font-size: 13px; }
+.vh .dl-progress { display: flex; flex-direction: column; gap: 4px; min-width: 150px; flex: 1 1 150px; }
+.vh .dl-progress .progress { margin-top: 0; }
+.vh .world.just-added { animation: vh-glow 2.4s ease-out 2; }
+@keyframes vh-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(242, 163, 58, 0); } 30% { box-shadow: 0 0 0 4px rgba(242, 163, 58, .45); } }
+.vh .cand { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.vh .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 26px 0 10px; font-weight: 600; }
+
+/* the Mods tab: one row per world */
+.vh .mods-worlds { display: flex; flex-direction: column; gap: 16px; }
+.vh .mods-world .world-mods { padding-top: 0; border-top: 0; }
+.vh .mods-world .row { gap: 8px; }
+
+/* menus */
+.vh .menu { position: relative; display: inline-block; }
+.vh .menu-list {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 210px; padding: 6px;
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 12px; box-shadow: var(--shadow);
+}
+.vh .menu-list button {
+  display: flex; width: 100%; align-items: center; gap: 10px; padding: 9px 10px; border: 0; background: none;
+  border-radius: 8px; cursor: pointer; text-align: left; color: var(--text);
+}
+.vh .menu-list button:hover { background: var(--surface-3); }
+.vh .menu-list button.danger { color: var(--bad-text); }
+.vh .menu-list svg { width: 17px; height: 17px; color: var(--muted); }
+.vh .menu-list button.danger svg { color: var(--bad-text); }
+
+/* settings and players */
+.vh .choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.vh .choice {
+  display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border: 1px solid var(--line-2);
+  border-radius: 12px; cursor: pointer; background: var(--bg-2);
+}
+.vh .choice.on { border-color: var(--accent); background: var(--accent-soft); }
+.vh .choice input { margin-top: 4px; accent-color: var(--accent); }
+.vh .choice .title { font-weight: 600; }
+.vh .choice .help { color: var(--text-2); font-size: 13px; margin-top: 2px; }
+.vh .update-row { gap: 12px; }
+.vh .update-row.ruled { padding-top: 12px; border-top: 1px solid var(--line); }
+.vh .segmented { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 2px; }
+.vh .segmented button {
+  border: 0; background: none; color: var(--text-2); padding: 6px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; white-space: nowrap;
+}
+.vh .segmented button.on { background: var(--surface-3); color: var(--text); }
+.vh .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.vh .chip {
+  display: inline-flex; align-items: center; gap: 6px; background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 99px; padding: 4px 6px 4px 12px; font-family: var(--mono); font-size: 13px;
+}
+.vh .chip button { border: 0; background: none; color: var(--muted); cursor: pointer; border-radius: 50%; width: 22px; height: 22px; display: grid; place-items: center; }
+.vh .chip button:hover { background: var(--surface-3); color: var(--text); }
+.vh .chip svg { width: 14px; height: 14px; }
+.vh .savebar {
+  position: sticky; bottom: 16px; z-index: 5; display: flex; align-items: center; gap: 12px; margin-top: 18px;
+  background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow);
+}
+.vh .ruled { padding-top: 12px; border-top: 1px solid var(--line); }
+
+/* adding a world */
+.vh .add-world { border: 2px dashed var(--line-2); display: flex; flex-direction: column; gap: 14px; transition: border-color .15s, background .15s; }
+.vh .add-world:not(.idle) { border-style: solid; border-width: 1px; }
+.dragging-files .vh .add-world { border-color: var(--accent); background: var(--accent-soft); }
+.vh .add-world-head { display: flex; align-items: center; gap: 16px; }
+.vh .add-world-head h2 { font-size: 18px; }
+.vh .add-world-head p { margin-top: 2px; }
+.vh .add-world-icon {
+  width: 52px; height: 52px; flex: none; border-radius: 14px; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent-2);
+}
+.vh .add-world-icon svg { width: 26px; height: 26px; }
+.vh .add-world-actions { gap: 10px; }
+.vh .add-world .progress { margin-top: 0; }
+.vh .add-world .callout { margin: 0; }
+.vh details.where > summary { cursor: pointer; color: var(--accent-2); font-size: 14px; width: max-content; max-width: 100%; }
+.vh details.where[open] > summary { margin-bottom: 10px; }
+.vh details.where .steps { margin-bottom: 8px; }
+.vh .path-box { background: var(--bg); padding: 8px 10px; border-radius: 8px; overflow-wrap: anywhere; margin: 6px 0; color: var(--text); }
+.vh-drop {
+  position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; pointer-events: none;
+  background: rgba(10, 14, 17, .78); animation: vh-fade .12s ease-out;
+}
+.vh-drop[hidden] { display: none; }
+.vh-drop > div {
+  display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 40px 48px;
+  border: 2px dashed var(--accent); border-radius: 22px; background: var(--surface); box-shadow: var(--shadow); max-width: calc(100vw - 32px);
+}
+.vh-drop svg { width: 44px; height: 44px; color: var(--accent); }
+.vh-drop b { font-size: 20px; }
+.vh-drop span { color: var(--text-2); }
+@keyframes vh-fade { from { opacity: 0; } }
+
+/* tutorial: every page sits in the same grid cell, so the window keeps its size */
+.vh .tut-pages { display: grid; }
+.vh .tut-page { grid-area: 1 / 1; display: flex; flex-direction: column; gap: 18px; visibility: hidden; min-width: 0; }
+.vh .tut-page.on { visibility: visible; animation: vh-fade .2s ease-out; }
+.vh .tut-figure {
+  container-type: inline-size; padding: 26px 18px 20px; border-radius: var(--radius); background: var(--bg-2);
+  border: 1px solid var(--line); pointer-events: none; user-select: none;
+}
+.vh .tut-flow { display: grid; justify-content: center; justify-items: center; align-items: center; column-gap: 14px; row-gap: 12px; }
+.vh .tut-pic, .vh .tut-arrow { grid-row: 1; grid-column: var(--c); }
+.vh .tut-caption { grid-row: 2; grid-column: var(--c); align-self: start; max-width: 170px; text-align: center; font-size: 13px; line-height: 1.35; color: var(--muted); }
+.vh .tut-arrow { display: flex; color: var(--muted); }
+.vh .tut-arrow svg { width: 20px; height: 20px; }
+.vh .tut-figure .status-pill svg { width: 16px; height: 16px; color: var(--muted); }
+.vh .tut-press { position: relative; display: inline-flex; }
+.vh .tut-press > :first-child { box-shadow: 0 0 0 3px var(--bg-2), 0 0 0 5px var(--info); }
+.vh .tut-pointer {
+  position: absolute; right: -14px; bottom: -18px; width: 26px; height: 26px; fill: #fff; stroke: #0b0f12; stroke-width: 1.6;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45)); animation: vh-tap 2.6s ease-in-out infinite;
+}
+@keyframes vh-tap { 0%, 55%, 80%, 100% { transform: none; } 65% { transform: translate(-2px, -2px) scale(.88); } }
+.vh .tut-game { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.vh .tut-game-button {
+  display: inline-flex; align-items: center; min-height: 40px; padding: 0 20px; border-radius: 6px; background: var(--game);
+  border: 1px solid var(--game-line); color: var(--game-ink); font-weight: 700; font-size: 14px; letter-spacing: .08em; text-transform: uppercase;
+}
+.vh .tut-join, .vh .tut-world {
+  display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border-radius: 12px; background: var(--surface);
+  border: 1px solid var(--line); text-align: left;
+}
+.vh .tut-join .join-code { font-size: 30px; }
+.vh .tut-addr { font-size: 16px; font-weight: 600; color: var(--text); }
+.vh .tut-world { align-items: flex-start; gap: 12px; width: 230px; max-width: 100%; }
+.vh .tut-world.playing { border-color: rgba(242, 163, 58, .55); }
+.vh .tut-world .world-name { font-size: 16px; }
+.vh .tut-menu {
+  display: flex; flex-direction: column; gap: 2px; align-self: stretch; padding: 6px; border-radius: 10px;
+  background: var(--surface-2); border: 1px solid var(--line-2);
+}
+.vh .tut-menu span { display: flex; align-items: center; gap: 9px; padding: 6px 10px; border-radius: 7px; font-size: 14px; }
+.vh .tut-menu .tut-press { display: flex; padding: 0; }
+.vh .tut-menu .tut-press > span { flex: 1; background: var(--surface-3); }
+.vh .tut-menu svg { width: 16px; height: 16px; color: var(--muted); }
+.vh .tut-menu .tut-pointer { width: 26px; height: 26px; color: inherit; }
+.vh .tut-mod { display: flex; align-items: center; justify-content: space-between; gap: 12px; align-self: stretch; padding-top: 10px; border-top: 1px solid var(--line); font-size: 14px; font-weight: 600; }
+.vh .tut-mod .muted { font-weight: 400; }
+.vh .tut-dialog {
+  display: flex; flex-direction: column; gap: 9px; min-width: 190px; padding: 12px 16px 14px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--line-2); text-align: left; font-size: 14px;
+}
+.vh .tut-select { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--bg); }
+.vh .tut-select svg { width: 16px; height: 16px; color: var(--muted); }
+.vh .tut-check { display: flex; align-items: center; gap: 8px; }
+.vh .tut-check .box { width: 16px; height: 16px; flex: none; display: grid; place-items: center; border-radius: 4px; border: 1px solid var(--line-2); }
+.vh .tut-check.on .box { background: var(--accent); border-color: transparent; color: var(--accent-ink); }
+.vh .tut-check .box svg { width: 12px; height: 12px; stroke-width: 3; }
+.vh .tut-head { display: flex; align-items: center; gap: 14px; }
+.vh .tut-icon { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 12px; background: var(--info-soft); color: var(--info-text); }
+.vh .tut-icon svg { width: 22px; height: 22px; }
+.vh .tut-step { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.vh .tut-head h3 { font-size: 20px; color: var(--text); text-wrap: balance; }
+.vh .tut-text { display: flex; flex-direction: column; gap: 8px; max-width: 64ch; }
+.vh .tut-text b { color: var(--text); font-weight: 600; }
+.vh .tut-dots { display: flex; gap: 2px; margin-right: auto; }
+.vh .tut-dots button { width: 30px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: none; cursor: pointer; display: grid; place-items: center; }
+.vh .tut-dots button::before { content: ""; width: 22px; height: 6px; border-radius: 99px; background: var(--surface-3); transition: background .15s; }
+.vh .tut-dots button:hover::before { background: var(--muted); }
+.vh .tut-dots button.seen::before { background: rgba(57, 135, 229, .45); }
+.vh .tut-dots button.on::before { background: var(--info); }
+@container (max-width: 560px) {
+  .vh .tut-flow { row-gap: 6px; }
+  .vh .tut-pic, .vh .tut-arrow, .vh .tut-caption { grid-row: auto; grid-column: 1; }
+  .vh .tut-caption { max-width: none; margin-bottom: 4px; }
+  .vh .tut-arrow svg { transform: rotate(90deg); }
+}
+
+/* ---------- smaller windows, as the old panel had them ---------- */
+@media (max-width: 860px) {
+  .vh .join-code { font-size: 34px; }
+  .vh .kv { column-gap: 8px; }
+  .vh .kv dd.mono { font-size: 12.5px; }
+}
+@media (max-width: 600px) {
+  .vh .card-head.wrap .segmented { width: 100%; }
+  .vh .card-head.wrap .segmented button { flex: 1; }
+  /* a phone shows one step at a time on a full-height window, so Next stays put */
+  .modal.vh.tutorial { height: calc(100vh - 32px); height: calc(100dvh - 32px); }
+  .modal.vh.tutorial .modal-body { flex: 1 1 auto; }
+  .vh .tut-page { grid-area: auto; }
+  .vh .tut-page:not(.on) { display: none; }
+}
+@media (max-width: 480px) {
+  .vh .tut-dots { display: none; }
+  .vh .tut-head h3 { font-size: 18px; }
+}
