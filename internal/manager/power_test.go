@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -55,16 +56,24 @@ func (p *presence) here() {
 	p.dark.Store(false)
 }
 
+// noNetwork makes the resume after waking wait for a network that never
+// comes back within the test, so it never starts a game by itself
+// (resume.go).
+func noNetwork(t *testing.T) {
+	set(t, &gatewayAnswers, func(context.Context) bool { return false })
+}
+
 // A computer that wakes up by itself (a Mac's maintenance dark wake, a
 // Windows wake timer) isn't kept awake and doesn't start the server. Once
 // someone wants it, by using it or with a wake signal, it stays awake and
 // the server starts again.
 func TestWakeWaitsForSomeone(t *testing.T) {
 	user := fakeUser(t)
+	noNetwork(t)
 	env := setup(t)
 	m := env.m
 	m.mu.Lock()
-	m.resumeOnWake = true                  // the server ran when it went to sleep
+	m.resumeSet = []string{m.legacyID}     // the server ran when it went to sleep
 	m.wakeHold = time.Now().Add(time.Hour) // a hold from before it slept
 	m.mu.Unlock()
 
@@ -72,7 +81,7 @@ func TestWakeWaitsForSomeone(t *testing.T) {
 	woke := &pendingWake{at: time.Now(), asleep: time.Now().Add(-2 * time.Hour)}
 	time.Sleep(10 * time.Millisecond)
 	m.mu.Lock()
-	awake, resume := m.wantAwakeLocked(time.Now()), m.resumeOnWake
+	awake, resume := m.wantAwakeLocked(time.Now()), len(m.resumeSet) > 0
 	m.mu.Unlock()
 	if m.wakeWanted(woke) || awake || !resume || hasText(m, "wake", "The computer woke up") {
 		t.Fatalf("woke up by itself: wanted %v, kept awake %v, still to resume %v", m.wakeWanted(woke), awake, resume)
@@ -100,6 +109,13 @@ func TestWakeWaitsForSomeone(t *testing.T) {
 	if !m.wakeWanted(woke) {
 		t.Fatal("a wake signal doesn't count")
 	}
+	// The KVM's own button (a packet without a request) starts what ran
+	// before the sleep at once (spec 4.7): here nothing is installed, so it
+	// says why it didn't.
+	waitFor(t, "the resume the wake signal asked for", 10*time.Second, func() bool {
+		return hasText(m, "info", "Starting Valheim again: someone asked with Wake-on-LAN") &&
+			hasText(m, "warning", "Valheim wasn't started again after waking")
+	})
 
 	// The network adapter (Wake-on-LAN from the KVM's own button, which the
 	// app doesn't hear) or the power button woke it: that counts too, even
@@ -109,14 +125,17 @@ func TestWakeWaitsForSomeone(t *testing.T) {
 		t.Fatal("a wake-up by a device doesn't count")
 	}
 
+	m.mu.Lock()
+	m.resumeSet = []string{m.legacyID} // owed again, for the wake on purpose
+	m.mu.Unlock()
 	m.wokenOnPurpose()
 	m.mu.Lock()
-	awake, resume = m.wantAwakeLocked(time.Now()), m.resumeOnWake
+	awake, pending := m.wantAwakeLocked(time.Now()), m.life.resume != nil
 	m.mu.Unlock()
-	if !awake || resume {
-		t.Fatalf("woken on purpose: kept awake %v, still to resume %v", awake, resume)
+	if !awake || !pending {
+		t.Fatalf("woken on purpose: kept awake %v, starting again %v", awake, pending)
 	}
-	if !hasText(m, "wake", "The computer woke up. It stays awake") || !hasText(m, "info", "Starting the server again in 20 seconds") {
+	if !hasText(m, "wake", "The computer woke up. It stays awake") || !hasText(m, "info", "Starting the server again once the network is back") {
 		t.Fatal("no activity about staying awake and starting again")
 	}
 }
@@ -222,6 +241,7 @@ func TestIdleDeadlineFollowsInput(t *testing.T) {
 func TestKVMWakeKeepsAwake(t *testing.T) {
 	set(t, &sleepReturns, true) // as on Windows
 	set(t, &wakeAskEvery, 100*time.Millisecond)
+	noNetwork(t)
 	user := fakeUser(t)
 	user.cause.Store(int32(platform.WakeCauseUnknown)) // Windows hasn't said yet
 	var sleptAt atomic.Int64
@@ -262,9 +282,9 @@ func TestKVMWakeKeepsAwake(t *testing.T) {
 	m.mu.Lock()
 	awake := m.wantAwakeLocked(time.Now().Add(wakeGrace - time.Minute))
 	m.mu.Unlock()
-	if !awake || !hasText(m, "info", "Starting the server again in 20 seconds") {
+	if !awake || !hasText(m, "info", "Starting the server again once the network is back") {
 		t.Fatalf("after a wake-up from the KVM: kept awake %v, starting again %v", awake,
-			hasText(m, "info", "Starting the server again in 20 seconds"))
+			hasText(m, "info", "Starting the server again once the network is back"))
 	}
 	// It asked about a wake-up after the computer went to sleep, not an
 	// earlier one.
@@ -281,6 +301,7 @@ func TestLongDarkWakeThenFullWake(t *testing.T) {
 	set(t, &darkWakes, true)
 	set(t, &sleepReturns, true) // so the test's sleep shows as a wake-up
 	set(t, &wakeWatch, 300*time.Millisecond)
+	noNetwork(t)
 	user := fakeUser(t) // a maintenance dark wake
 	env := setup(t)
 	m := env.m
@@ -292,7 +313,7 @@ func TestLongDarkWakeThenFullWake(t *testing.T) {
 	}
 	waitJob(t, m, currentJobID(m))
 	m.mu.Lock()
-	m.resumeOnWake = true // the server ran when it went to sleep
+	m.resumeSet = []string{m.legacyID} // the server ran when it went to sleep
 	m.mu.Unlock()
 	waitFor(t, "the wake to be noticed", 5*time.Second, func() bool {
 		m.mu.Lock()
@@ -308,7 +329,7 @@ func TestLongDarkWakeThenFullWake(t *testing.T) {
 	waitFor(t, "the computer to stay awake", 5*time.Second, func() bool {
 		return hasText(m, "wake", "The computer woke up. It stays awake")
 	})
-	if !hasText(m, "info", "Starting the server again in 20 seconds") {
+	if !hasText(m, "info", "Starting the server again once the network is back") {
 		t.Fatal("the server doesn't start again")
 	}
 }
@@ -321,7 +342,7 @@ func TestResumeOwedThroughTimerWakes(t *testing.T) {
 	env := setup(t)
 	m := env.m
 	m.mu.Lock()
-	m.resumeOnWake = true // the server ran when it first went to sleep
+	m.resumeSet = []string{m.legacyID} // the server ran when it first went to sleep
 	m.mu.Unlock()
 	m.onWake(time.Hour)
 	if err := m.Hibernate("Nobody has played for 60 minutes."); err != nil {
@@ -329,7 +350,7 @@ func TestResumeOwedThroughTimerWakes(t *testing.T) {
 	}
 	waitJob(t, m, currentJobID(m))
 	m.mu.Lock()
-	owed := m.resumeOnWake
+	owed := slices.Equal(m.resumeSet, []string{m.legacyID})
 	m.mu.Unlock()
 	if !owed {
 		t.Fatal("going back to sleep after a timer wake forgot to start the server again")
