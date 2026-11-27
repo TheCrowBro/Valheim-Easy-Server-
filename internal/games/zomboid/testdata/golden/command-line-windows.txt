@@ -25,3 +25,4 @@ ADMINPASSWORD
 16300
 -udpport
 16301
+PZ_CLASSPATH=java/;java/projectzomboid.jar

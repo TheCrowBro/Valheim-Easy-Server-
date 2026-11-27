@@ -137,25 +137,42 @@ func portFree(protos []string, port int, real bool) bool {
 	return true
 }
 
-// bindTaken says whether this process can't open the port: on 127.0.0.1,
-// where stand-ins listen, and with real also on every address. Opening the
-// very address the server uses is what tells on every system (macOS lets a
-// wildcard and a specific address share a TCP port).
+// bindTaken says whether this process can't open the port.
+//
+// Only opening the very address a server holds clashes on every system.
+// The stand-ins listen on 127.0.0.1, so that address tells for them. A
+// real server listens on every address, as 0.0.0.0 (IPv4) or [::] (IPv6,
+// usually taking IPv4 too), and opening another address beside it often
+// works: Windows lets a second program open 127.0.0.1:N while another
+// holds 0.0.0.0:N (unless that one asked for its port alone), macOS lets a
+// Go program do the same over TCP (Go's listeners ask for SO_REUSEADDR,
+// which allows it there), and Go's "every address" listener, an IPv6 one
+// that also takes IPv4, didn't clash with a server's IPv4 0.0.0.0:N on
+// Windows or macOS either. That made the first real-server run on GitHub
+// report Terraria's game port (Windows and macOS) and Enshrouded's query
+// port (Windows) free while the servers held them, as the systems' own
+// port tables (platform.PortInUse) showed. So with real, 0.0.0.0 is tried
+// by itself as well.
 func bindTaken(proto string, port int, real bool) bool {
-	addrs := []string{"127.0.0.1"}
-	if real {
-		addrs = append(addrs, "")
+	network := "tcp"
+	if strings.EqualFold(proto, "udp") {
+		network = "udp"
 	}
-	for _, host := range addrs {
-		addr := net.JoinHostPort(host, strconv.Itoa(port))
-		if strings.EqualFold(proto, "udp") {
-			c, err := net.ListenPacket("udp", addr)
+	type try struct{ network, host string }
+	tries := []try{{network + "4", "127.0.0.1"}}
+	if real {
+		tries = append(tries, try{network + "4", "0.0.0.0"}, try{network, ""})
+	}
+	for _, tr := range tries {
+		addr := net.JoinHostPort(tr.host, strconv.Itoa(port))
+		if network == "udp" {
+			c, err := net.ListenPacket(tr.network, addr)
 			if err != nil {
 				return true
 			}
 			c.Close()
 		} else {
-			l, err := net.Listen("tcp", addr)
+			l, err := net.Listen(tr.network, addr)
 			if err != nil {
 				return true
 			}

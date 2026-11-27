@@ -182,7 +182,7 @@ func TestStandInMatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	args := s.args(l, defaultSaved(t, s), "World", "")
+	args := s.args(l, defaultSaved(t, s), "World", "", s.env.Dirs.Saves)
 	args = slices.DeleteFunc(args, func(a string) bool { return a == "-adminpassword" || a == "" })
 	out := run(args...)
 	if !strings.Contains(out, "version=42.") || !strings.Contains(out, "Enter new administrator password") || !strings.Contains(out, "NoSuchElementException") {

@@ -19,8 +19,11 @@ import (
 //	WARN : Script       f:0 st:34,865,802 at ModelScript.check     > no such model …
 //	LOG  : General      f:0, t:1760000000000, st:1,234> Saving finish
 //
-// "st:" counts milliseconds since the server's Java started, so only "t:"
-// (milliseconds since 1970, when the server prints it) is a time of day.
+// "st:" is a millisecond clock that doesn't start with the server (on the
+// first real-server check two runs 19 minutes apart, each a new Java,
+// printed st:680,281 and st:1,821,529: most likely the time since the
+// computer started), so only "t:" (milliseconds since 1970, when the
+// server prints it) is a time of day.
 // Other lines have no header: the rest of a reply that runs over several
 // lines (the "-name" lines after "Players connected (2): "), Java's own
 // notes ("Picked up _JAVA_OPTIONS") and stack traces.
@@ -51,7 +54,8 @@ var noise = []*regexp.Regexp{
 	regexp.MustCompile(`^Reseeding weather period`),
 	regexp.MustCompile(`^Missing texture: `),
 	regexp.MustCompile(`^ObjectID type=`),
-	regexp.MustCompile(`^Picked up (_JAVA_OPTIONS|JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS)`),
+	// Java's note on the option variables the plan empties (javaOptionVars).
+	regexp.MustCompile(`^(NOTE: )?Picked up (_JAVA_OPTIONS|JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS)`),
 	regexp.MustCompile(`^compressionElapsed=`),
 }
 
@@ -81,6 +85,11 @@ type monitor struct {
 	// shutdown is set once the server's shutdown handling has begun:
 	// nothing after that means it is ready.
 	shutdown bool
+	// failed is set once the server has written "Server Terminated.": it
+	// gave up on its start after an error, so nothing after that means it
+	// is ready either (FACTS.md: it may carry on loading, with parts of
+	// itself missing, and its Java may never end).
+	failed bool
 }
 
 func (s *server) Watch(rec game.Record, known func(name string) string) game.Monitor {
@@ -151,13 +160,29 @@ func (m *monitor) Line(raw string, now time.Time) game.Line {
 		// didn't reach the server; it now waits on its console for good.
 		add(game.Event{Kind: "admin_prompt",
 			Text: "The Project Zomboid server is waiting for an admin password, which the app gives it on its command line. Stop it and start it again; if this happens again, click Repair."})
+
+	case strings.HasPrefix(trimmed, "Server Terminated"):
+		// What GameServer.main writes after an error it can't get past
+		// while starting. On the first real-server check it came twice,
+		// 30 seconds in, and the server's Java then stayed running for
+		// good without opening its ports (FACTS.md), so without this the
+		// owner would only see "starting" for a quarter of an hour.
+		if !m.failed {
+			m.failed = true
+			what := "hit an error while starting and gave up"
+			if m.state.Ready {
+				what = "hit an error and stopped working"
+			}
+			add(game.Event{Kind: "load_failed",
+				Text: "The Project Zomboid server " + what + " (\"Server Terminated.\" in its log), though its program may still be running. Stop it, then look on the Log page for the error just above that line; if it names one of the server's own files, click Repair."})
+		}
 	}
 	return out
 }
 
 // online notes that the server is up, once.
 func (m *monitor) online() []game.Event {
-	if m.state.Ready || m.shutdown {
+	if m.state.Ready || m.shutdown || m.failed {
 		return nil
 	}
 	m.state.Ready = true

@@ -15,6 +15,7 @@ package necesse
 
 import (
 	"bytes"
+	"context"
 	"debug/macho"
 	"debug/pe"
 	"fmt"
@@ -63,13 +64,36 @@ func realServerChecks(t *testing.T, g game.Game) {
 	})
 
 	// The parts particular to Necesse.
-	t.Run("console, password, takeover and Ctrl+C", func(t *testing.T) {
+	//
+	// On the Intel Mac runner (run 45921304914, both attempts) every check
+	// in this subtest passed, and then Go's own removal of the subtest's
+	// temporary folder failed: "unlinkat …/TestRealServerconsole,…: directory
+	// not empty", while the same removal after "conformance" worked
+	// (FACTS.md, "The Mac cell's temporary folder"). So this subtest notes
+	// which folder gametest made for it, and after it says what, if
+	// anything, was left there and which programs still had it open.
+	var sessionFolder string
+	ok := t.Run("console, password, takeover and Ctrl+C", func(t *testing.T) {
 		// The first start has no password, given as an empty value, which
 		// must reach Java as one (an empty value lost on the way would make
 		// the next option the password).
 		s := gametest.Start(t, g, gametest.Options{Real: true, World: "Takeover", Change: func(sv *game.Saved) {
 			sv.Server["serverName"] = "Real check"
 		}})
+		// gametest's data folder is <the subtest's folder>/001.
+		sessionFolder = filepath.Dir(s.Env().Data)
+		// This runs before gametest's own cleanup and the folder's removal
+		// (cleanups run last-registered first). Once every server here has
+		// stopped, no program should still have a file open in the folder.
+		finished := false
+		t.Cleanup(func() {
+			if !finished {
+				return // a server the test left running is gametest's to stop
+			}
+			if h := holders(sessionFolder); h != "" {
+				t.Logf("FACTS: after the last stop, programs still had files open in the test's folder %s:\n%s", sessionFolder, h)
+			}
+		})
 		ready := s.Plan().ReadyWait + 5*time.Minute
 		s.WaitEvent("online", "", ready)
 		rec := s.Record()
@@ -142,7 +166,117 @@ func realServerChecks(t *testing.T, g game.Game) {
 		s.Stop()
 
 		codePageFacts(t, s.Server().(*server), s.Env().Store.Get())
+		finished = true
 	})
+	if !ok {
+		leftBehind(t, sessionFolder)
+	}
+}
+
+// leftBehind says, for a subtest that failed, what is still in the
+// temporary folder Go should have removed when it ended, and which programs
+// have files open there: the evidence for a "TempDir RemoveAll cleanup"
+// failure, which by itself names only the folder. It leaves the folder as
+// it is, for the CI step that collects the test's logs.
+func leftBehind(t *testing.T, dir string) {
+	t.Helper()
+	if dir == "" {
+		return
+	}
+	if _, err := os.Lstat(dir); err != nil {
+		t.Logf("FACTS: the failed subtest's folder %s is gone (%v)", dir, err)
+		return
+	}
+	t.Logf("FACTS: the failed subtest's folder %s is still there, holding (path, size, mode, last change):\n%s", dir, listTree(dir))
+	if h := holders(dir); h != "" {
+		t.Logf("FACTS: programs with files open in it:\n%s", h)
+	} else {
+		t.Logf("FACTS: no program has a file open in it (or lsof isn't available here)")
+	}
+}
+
+// listTree lists everything under dir, hidden files included, one line
+// each, with the time each last changed (to the nanosecond, so it can be
+// set against the times in the test's log).
+func listTree(dir string) string {
+	var lines []string
+	filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			lines = append(lines, fmt.Sprintf("  %s: %v", p, err))
+			return nil
+		}
+		if p == dir {
+			return nil
+		}
+		rel, _ := filepath.Rel(dir, p)
+		if info, err := d.Info(); err == nil {
+			lines = append(lines, fmt.Sprintf("  %s %d %v %s", rel, info.Size(), info.Mode(), info.ModTime().UTC().Format(time.RFC3339Nano)))
+		} else {
+			lines = append(lines, fmt.Sprintf("  %s (%v)", rel, err))
+		}
+		if len(lines) >= 200 {
+			return fs.SkipAll
+		}
+		return nil
+	})
+	if len(lines) == 0 {
+		return "  (nothing)"
+	}
+	return strings.Join(lines, "\n")
+}
+
+// holders is what lsof says about the programs that have a file (or their
+// working folder) under dir, or "" when none has or lsof isn't there
+// (Windows). It gives up after 30 seconds.
+func holders(dir string) string {
+	if runtime.GOOS == "windows" {
+		return ""
+	}
+	lsof, err := exec.LookPath("lsof")
+	if err != nil {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	// lsof exits 1 when it finds nothing; its output says all there is.
+	// -w leaves out its warnings (about file systems it can't look at),
+	// so any output names a program.
+	out, _ := exec.CommandContext(ctx, lsof, "-w", "-n", "-P", "+D", dir).CombinedOutput()
+	return strings.TrimSpace(string(out))
+}
+
+// ownTempFolder makes a temporary folder for something the test starts
+// itself, outside the folder gametest made (named Test… so CI's step that
+// collects a failed test's logs looks in it too), and removes it when the
+// test ends. If it can't be removed at once, the test's log says what was
+// in it and which programs had it open, and it tries again for 10 seconds
+// before failing.
+func ownTempFolder(t *testing.T, pattern string) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", pattern)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		err := os.RemoveAll(dir)
+		if err == nil {
+			return
+		}
+		t.Logf("FACTS: removing %s failed (%v); it held:\n%s", dir, err, listTree(dir))
+		if h := holders(dir); h != "" {
+			t.Logf("FACTS: programs with files open in it:\n%s", h)
+		}
+		first := time.Now()
+		for time.Since(first) < 10*time.Second {
+			time.Sleep(500 * time.Millisecond)
+			if err = os.RemoveAll(dir); err == nil {
+				t.Logf("FACTS: removing it worked %v later", time.Since(first).Round(100*time.Millisecond))
+				return
+			}
+		}
+		t.Errorf("couldn't remove %s: %v; it holds:\n%s", dir, err, listTree(dir))
+	})
+	return dir
 }
 
 // codePageFacts settles how a value with characters outside Windows' code
@@ -151,11 +285,20 @@ func realServerChecks(t *testing.T, g game.Game) {
 // name and a data folder of its own, and looks at the world file the
 // server makes: a file under the name as given means the name got through
 // whole.
+//
+// That data folder is its own temporary folder, not one inside the folder
+// gametest made for the subtest (t.TempDir would put it there, as "002"
+// beside gametest's "001"). On the Mac this server really runs (on Windows
+// it ends at once on the mangled name), and the subtest's folder was the
+// one Go couldn't remove there; with this run's folder apart, a folder it
+// leaves behind is reported on its own (ownTempFolder), and gametest's
+// folder holds only what gametest put in it, as in "conformance", whose
+// folder was removed without trouble.
 func codePageFacts(t *testing.T, srv *server, sv game.Saved) {
 	t.Helper()
 	const world = "Code page ✓ 🏡"
 	own := *srv
-	own.env.Dirs.Saves = t.TempDir()
+	own.env.Dirs.Saves = ownTempFolder(t, "TestRealServer-codepage-")
 	cmd := exec.Command(srv.Program(), own.args(sv, world)...)
 	cmd.Dir = srv.env.Dirs.Server
 	stdin, err := cmd.StdinPipe()
@@ -169,6 +312,16 @@ func codePageFacts(t *testing.T, srv *server, sv game.Saved) {
 	}
 	done := make(chan struct{})
 	go func() { cmd.Wait(); close(done) }()
+	// Whatever happens below, this Java has ended before its folder is
+	// removed (cleanups run last-registered first).
+	t.Cleanup(func() {
+		select {
+		case <-done:
+		default:
+			cmd.Process.Kill()
+			<-done
+		}
+	})
 	// It makes the world, then says it's ready; or, given a name it can't
 	// use, it may end or hang instead.
 	deadline := time.Now().Add(3 * time.Minute)

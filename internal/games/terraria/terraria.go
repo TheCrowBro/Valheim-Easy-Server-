@@ -4,10 +4,13 @@
 //
 // Terraria is a console game. Its server saves only when "save" or "exit"
 // is typed on its console, every 10 minutes while someone plays, and when
-// the last player leaves; Ctrl+C ends it without saving. So the app keeps
-// a pipe to its console (Plan.Console), stops it with "exit", and types
-// "save" before the app itself exits. After an app restart the console is
-// gone, and the stop falls back to Ctrl+C (spec 2.11).
+// the last player leaves; Ctrl+C ends the Mac (and Linux) server without
+// saving, and the Windows server ignores it. So the app keeps a pipe to
+// its console (Plan.Console), stops it with "exit", and types "save"
+// before the app itself exits. After an app restart the console is gone,
+// and the stop falls back to Ctrl+C (spec 2.11), which on Windows leaves
+// only Force stop. The Windows server also reads its console as UTF-16,
+// which the game contract can't express yet (FACTS.md, 3 and 11).
 //
 // Every fact the code relies on was checked against the real server and is
 // written down, with its source, in FACTS.md beside this file.
@@ -199,12 +202,41 @@ func (s *server) Texts() game.Texts { return game.Texts{Players: "players", Play
 
 // Stop types "exit", which saves the world and ends the server. After a
 // takeover the app has no console to type it on, so the chain goes on to
-// Ctrl+C, which ends the server at once without saving.
+// Ctrl+C, which ends the Mac (and Linux) server at once without saving.
 func (s *server) Stop(rec game.Record) []game.StopStep {
+	goos := runtime.GOOS
+	if s.env.Fake != nil {
+		// The stand-in behaves like the Mac and Linux servers everywhere.
+		goos = "fake"
+	}
+	return stopSteps(goos)
+}
+
+// The text shown while the Ctrl+C step waits.
+const (
+	sayCtrlC = "Terraria saves every 10 minutes and when the last player leaves; anything since then is lost."
+	// The Windows server catches Ctrl+C and carries on (FACTS.md, 3 and
+	// 10), so after a takeover only Force stop ends it. Saying so lets
+	// the owner choose that without wondering why nothing happens. The
+	// step also runs when "exit" didn't stop it in time, so the text is
+	// true either way.
+	sayCtrlCWindows = "Terraria's Windows server stops only from its console, which is gone after the app restarts, and it ignores Ctrl+C. " +
+		"If it keeps running, use Force stop: Terraria saves every 10 minutes and when the last player leaves; anything since then is lost."
+)
+
+// stopSteps is the chain for goos. The Ctrl+C step stays on Windows, where
+// it can't end the server, because a console game's chain must not end at
+// its console step (after a takeover the manager would have nothing left to
+// try); its wait there is short, as the server's handler answers at once
+// and waiting longer would only keep the owner from Force stop.
+func stopSteps(goos string) []game.StopStep {
+	ctrlC := game.StopStep{Kind: "interrupt", Wait: time.Minute, Say: sayCtrlC}
+	if goos == "windows" {
+		ctrlC.Wait, ctrlC.Say = 15*time.Second, sayCtrlCWindows
+	}
 	return []game.StopStep{
 		{Kind: "console", Line: "exit", Wait: 3 * time.Minute},
-		{Kind: "interrupt", Wait: time.Minute,
-			Say: "Terraria saves every 10 minutes and when the last player leaves; anything since then is lost."},
+		ctrlC,
 	}
 }
 

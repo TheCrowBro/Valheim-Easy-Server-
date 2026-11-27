@@ -23,19 +23,28 @@ import (
 //
 // Its command line is the one the adapter gives the real server:
 //
-//	TerrariaServer -config <serverconfig.txt>
+//	TerrariaServer -config <serverconfig.txt> -savedirectory <folder>
 //
-// and it reads from that file what the real server does: world (the .wld
-// to load), autocreate/worldname/difficulty/seed (to make it when it's
-// missing), port, maxplayers and password. It listens on the port with TCP
+// It ignores -savedirectory, where the real one keeps favorites.json and
+// this one keeps nothing, and it reads from the config what the real
+// server does: world (the .wld to load), autocreate/worldname/difficulty/
+// seed (to make it when it's missing), port, maxplayers and password. It listens on the port with TCP
 // and UDP; when the TCP port is taken it says "Listening on port N" and
 // quits with code 0 without a word, as the real one does.
 //
 // Its console takes "save" (saves, with the real progress lines), "exit"
 // ("Saving before exit...", saves silently, exits 0), "exit-nosave",
 // "playing", "version", "port" and "help". Ctrl+C ends it at once without
-// saving, as the real one does. While players are on it autosaves every
-// 10 minutes of its clock, and it saves when the last player leaves.
+// saving, as the real Mac and Linux servers do. While players are on it
+// autosaves every 10 minutes of its clock, and it saves when the last
+// player leaves.
+//
+// It acts like the Mac and Linux servers on every system, Windows
+// included: it reads its console as UTF-8 and ends on Ctrl+C. The real
+// Windows server reads its console as UTF-16 and ignores Ctrl+C
+// (FACTS.md, 3); copying that here would fail every Windows test of the
+// app until the game contract can say which encoding a console game
+// reads, so that waits for the contract change.
 //
 // Script verbs: join and leave (with the "is connecting..." line before a
 // join), deny (a wrong password), badversion (an older client), save, and

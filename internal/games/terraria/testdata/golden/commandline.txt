@@ -1,24 +1,24 @@
 [windows]
 program: <data>/games/terraria/server/Windows/TerrariaServer.exe
-args: -config <data>/games/terraria/server/serverconfig.txt
+args: -config <data>/games/terraria/server/serverconfig.txt -savedirectory <data>/games/terraria/server
 dir: <data>/games/terraria/server/Windows
 env: 
 
 [darwin]
 program: <data>/games/terraria/server/Mac/Terraria Server.app/Contents/MacOS/TerrariaServer.bin.osx
-args: -config <data>/games/terraria/server/serverconfig.txt
+args: -config <data>/games/terraria/server/serverconfig.txt -savedirectory <data>/games/terraria/server
 dir: <data>/games/terraria/server/Mac/Terraria Server.app/Contents/MacOS
 env: DYLD_LIBRARY_PATH=<data>/games/terraria/server/Mac/Terraria Server.app/Contents/MacOS/osx
 
 [linux]
 program: <data>/games/terraria/server/Linux/TerrariaServer.bin.x86_64
-args: -config <data>/games/terraria/server/serverconfig.txt
+args: -config <data>/games/terraria/server/serverconfig.txt -savedirectory <data>/games/terraria/server
 dir: <data>/games/terraria/server/Linux
 env: 
 
 [fake]
 program: <data>/games/terraria/server/TerrariaServer
-args: -config <data>/games/terraria/server/serverconfig.txt
+args: -config <data>/games/terraria/server/serverconfig.txt -savedirectory <data>/games/terraria/server
 dir: <data>/games/terraria/server
 env: 
 
