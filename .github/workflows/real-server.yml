@@ -1,37 +1,730 @@
-name: Real Valheim server
+name: Real game servers
 
-# Started by hand (Actions, "Run workflow"). On an Intel Mac, like a 2013
-# Mac Pro, and on Windows, it installs the real Valheim server with SteamCMD
-# (about 2 GB), makes a new world with crossplay and stops it as soon as
-# it's online (the world must be saved), plays it with a mod, then without
-# crossplay or mods. It takes about a quarter of an hour.
+# Installs and runs the real game servers, not the stand-ins, on the systems
+# the app is offered on: one job (a "cell") per game and runner. It checks
+# what the stand-ins can't: that the real download installs, the server
+# starts and says it's online, and stopping it saves the world.
+#
+# Each game says where and how its check runs in its own
+# internal/games/<id>/realserver.json, for example:
+#   {"os": ["windows-latest", "macos-15-intel"], "onDemand": false,
+#    "timeoutMinutes": 60, "package": "./internal/games/minecraft/",
+#    "run": "TestRealServer", "setup": {"macos": ".github/scripts/x.sh"}}
+# "os" lists the runners; "onDemand" games (a big download, such as
+# Satisfactory) run only when "big" is ticked; "setup" names a script per
+# system (windows, macos, linux) that runs before the test. The plan job
+# reads every one of these files and builds the cells
+# (docs/dev/multigame/spec.md, 7.4).
+#
+# Keep this file's name: build.yml's release job publishes a merge only if
+# this workflow has a passed run, started by hand with games set to "all",
+# on the commit merged in. It tells that from the run's title (run-name
+# below), so keep the title's form too.
+#
+# When it runs:
+# - by hand (Actions, "Run workflow", on any branch). "changed" compares a
+#   stream's branch with multigame, and multigame (or a release branch)
+#   with the default branch, which is the last release;
+# - on a push to multigame: only the games changed since the last push run
+#   whose checks all ran, or every game when code they all use changed. A
+#   game counts as changed when its own folder, its setup script or any
+#   package its test is built from changed;
+# - every night: all games on multigame. GitHub starts scheduled runs only
+#   from the default branch's copy of this file, so this begins once the
+#   file is released.
 
 on:
   workflow_dispatch:
+    inputs:
+      games:
+        description: 'Which games: "all", "changed" (what this branch changed) or ids such as "minecraft,terraria"'
+        type: string
+        required: true
+        default: all
+      big:
+        description: Also run the games checked only on demand (Satisfactory, about 15.5 GB)
+        type: boolean
+        default: false
+  push:
+    branches: [multigame]
+    # Notes (docs/, and .md files in any folder) never start a real server.
+    paths-ignore: ['docs/**', '**.md']
+  schedule:
+    - cron: '23 2 * * *'
+
+# The run's title says what was asked for, so a run that checked only some
+# games can be told from one that checked them all. build.yml's release
+# check reads the games back from it: everything after the first ": " in
+# "Real servers on <branch>: <games>" (a branch name can't hold a colon),
+# split at commas as the plan job does.
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+  && format('Real servers on {0}: {1}{2}', github.ref_name, inputs.games, inputs.big && ', and the big ones' || '')
+  || github.event_name == 'schedule' && 'Real servers: nightly, all games'
+  || format('Real servers: the games this push to {0} changed', github.ref_name) }}
 
 permissions:
   contents: read
 
+# A newer push stops the checks of an older push, so a row of pushes
+# doesn't queue hours of checks. Nothing the older push changed goes
+# unchecked: a push run compares with the last push run whose checks all
+# ran, not with the push before it, so a stopped run's changes are checked
+# by the next one. Runs started by hand or at night are never stopped: a
+# release may wait for one of them.
+concurrency:
+  group: ${{ github.event_name == 'push' && format('{0}-push-{1}', github.workflow, github.ref) || format('{0}-{1}', github.workflow, github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+env:
+  # The branch work is merged into: nightly runs check it out, and
+  # "changed" compares a stream's branch with it. The push trigger above
+  # names it too (a trigger can't read this).
+  INTEGRATION_BRANCH: multigame
+
 jobs:
-  real-server:
-    name: Install, play, save, play with a mod (${{ matrix.name }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-15-intel
-            name: Intel Mac
-          - os: windows-latest
-            name: Windows
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 80
+  plan:
+    # The push runs look for this name when they read earlier runs' jobs
+    # (PLAN_JOB below).
+    name: Choose the games to check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # To read this workflow's earlier push runs, which say what has
+      # already been checked.
+      actions: read
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      count: ${{ steps.plan.outputs.count }}
+      sha: ${{ steps.plan.outputs.sha }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Every branch's history, to tell what changed.
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'schedule' && env.INTEGRATION_BRANCH || github.sha }}
+      # Go lists the packages each game's test is built from, so a change
+      # to one of them (Valheim's mods code, say) checks that game.
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
-      - name: Build the mod loader for macOS 11 and later (UnityDoorstop)
-        if: runner.os == 'macOS'
-        run: .github/scripts/build-doorstop.sh
+          # Listing only downloads the modules. Saving that would take the
+          # Linux cache key build.yml's tests use, without their build cache.
+          cache: false
+      - name: Read each game's realserver.json
+        id: plan
+        shell: python3 -I {0}
+        env:
+          EVENT: ${{ github.event_name }}
+          GAMES: ${{ inputs.games }}
+          BIG: ${{ inputs.big }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Turns every internal/games/<id>/realserver.json into the cells:
+          # one per game and runner. A file with a mistake stops the whole
+          # run, because otherwise a misspelt key could quietly skip a
+          # game's check, or run a big download every night.
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+
+          # Code every real check goes through: when it changes, every game
+          # is checked. internal/game/ is the contract and gametest (not
+          # internal/games/, each game's own folder). cmd/fakeserver/, the
+          # stand-ins, is left out on purpose: no real check uses it. Code
+          # only some games use (Valheim's mods and config, rcon, the world
+          # store) checks the games whose tests are built from it, found by
+          # go list (linked_folders).
+          SHARED_FOLDERS = (
+              "internal/install/",
+              "internal/steamcmd/",
+              "internal/platform/",
+              "internal/manager/",
+              "internal/game/",
+          )
+          # The Go version and modules every test builds with, and this file.
+          SHARED_FILES = ("go.mod", "go.sum", ".github/workflows/real-server.yml")
+
+          KEYS = ("os", "onDemand", "timeoutMinutes", "package", "run", "setup")
+          REQUIRED = ("os", "timeoutMinutes", "package", "run")
+          # A runner label's first word, and the key its setup script has.
+          SYSTEMS = {"windows": "windows", "macos": "macos", "ubuntu": "linux"}
+          # Each of those systems as Go calls it, to list what a test is
+          # built from there: some files and packages are for one system only.
+          GOOS = {"windows": "windows", "macos": "darwin", "linux": "linux"}
+          # This file, as gh names it, and its plan job's name (above), to
+          # read earlier push runs.
+          WORKFLOW_FILE = "real-server.yml"
+          PLAN_JOB = "Choose the games to check"
+          # The job may run this much longer than the test, for checking out,
+          # setting up and saving the logs. A GitHub job stops at 6 hours.
+          MARGIN = 15
+          MOST_MINUTES = 360 - MARGIN
+
+          GAME_ID = re.compile(r"[a-z0-9][a-z0-9_-]*")
+          LABEL = re.compile(r"(windows|macos|ubuntu)-[a-z0-9][a-z0-9.-]*")
+          # These go into the test's command line as they are, in PowerShell
+          # on Windows and bash on a Mac, so only letters, digits and a few
+          # safe marks are allowed.
+          PACKAGE = re.compile(r"\./[A-Za-z0-9_./-]*")
+          RUN = re.compile(r"Test[A-Za-z0-9_]*(/[A-Za-z0-9_]+)*")
+          SCRIPT = re.compile(r"[A-Za-z0-9_.][A-Za-z0-9_./-]*\.(sh|ps1)")
+
+
+          def escape(text, prop=False):
+              text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              if prop:
+                  text = text.replace(":", "%3A").replace(",", "%2C")
+              return text
+
+
+          def annotate(level, message, file=None):
+              where = " file=" + escape(file, True) if file else ""
+              print(f"::{level}{where}::{escape(message)}", flush=True)
+
+
+          def read_games(root):
+              """Reads and checks every internal/games/<id>/realserver.json under
+              root. Returns the games, in id order, and the problems found as
+              (file, message) pairs."""
+              games, problems = [], []
+              folder = os.path.join(root, "internal", "games")
+              ids = sorted(os.listdir(folder)) if os.path.isdir(folder) else []
+              for gid in ids:
+                  rel = f"internal/games/{gid}/realserver.json"
+                  path = os.path.join(root, rel)
+                  if not os.path.isfile(path):
+                      continue
+                  found = []
+                  if not GAME_ID.fullmatch(gid):
+                      found.append("is in a folder whose name isn't a game id (lowercase letters, digits, - and _)")
+                  try:
+                      with open(path, encoding="utf-8") as f:
+                          spec = json.load(f)
+                  except (OSError, ValueError) as e:
+                      problems.append((rel, f"isn't valid JSON: {e}"))
+                      continue
+                  if not isinstance(spec, dict):
+                      problems.append((rel, "must hold one JSON object, such as {\"os\": [\"windows-latest\"], ...}"))
+                      continue
+                  for key in sorted(set(spec) - set(KEYS)):
+                      found.append(f'has "{key}", which isn\'t one of the keys ({", ".join(KEYS)})')
+                  for key in REQUIRED:
+                      if key not in spec:
+                          found.append(f'needs "{key}"')
+
+                  labels = spec.get("os")
+                  if "os" in spec:
+                      if not isinstance(labels, list) or not labels:
+                          found.append('"os" must list the runners, such as ["windows-latest", "macos-15-intel"]')
+                      else:
+                          for label in labels:
+                              if not isinstance(label, str) or not LABEL.fullmatch(label):
+                                  found.append(f'"os" has {json.dumps(label)}, which isn\'t a GitHub runner label starting windows-, macos- or ubuntu-')
+                          if len(set(map(str, labels))) != len(labels):
+                              found.append('"os" names a runner twice')
+
+                  on_demand = spec.get("onDemand", False)
+                  if not isinstance(on_demand, bool):
+                      found.append('"onDemand" must be true or false')
+
+                  minutes = spec.get("timeoutMinutes")
+                  if "timeoutMinutes" in spec and (
+                      not isinstance(minutes, int) or isinstance(minutes, bool) or not 1 <= minutes <= MOST_MINUTES
+                  ):
+                      found.append(f'"timeoutMinutes" must be a whole number of minutes from 1 to {MOST_MINUTES}')
+
+                  package = spec.get("package")
+                  if "package" in spec:
+                      if not isinstance(package, str) or not PACKAGE.fullmatch(package) or ".." in package:
+                          found.append('"package" must be one package folder in this repository, such as "./internal/games/minecraft/"')
+                      elif not os.path.isdir(os.path.join(root, package)):
+                          found.append(f'"package" is {package}, which isn\'t a folder in this commit')
+
+                  run = spec.get("run")
+                  if "run" in spec and (not isinstance(run, str) or not RUN.fullmatch(run)):
+                      found.append('"run" must be a test name for go test -run, such as "TestRealServer"')
+
+                  setup = spec.get("setup", {})
+                  if not isinstance(setup, dict):
+                      found.append('"setup" must map a system (windows, macos or linux) to a script, such as {"macos": ".github/scripts/build-doorstop.sh"}')
+                      setup = {}
+                  for system, script in setup.items():
+                      if system not in SYSTEMS.values():
+                          found.append(f'"setup" has "{system}", which isn\'t windows, macos or linux')
+                      elif not isinstance(script, str) or not SCRIPT.fullmatch(script) or ".." in script:
+                          found.append(f'"setup".{system} must be a script in this repository ending in .sh or .ps1')
+                      elif not os.path.isfile(os.path.join(root, script)):
+                          found.append(f'"setup".{system} is {script}, which isn\'t a file in this commit')
+                      elif script.endswith(".sh") and not os.access(os.path.join(root, script), os.X_OK):
+                          # It's run as a program, so its own first line picks
+                          # the shell, as it would be run by hand.
+                          found.append(f'"setup".{system} is {script}, which isn\'t executable (git update-index --chmod=+x {script})')
+
+                  if found:
+                      problems.extend((rel, p) for p in found)
+                      continue
+                  games.append({
+                      "id": gid,
+                      "os": labels,
+                      "onDemand": on_demand,
+                      "timeoutMinutes": minutes,
+                      "package": package,
+                      "run": run,
+                      "setup": setup,
+                  })
+              return games, problems
+
+
+          def run(*args, env=None):
+              return subprocess.run(list(args), check=True, capture_output=True, text=True, env=env).stdout
+
+
+          def git(*args):
+              return run("git", *args)
+
+
+          def last_line(err):
+              """The last line of what a failed command printed, for a note."""
+              text = getattr(err, "stderr", None) or str(err)
+              lines = [line for line in text.strip().splitlines() if line.strip()]
+              return lines[-1].strip() if lines else type(err).__name__
+
+
+          def is_commit(rev):
+              return subprocess.run(["git", "cat-file", "-e", rev + "^{commit}"], capture_output=True).returncode == 0
+
+
+          def diff(base, sha):
+              # Without renames, a file moved out of a game's folder counts for
+              # that game too. Two commits' files are compared directly, so
+              # it's what differs from the commit that was checked.
+              out = git("diff", "--name-only", "--no-renames", "-z", base, sha)
+              return [p for p in out.split("\0") if p]
+
+
+          def plan_passed(repo, run_id):
+              """Whether this run's plan job passed, so its cells ran."""
+              query = f".jobs[] | select(.name == {json.dumps(PLAN_JOB)}) | .conclusion"
+              try:
+                  out = run("gh", "api", "--paginate", f"repos/{repo}/actions/runs/{run_id}/jobs?per_page=100", "--jq", query)
+              except (OSError, subprocess.CalledProcessError):
+                  return False
+              return "success" in out.split()
+
+
+          def last_checked_push(repo, branch, number):
+              """The newest push run of this workflow on this branch, before
+              run number, whose checks all ran: (its commit, its number), or
+              None and why there's none.
+
+              Comparing with the push just before this one would miss what
+              an earlier push changed whenever that push's run was stopped
+              by a newer push (concurrency, above), or its plan failed. So
+              only a run that finished counts: one that passed, or one whose
+              plan passed and some check failed, which shows on that run. A
+              run still going or stopped doesn't count; this run checks what
+              it changed too."""
+              try:
+                  runs = json.loads(run(
+                      "gh", "run", "list", "--repo", repo, "--workflow", WORKFLOW_FILE,
+                      "--event", "push", "--branch", branch, "--limit", "100",
+                      "--json", "number,databaseId,headSha,status,conclusion",
+                  ))
+              except (OSError, ValueError, subprocess.CalledProcessError) as e:
+                  return None, f"GitHub's list of this workflow's runs couldn't be read: {last_line(e)}"
+              if not isinstance(runs, list):
+                  return None, "GitHub's list of this workflow's runs wasn't a list"
+              for r in sorted(runs, key=lambda r: r.get("number", 0), reverse=True):
+                  head = r.get("headSha", "")
+                  if r.get("number", 0) >= number or r.get("status") != "completed":
+                      continue
+                  if not isinstance(head, str) or not re.fullmatch(r"[0-9a-f]{40}", head):
+                      continue
+                  conclusion = r.get("conclusion")
+                  if conclusion == "success" or (conclusion == "failure" and plan_passed(repo, r.get("databaseId"))):
+                      return (head, r["number"]), ""
+              return None, f"no earlier push run on {branch} ran all its checks"
+
+
+          def what_changed(event, sha, branches, last_push):
+              """The files changed, and what they were compared with. The files
+              are None when that can't be told, which means everything.
+              last_push() gives what last_checked_push gives."""
+              if event == "push":
+                  found, why = last_push()
+                  if found is None:
+                      return None, why
+                  base, number = found
+                  if not is_commit(base):
+                      return None, f"the commit run #{number} checked ({base[:12]}) isn't in the history any more"
+                  return diff(base, sha), f"{base[:12]}, which run #{number} checked (the last push run whose checks all ran)"
+              # By hand: compared with where this branch came from, which is
+              # the integration branch for a stream's branch, and the default
+              # branch (the last release) for the integration branch itself.
+              for branch in branches:
+                  ref = "origin/" + branch
+                  if not branch or not is_commit(ref):
+                      continue
+                  try:
+                      base = git("merge-base", sha, ref).strip()
+                  except subprocess.CalledProcessError:
+                      continue
+                  if base != sha:
+                      return diff(base, sha), f"{branch} at {base[:12]}"
+              return [], "the branches it came from, which already have this commit"
+
+
+          def counts(path):
+              """Whether a change to this file can change a real check. Notes
+              don't, as for the push trigger."""
+              return not (path.startswith("docs/") or path.endswith(".md"))
+
+
+          def folder_of(package):
+              folder = package[2:]
+              return folder if folder == "" or folder.endswith("/") else folder + "/"
+
+
+          def touches(game, path):
+              """Whether a changed file is the game's own: in its folder or its
+              test's package, or its setup script."""
+              return (
+                  path.startswith(f"internal/games/{game['id']}/")
+                  or path.startswith(folder_of(game["package"]))
+                  or path in game["setup"].values()
+              )
+
+
+          def in_folder(path, folder):
+              """Whether a file is in a package's folder or below it (its
+              testdata, embedded files, and packages inside it, which counts a
+              little more than needed but never less)."""
+              return "/" not in path if folder == "." else path.startswith(folder + "/")
+
+
+          LINKED = {}
+
+
+          def linked_folders(package, goos):
+              """The folders, from the repository's top, of this repository's
+              packages that package's test is built from on that system, with
+              the realserver tag: (folders, "") or (None, why) when go can't
+              list them. Remembered, as games may share a package."""
+              key = (package, goos)
+              if key not in LINKED:
+                  # cgo on, as on the Mac and Windows runners: listing never
+                  # compiles anything, it only reads which files count.
+                  env = dict(os.environ, GOOS=goos, CGO_ENABLED="1")
+                  template = "{{if .Module}}{{if .Module.Main}}{{.Dir}}{{end}}{{end}}"
+                  try:
+                      out = run("go", "list", "-deps", "-test", "-tags", "realserver", "-f", template, package, env=env)
+                  except (OSError, subprocess.CalledProcessError) as e:
+                      LINKED[key] = (None, f"go list {package} for {goos}: {last_line(e)}")
+                  else:
+                      top = os.path.realpath(".")
+                      folders = set()
+                      for line in out.splitlines():
+                          if line.strip():
+                              rel = os.path.relpath(os.path.realpath(line.strip()), top).replace(os.sep, "/")
+                              if rel != ".." and not rel.startswith("../"):
+                                  folders.add(rel)
+                      LINKED[key] = (folders, "")
+              return LINKED[key]
+
+
+          def uses(game, games):
+              """The folders of the packages the game's test is built from, on
+              every system it runs on: (folders, "") or (None, why).
+
+              Other games that have their own real check are left out. A
+              check that goes through the manager (Valheim's) is built with
+              every registered game (internal/games/all), but it runs only
+              its own game's server, and each other game's code is checked
+              by that game's own cells. internal/games/all itself still
+              counts, so registering a game checks the manager-level games
+              again."""
+              others = [g["id"] for g in games if g["id"] != game["id"]]
+              found = set()
+              for label in game["os"]:
+                  folders, why = linked_folders(game["package"], GOOS[SYSTEMS[label.split("-")[0]]])
+                  if folders is None:
+                      return None, why
+                  found |= folders
+              return {
+                  f for f in found
+                  if not any(f == f"internal/games/{o}" or f.startswith(f"internal/games/{o}/") for o in others)
+              }, ""
+
+
+          def reason(game, files, uses):
+              """Why a change checks the game, or None when it doesn't. uses()
+              gives what uses gives, and is called only when it's needed."""
+              mine = [p for p in files if touches(game, p)]
+              if mine:
+                  return f"changed ({mine[0]})"
+              if not files:
+                  return None
+              folders, why = uses()
+              if folders is None:
+                  # Checking it is the safe side: its cell shows why go
+                  # couldn't read the package, if it's broken.
+                  return f"can't tell which packages its test uses ({why})"
+              linked = [p for p in files if any(in_folder(p, f) for f in folders)]
+              if linked:
+                  return f"its test uses changed code ({linked[0]})"
+              return None
+
+
+          def choose(games, event, wanted, big, changed, uses=lambda game: (set(), "")):
+              """Which games to check, each with why. changed() gives what
+              what_changed gives, and is called only when it's needed;
+              uses(game) gives what uses gives. Returns (reasons by id, notes,
+              errors)."""
+              by_id = {g["id"]: g for g in games}
+              chosen, notes, errors = {}, [], []
+
+              def add(game, why):
+                  chosen.setdefault(game["id"], why)
+
+              if event == "push":
+                  words, big = ["changed"], False
+              elif event == "schedule":
+                  words, big = ["all"], False
+              elif event == "workflow_dispatch":
+                  words = [w.strip().lower() for w in wanted.split(",") if w.strip()]
+                  if not words:
+                      errors.append('Say which games to check: "all", "changed", or ids such as "minecraft,terraria".')
+              else:
+                  errors.append(f"This workflow doesn't know what to check for a {event} event.")
+                  words = []
+
+              for word in words:
+                  if word == "all":
+                      for g in games:
+                          if not g["onDemand"]:
+                              add(g, "all games")
+                  elif word == "changed":
+                      files, against = changed()
+                      if files is None:
+                          notes.append(f"Can't tell what changed ({against}), so every game is checked.")
+                          for g in games:
+                              if not g["onDemand"]:
+                                  add(g, "everything may have changed")
+                          continue
+                      files = [p for p in files if counts(p)]
+                      shared = [p for p in files if p in SHARED_FILES or p.startswith(SHARED_FOLDERS)]
+                      if shared:
+                          notes.append(f"Compared with {against}, code every check uses changed ({shared[0]}), so every game is checked.")
+                          for g in games:
+                              if not g["onDemand"]:
+                                  add(g, f"shared code changed ({shared[0]})")
+                          continue
+                      notes.append(f"Compared with {against}, {len(files)} changed file(s) besides notes.")
+                      for g in games:
+                          if g["id"] in chosen:
+                              continue
+                          why = reason(g, files, lambda: uses(g))
+                          if why is None:
+                              continue
+                          if g["onDemand"] and not big:
+                              notes.append(f"{g['id']}: {why}, but it's checked only on demand: run this workflow by hand with big ticked.")
+                          else:
+                              add(g, why)
+                  elif word in by_id:
+                      if by_id[word]["onDemand"] and not big:
+                          errors.append(f'{word} is checked only on demand (a big download): tick "big" to run it.')
+                      else:
+                          add(by_id[word], "asked for")
+                  else:
+                      known = ", ".join(sorted(by_id)) or "none"
+                      errors.append(f'There\'s no game "{word}" with a realserver.json. The games are: {known}.')
+
+              if big:
+                  for g in games:
+                      if g["onDemand"]:
+                          add(g, "big ticked")
+              return chosen, notes, errors
+
+
+          def cells(games, chosen):
+              out = []
+              for g in games:
+                  if g["id"] not in chosen:
+                      continue
+                  for label in g["os"]:
+                      out.append({
+                          "game": g["id"],
+                          "os": label,
+                          "title": f"{g['id']} on {label}",
+                          "package": g["package"],
+                          "run": g["run"],
+                          "timeoutMinutes": g["timeoutMinutes"],
+                          "jobMinutes": g["timeoutMinutes"] + MARGIN,
+                          "setup": g["setup"].get(SYSTEMS[label.split("-")[0]], ""),
+                      })
+              return out
+
+
+          def main():
+              env = os.environ
+              event = env.get("EVENT", "")
+              games, problems = read_games(".")
+              for file, message in problems:
+                  annotate("error", f"{file} {message}.", file=file)
+              if problems:
+                  return 1
+              sha = git("rev-parse", "HEAD").strip()
+              branches = [env.get("INTEGRATION_BRANCH", ""), env.get("DEFAULT_BRANCH", "")]
+              try:
+                  number = int(env.get("GITHUB_RUN_NUMBER", ""))
+              except ValueError:
+                  number = 0
+              last_push = lambda: last_checked_push(env.get("GITHUB_REPOSITORY", ""), env.get("GITHUB_REF_NAME", ""), number)
+              chosen, notes, errors = choose(
+                  games, event, env.get("GAMES", ""), env.get("BIG", "") == "true",
+                  lambda: what_changed(event, sha, branches, last_push),
+                  lambda game: uses(game, games),
+              )
+              for note in notes:
+                  annotate("notice", note)
+              for error in errors:
+                  annotate("error", error)
+              if errors:
+                  return 1
+              matrix = cells(games, chosen)
+              if not matrix and event != "push":
+                  # A run that checks nothing mustn't look like the real
+                  # servers passed: a release would take it as proof.
+                  annotate("error", "No game was chosen, so nothing would be checked.")
+                  return 1
+
+              lines = [f"Commit {sha}, {event}.", ""]
+              if matrix:
+                  lines += ["| Game | Runner | Why | Test | Minutes | Setup |", "|---|---|---|---|---|---|"]
+                  for c in matrix:
+                      lines.append(f"| {c['game']} | {c['os']} | {chosen[c['game']]} | `{c['run']}` in `{c['package']}` | {c['timeoutMinutes']} | {c['setup'] or '-'} |")
+              else:
+                  lines.append("Nothing changed since the last checked push touches a game's real-server check.")
+              lines += [""] + [f"- {n}" for n in notes]
+              summary = "\n".join(lines) + "\n"
+              print(summary)
+              if env.get("GITHUB_STEP_SUMMARY"):
+                  with open(env["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+                      f.write("### Real-server cells\n\n" + summary)
+              with open(env["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+                  f.write(f"matrix={json.dumps({'include': matrix}, separators=(',', ':'))}\n")
+                  f.write(f"count={len(matrix)}\n")
+                  f.write(f"sha={sha}\n")
+              return 0
+
+
+          if __name__ == "__main__":
+              sys.exit(main())
+
+  cell:
+    name: ${{ matrix.title || 'The real servers' }}
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.jobMinutes }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # The commit the plan read, also for a nightly run of multigame.
+          ref: ${{ needs.plan.outputs.sha }}
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Free disk space
+        shell: bash
+        run: df -h
+      # The game's own preparation, such as building the Mac mod loader for
+      # Valheim, so its Mac cell tests the one releases ship. A .sh script
+      # is run as a program, so its first line picks the shell.
+      - name: Set up (${{ matrix.setup }})
+        if: matrix.setup != '' && !endsWith(matrix.setup, '.ps1')
+        shell: bash
+        run: ./${{ matrix.setup }}
+      - name: Set up (${{ matrix.setup }})
+        if: endsWith(matrix.setup, '.ps1')
+        shell: pwsh
+        run: '& ./${{ matrix.setup }}'
+      # go test passes when -run matches no test (it only warns), so a cell
+      # whose test is missing, renamed or lacks its build tag would pass
+      # without checking anything.
+      - name: Check the test exists
+        shell: bash
+        env:
+          RUN: ${{ matrix.run }}
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          if ! list=$(go test -tags realserver -list "${RUN%%/*}" "$PACKAGE" 2>&1); then
+            echo "$list"
+            echo "::error::The real-server test in $PACKAGE doesn't build."
+            exit 1
+          fi
+          echo "$list"
+          if ! grep -q '^Test' <<<"$list"; then
+            echo "::error::No test in $PACKAGE matches -run $RUN with -tags realserver, so this cell would check nothing. Check the test's name and its //go:build realserver line."
+            exit 1
+          fi
+      # In the runner's usual shell (PowerShell on Windows, bash on a Mac),
+      # as this check has always run. The plan allows only safe characters
+      # in these values.
       - name: The real server
-        run: go test -tags realserver -run TestRealServer -v -count=1 -timeout 75m ./internal/manager/
+        run: go test -tags realserver -run ${{ matrix.run }} -v -count=1 -timeout ${{ matrix.timeoutMinutes }}m ${{ matrix.package }}
+      # The test makes its data folder with t.TempDir(), in the system's
+      # temporary folder, and removes it when it ends. What's left after a
+      # failure (when the test was cut off by its timeout, or a file was
+      # still open) is saved here: the logs, not the downloaded server.
+      - name: Collect the test's logs
+        if: failure()
+        shell: bash
+        env:
+          OUT: ${{ runner.temp }}/real-server-logs
+        run: |
+          mkdir -p "$OUT"
+          # Go's temporary folder: TMPDIR on a Mac; TEMP on Windows, which
+          # Git Bash also shows as /tmp. Each folder is searched once.
+          seen=()
+          for tmp in "${TMPDIR:-}" "${TEMP:-}" "${TMP:-}" /tmp; do
+            if [ -z "$tmp" ] || [ ! -d "$tmp" ]; then continue; fi
+            dup=
+            for s in "${seen[@]+"${seen[@]}"}"; do
+              if [ "$tmp" -ef "$s" ]; then dup=1; fi
+            done
+            if [ -n "$dup" ]; then continue; fi
+            seen+=("$tmp")
+            # t.TempDir() names the folder after the test: TestRealServer123/001.
+            for dir in "$tmp"/Test*/; do
+              if [ ! -d "$dir" ]; then continue; fi
+              name=$(basename "$dir")
+              # Saving logs must never be what fails, so a file that can't be
+              # read is skipped.
+              { (cd "$dir" && find . -type f \( -iname '*.log' -o -iname '*.txt' -o -ipath '*/logs/*' \) -size -50M -print0 2>/dev/null) || true; } |
+                while IFS= read -r -d '' f; do
+                  { mkdir -p "$OUT/$name/$(dirname "$f")" && cp -p "$dir/$f" "$OUT/$name/$f"; } 2>/dev/null ||
+                    echo "Couldn't copy $dir$f (still open?)"
+                done
+            done
+          done
+          if [ -n "$(find "$OUT" -type f | head -n 1)" ]; then
+            find "$OUT" -type f
+          else
+            echo "The test left no data folder: it removes it when it ends, unless it was cut off. Its own output above has the server's log."
+          fi
+          df -h
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: logs-${{ matrix.game }}-${{ matrix.os }}
+          path: ${{ runner.temp }}/real-server-logs
+          if-no-files-found: ignore
+          retention-days: 14
