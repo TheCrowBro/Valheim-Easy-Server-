@@ -231,6 +231,7 @@ func (m *Manager) askedLocked(inst *instance) {
 func (m *Manager) startForRequest(inst *instance, tag string, last bool) {
 	m.mu.Lock()
 	stopping := inst.run != nil && inst.run.stopping
+	before := inst.job // to tell the start job this makes from an older one
 	m.mu.Unlock()
 	var err error
 	if stopping {
@@ -240,6 +241,7 @@ func (m *Manager) startForRequest(inst *instance, tag string, last bool) {
 	}
 	var be *BusyError
 	var post discordPost
+	var failed error // the start this made has failed already
 	online := false
 	m.mu.Lock()
 	if m.wakeTags == nil {
@@ -248,6 +250,15 @@ func (m *Manager) startForRequest(inst *instance, tag string, last bool) {
 	switch {
 	case err == nil:
 		m.wakeTags[inst.id] = tag
+		if j := inst.job; j != before && j != nil && j.Kind == "start" && j.Finished != nil && inst.run == nil {
+			// The start job this made ended before it could be marked as
+			// asked for from Discord (it can fail within a moment, a port
+			// in use, say), so onJob didn't answer it: answer it here.
+			if j.Error != "" {
+				failed = errors.New(j.Error)
+			}
+			break
+		}
 		m.askedLocked(inst)
 	case !errors.Is(err, errStillStopping) && (inst.run != nil && !inst.run.stopping || running(inst.job) && inst.job.Kind == "start"):
 		// It was started meanwhile (a repeat got there first, or someone
@@ -276,6 +287,9 @@ func (m *Manager) startForRequest(inst *instance, tag string, last bool) {
 		text = "Starting the server: someone asked for it from Discord (/valheim) or with Wake-on-LAN." // as always
 	}
 	m.addGameActivity(activityGame(inst), "info", "", text)
+	if failed != nil {
+		m.wakeReply(inst, failed)
+	}
 }
 
 // commandOf is the game's slash command: its own, or its id.

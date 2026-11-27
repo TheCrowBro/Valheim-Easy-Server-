@@ -85,9 +85,10 @@ type wakerState struct {
 	// while it was being installed is still noticed.
 	picked, planned string
 	// asked holds the instances whose start a Discord request asked for,
-	// until that run ends: a failed start is then answered in the game's
-	// channel, and the game's online post goes out there whatever its own
-	// Discord settings say (askedFromDiscordLocked).
+	// until that run ends (or, for a server that dies while loading, until
+	// its start job has failed): a failed start is then answered in the
+	// game's channel, and the game's online post goes out there whatever
+	// its own Discord settings say (askedFromDiscordLocked).
 	asked map[string]bool
 	// kept holds, by instance, the request (tag) that came while the game
 	// was busy or stopping: the waker's repeats may still start it, and
@@ -232,6 +233,7 @@ func (m *Manager) wakerPlan(ctx context.Context, token string) (waker.Config, wa
 	m.mu.Lock()
 	s := m.settings
 	r2 := m.wakerR2Locked()
+	installed := m.wk.file.Setup.Guild // the Discord server the waker answers in now
 	var picks []wakerPick
 	if !r2 {
 		picks = m.wakerPicksLocked()
@@ -265,10 +267,21 @@ func (m *Manager) wakerPlan(ctx context.Context, token string) (waker.Config, wa
 		switch {
 		case err == nil:
 			setup.Guild = g
+		case r2 && !s.Discord:
+			// /valheim alone, with Valheim's posts off: nobody posts to this
+			// link, and before R3 the waker didn't ask it at all. Whatever
+			// went wrong with it (deleted, or Discord out of reach), the
+			// waker keeps the Discord server it answers in now ("" when it
+			// answers in any, as before R3 with the posts off), so a link
+			// nobody uses never stops it being installed, restarted or
+			// updated, and never lets it answer in more Discord servers
+			// than it does now.
+			setup.Guild = installed
 		case r2 || ctx.Err() != nil || !errors.As(err, &de) || de.Temporary:
 			// /valheim of R2 works in any channel, so the Discord server is
-			// all that keeps it to the owner's; and a Discord that can't be
-			// reached just now may answer next time.
+			// all that keeps it to the owner's: with Valheim's posts on it
+			// fails as before R3. And a Discord that can't be reached just
+			// now may answer next time.
 			where := "the main Discord channel"
 			if r2 {
 				where = "the join-code channel"
@@ -1110,22 +1123,36 @@ type wakerObserver struct{ m *Manager }
 func (o wakerObserver) onReady(inst *instance)                {}
 func (o wakerObserver) onEvent(inst *instance, ev game.Event) {}
 
-// onExit: the run a Discord request started is over.
+// onExit: the run a Discord request started is over. A server that dies
+// while it is still loading ends before its start job does: server.go
+// calls this first and only then lets the job, which waits for the world
+// to load, see the exit and fail. The mark is kept then, so the job's end
+// (onJob) still tells the channel the start failed. A stop on purpose
+// while loading (exit.Expected) is no failure to report.
 func (o wakerObserver) onExit(inst *instance, run *serverRun, exit *ExitInfo) {
+	if !run.ready && !exit.Expected && running(inst.job) && inst.job.Kind == "start" {
+		return
+	}
 	delete(o.m.wk.asked, inst.id)
 }
 
 // onTick: the waker follows any change to the commands it should have.
 func (o wakerObserver) onTick(now time.Time) { o.m.noticeCommandsLocked() }
 
-// onJob: a start a Discord request asked for failed, so the channel the
-// request came from hears why (spec 6.4's "failed").
+// onJob: a start a Discord request asked for ended with no server left
+// running (it failed before launching one, or the one it launched died
+// while loading, see onExit), so the request's mark goes; when it failed,
+// the channel the request came from hears why (spec 6.4's "failed"). A
+// start that left a server running keeps the mark until that run ends.
 func (o wakerObserver) onJob(inst *instance, job *Job) {
 	m := o.m
-	if inst == nil || job.Finished == nil || job.Kind != "start" || job.Error == "" || !m.wk.asked[inst.id] || inst.run != nil {
+	if inst == nil || job.Finished == nil || job.Kind != "start" || inst.run != nil || !m.wk.asked[inst.id] {
 		return
 	}
 	delete(m.wk.asked, inst.id)
+	if job.Error == "" {
+		return
+	}
 	err := errors.New(job.Error)
 	m.go_(func() { m.wakeReply(inst, err) })
 }

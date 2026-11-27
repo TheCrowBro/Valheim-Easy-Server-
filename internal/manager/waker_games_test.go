@@ -332,6 +332,54 @@ func TestWakerPlanNoCommands(t *testing.T) {
 	}
 }
 
+// With no list of games (/valheim alone, as R2 sets it up) and Valheim's
+// own posts off, nobody posts to the main link: a deleted one, or a Discord
+// out of reach, never stops the waker being installed or kept up, and it
+// keeps the Discord server it answers in now. With the posts on, the plan
+// fails as before R3, naming the join-code channel.
+func TestWakerPlanR2BrokenMainLink(t *testing.T) {
+	ch := newFakeChannels(t)
+	env := setup(t, wakerOptions(t, nil, ch.URL, wired()))
+	m := env.m
+	ctx := context.Background()
+	gone := func(on bool) {
+		ch.mu.Lock()
+		defer ch.mu.Unlock()
+		ch.gone["1"] = on
+	}
+	setMain(t, m, "1", false)
+	gone(true)
+	cfg, setup, err := m.wakerPlan(ctx, "secret")
+	if err != nil || cfg.Guild != "" || setup.Guild != "" || cfg.Query == "" || cfg.Games != nil {
+		t.Fatalf("deleted link, nothing installed: %+v %+v %v", cfg, setup, err)
+	}
+	m.mu.Lock()
+	m.wk.file.Setup.Guild = "g1" // installed while the link still worked
+	m.mu.Unlock()
+	if _, setup, err = m.wakerPlan(ctx, "secret"); err != nil || setup.Guild != "g1" {
+		t.Fatalf("deleted link: %+v %v", setup, err)
+	}
+	ch.down.Store(true)
+	if _, setup, err = m.wakerPlan(ctx, "secret"); err != nil || setup.Guild != "g1" {
+		t.Fatalf("Discord out of reach: %+v %v", setup, err)
+	}
+	ch.down.Store(false)
+
+	gone(false)
+	setMain(t, m, "1", true) // Valheim posts its join code there
+	gone(true)
+	if _, _, err := m.wakerPlan(ctx, "secret"); err == nil || !strings.Contains(err.Error(), "Couldn’t find out which Discord server the join-code channel is in.") {
+		t.Fatalf("deleted link with Valheim's posts on: %v", err)
+	}
+	gone(false)
+	ch.mu.Lock()
+	ch.guilds["1"] = "g7" // the channel the link posts in now is the one that counts
+	ch.mu.Unlock()
+	if _, setup, err = m.wakerPlan(ctx, "secret"); err != nil || setup.Guild != "g7" {
+		t.Fatalf("working link: %+v %v", setup, err)
+	}
+}
+
 // The waker on a stand-in JetKVM follows the stars: unstarring everything
 // leaves it with no commands, and a star change while the app is busy with
 // the JetKVM is tried again later.
@@ -387,19 +435,28 @@ func TestWakerFollowsStars(t *testing.T) {
 	}
 
 	// Minecraft starred while the app is busy with the JetKVM: the update
-	// waits, and goes through once the JetKVM is free.
-	m.mu.Lock()
-	m.wk.busy = true
-	m.mu.Unlock()
+	// waits, and goes through once the JetKVM is free. The test takes the
+	// JetKVM the way the Settings page does (beginWaker), and only once the
+	// update above has wholly finished (it writes the waker's settings
+	// before it waits for the waker to start), so no other update can free
+	// it meanwhile: only a retry can then bring /minecraft.
+	none := commandsPrint([]waker.GameCommand{})
+	waitFor(t, "the update to finish and the JetKVM to be free", 20*time.Second, func() bool {
+		m.mu.Lock()
+		done := m.wk.file.Setup.Games == none
+		m.mu.Unlock()
+		return done && m.beginWaker() == nil
+	})
 	useServers(m, []string{"minecraft"}, nil, map[string]string{"minecraft": "2"})
 	m.starsChanged() // as SetStar does
-	time.Sleep(4 * commandsRetry)
-	if got := commands(); len(got) != 0 {
-		t.Fatalf("updated while busy: %q", got)
-	}
+	time.Sleep(commandsDelay + 3*commandsRetry)
 	m.mu.Lock()
-	m.wk.busy = false
+	busy, setup := m.wk.busy, m.wk.file.Setup
 	m.mu.Unlock()
+	if got := commands(); len(got) != 0 || !busy || setup.Games != none {
+		t.Fatalf("updated while busy: %q (busy %v, setup %+v)", got, busy, setup)
+	}
+	m.endWaker()
 	waitFor(t, "/minecraft once the JetKVM is free", 20*time.Second, func() bool {
 		return reflect.DeepEqual(commands(), []string{"minecraft@ch2"})
 	})
@@ -582,27 +639,93 @@ func TestWakeWhileBusy(t *testing.T) {
 	}
 }
 
-// A start Discord asked for that fails in its job (the server stopped while
-// starting, say) is answered in the channel too.
+// A start Discord asked for whose server dies while it is still loading is
+// answered in the channel, whatever Valheim's own posts are set to. It runs
+// the real order: the run ends (onExit) before its start job fails (onJob).
+// A stop on purpose while it loads is no failure: nobody is told.
+func TestWakeStartDiesWhileLoading(t *testing.T) {
+	t.Setenv("FAKE_VALHEIM_SPEED", "0.1") // ten times slower: it loads for half a minute
+	ch := newFakeChannels(t)
+	env := setup(t, wakerOptions(t, nil, ch.URL))
+	m := env.m
+	install(t, m)
+	setMain(t, m, "1", false)
+	inst := m.legacy()
+	asked := func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return m.askedFromDiscordLocked(inst)
+	}
+	loading := func() *serverRun {
+		var run *serverRun
+		waitFor(t, "the server to be loading", 20*time.Second, func() bool {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			run = inst.run
+			return run != nil && !run.ready && running(inst.job) && inst.job.Kind == "start" && m.askedFromDiscordLocked(inst)
+		})
+		return run
+	}
+
+	m.wakeGame(m.legacyID, "crash1")
+	if err := loading().proc.Kill(); err != nil { // it crashes while loading
+		t.Fatal(err)
+	}
+	ch.wait(t, "1", "⚠️ **Valheim** didn't start: the server stopped while starting.")
+	m.mu.Lock()
+	job := *inst.job
+	m.mu.Unlock()
+	if !strings.HasPrefix(job.Error, "The server stopped while starting.") || asked() {
+		t.Fatalf("the start job = %+v, still marked as asked for: %v", job, asked())
+	}
+
+	m.wakeGame(m.legacyID, "stop01")
+	loading()
+	if err := m.StopServer(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the server to stop", 20*time.Second, func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return inst.run == nil && !running(inst.job)
+	})
+	time.Sleep(500 * time.Millisecond)
+	if n := len(ch.in("1")); n != 1 || asked() {
+		t.Fatalf("posts %q, still marked as asked for: %v", ch.in("1"), asked())
+	}
+}
+
+// A start job that fails at once (a port in use, say) can end before the
+// request is marked as asked for from Discord: it is answered all the same,
+// once, in the game's channel. The stand-in start makes its job end before
+// it returns, as such a job can.
 func TestWakeFailedStartIsAnswered(t *testing.T) {
 	ch := newFakeChannels(t)
 	env := setupGames(t, []string{"minecraft"}, wakerOptions(t, nil, ch.URL))
 	m := env.m
 	setMain(t, m, "1", true)
 	useServers(m, []string{"minecraft"}, nil, map[string]string{"minecraft": "2"})
-	useRequests(t, &requests{})
-	m.wakeGame("minecraft", "mc0001")
 	inst, _ := m.instanceByID("minecraft")
-	now := time.Now()
+	useRequests(t, &requests{answer: func(id string, n int) error {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		now := time.Now()
+		job := &Job{ID: 1000 + n, Game: id, Kind: "start", Started: now, Percent: -1}
+		inst.job = job
+		m.observeLocked(func(o observer) { o.onJob(inst, job) }) // started, as jobs.go says
+		job.Finished, job.Error = &now, "Port 25565 is in use by another program."
+		m.observeLocked(func(o observer) { o.onJob(inst, job) }) // and finished
+		return nil
+	}})
+	m.wakeGame("minecraft", "mc0001")
+	ch.wait(t, "2", "⚠️ **Minecraft** didn't start: port 25565 is in use by another program.")
+	m.wakeGame("minecraft", "mc0001") // the waker's repeat
+	time.Sleep(300 * time.Millisecond)
 	m.mu.Lock()
-	m.observeLocked(func(o observer) {
-		o.onJob(inst, &Job{Kind: "start", Error: "The server stopped while starting.", Finished: &now})
-	})
 	asked := m.askedFromDiscordLocked(inst)
 	m.mu.Unlock()
-	ch.wait(t, "2", "⚠️ **Minecraft** didn't start: the server stopped while starting.")
-	if asked {
-		t.Fatal("still marked as asked for after its start failed")
+	if asked || len(ch.in("2")) != 1 {
+		t.Fatalf("still marked as asked for: %v; posts %q", asked, ch.in("2"))
 	}
 }
 
