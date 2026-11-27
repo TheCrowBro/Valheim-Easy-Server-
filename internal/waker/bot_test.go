@@ -221,9 +221,10 @@ func TestWakeFromDiscord(t *testing.T) {
 	b := testBot(t, f, "secret")
 	var sent atomic.Int32
 	var up atomic.Bool
-	b.send = func(mac net.HardwareAddr, tag []byte, targets []string) error {
-		if mac.String() != "3c:07:54:5a:21:9f" || len(tag) != 6 || len(targets) == 0 {
-			t.Errorf("sent for %s (tag %x) to %v", mac, tag, targets)
+	b.send = func(mac net.HardwareAddr, tag []byte, id string, targets []string) error {
+		// An older app's settings: the packet names no game, as always.
+		if mac.String() != "3c:07:54:5a:21:9f" || len(tag) != 6 || id != "" || len(targets) == 0 {
+			t.Errorf("sent for %s (tag %x, game %q) to %v", mac, tag, id, targets)
 		}
 		sent.Add(1)
 		return nil
@@ -290,7 +291,7 @@ func TestWakeTimesOut(t *testing.T) {
 	f := newFakeDiscord(t, "secret")
 	b := testBot(t, f, "secret")
 	b.waitFor = 200 * time.Millisecond
-	b.send = func(net.HardwareAddr, []byte, []string) error { return nil }
+	b.send = func(net.HardwareAddr, []byte, string, []string) error { return nil }
 	b.query = func(context.Context, string) (Info, error) { return Info{}, errors.New("no answer") }
 	run(t, b)
 	f.wait(t, "/valheim to be set up", func() bool { return len(f.commands["g1"]) == 1 })
@@ -318,7 +319,7 @@ func TestOnlyItsOwnServer(t *testing.T) {
 	b := testBot(t, f, "secret")
 	b.Config.Guild = "g1"
 	var sent atomic.Int32
-	b.send = func(net.HardwareAddr, []byte, []string) error { sent.Add(1); return nil }
+	b.send = func(net.HardwareAddr, []byte, string, []string) error { sent.Add(1); return nil }
 	b.query = func(context.Context, string) (Info, error) { return Info{}, errors.New("no answer") }
 	run(t, b)
 	f.wait(t, "/valheim in g1 only", func() bool { return len(f.commands["g1"]) == 1 && len(f.commands["g2"]) == 0 })
@@ -403,7 +404,9 @@ func TestBadToken(t *testing.T) {
 	if app, err := good.Application(context.Background()); err != nil || app != "app1" {
 		t.Fatalf("application = %q %v", app, err)
 	}
-	want := "https://discord.com/oauth2/authorize?client_id=app1&disable_guild_select=true&guild_id=g1&permissions=0&scope=bot+applications.commands"
+	// It asks to see channels and read their history, for the app's
+	// "still playing?" question (spec 4.6).
+	want := "https://discord.com/oauth2/authorize?client_id=app1&disable_guild_select=true&guild_id=g1&permissions=66560&scope=bot+applications.commands"
 	if got := Invite("app1", "g1"); got != want {
 		t.Fatalf("invite = %s", got)
 	}

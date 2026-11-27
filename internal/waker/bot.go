@@ -1,8 +1,9 @@
 // Package waker is the companion that runs on the IP KVM next to the server
 // computer (a JetKVM, which is always on). It stays in Discord, and when
-// someone types /valheim it wakes the server computer with Wake-on-LAN. The
-// app on the server computer hears the same signal when it's already awake,
-// and starts Valheim either way.
+// someone types a game's command (/valheim, /minecraft…) in that game's
+// channel it wakes the server computer with Wake-on-LAN. The app on the
+// server computer hears the same signal when it's already awake, and
+// starts that game either way.
 package waker
 
 import (
@@ -78,7 +79,9 @@ type Status struct {
 	Updated   time.Time  `json:"updated"`
 }
 
-// commandName is what people type: /valheim.
+// commandName is what people type: /valheim. It is the one command of a
+// settings file from an app of R2 or before (no Games); an R3 app names
+// every command itself (games.go).
 const commandName = "valheim"
 
 var command = map[string]any{
@@ -86,6 +89,13 @@ var command = map[string]any{
 	"description": "Wake the server computer and start the Valheim server",
 	"type":        1,
 }
+
+// invitePermissions are what the link that adds the bot asks for: View
+// Channel (1024) and Read Message History (65536). The bot itself needs
+// none to add and answer its commands, but the app reads a game's channel
+// with the bot's token for the "still playing?" question (spec 4.6), to see
+// whether anyone answered, and a bot that can't see the channel can't tell.
+const invitePermissions = "66560"
 
 // Bot is the waker in Discord.
 type Bot struct {
@@ -97,10 +107,12 @@ type Bot struct {
 	http    *http.Client
 	api     string
 	gateway string
-	send    func(mac net.HardwareAddr, tag []byte, targets []string) error
-	query   func(context.Context, string) (Info, error)
+	// send sends one wake packet: tag tells requests apart, and id names the
+	// game ("" for the legacy /valheim, whose packet names none, as always).
+	send  func(mac net.HardwareAddr, tag []byte, id string, targets []string) error
+	query func(context.Context, string) (Info, error)
 	// How often wake packets go out, for how long, and how long to wait for
-	// Valheim to answer.
+	// a game that answers queries (Valheim) to answer.
 	wakeEvery, wakeFor, waitFor time.Duration
 
 	fileMu     sync.Mutex // saving the status file, one change at a time
@@ -109,11 +121,16 @@ type Bot struct {
 	sessionID  string
 	resumeURL  string
 	seq        int64
-	guilds     map[string]bool // where /valheim is set up (true) or being set up
-	waking     time.Time       // when the current wake began; zero when none
-	wokenBy    string
-	queryWorks bool // Valheim has answered a query at least once
+	guilds     map[string]bool   // where the commands are set up (true) or being set up
+	waking     map[string]waking // the wakes under way, by command: each game has its own
+	queryWorks bool              // the legacy /valheim's server has answered a query at least once
 	status     Status
+}
+
+// waking is a wake under way for one command.
+type waking struct {
+	since time.Time
+	by    string // who asked
 }
 
 // New makes a bot with the settings.
@@ -123,9 +140,10 @@ func New(cfg Config, logger *log.Logger) *Bot {
 		http:    &http.Client{Timeout: 20 * time.Second},
 		api:     apiURL,
 		gateway: gatewayURL,
-		send:    wol.Send,
+		send:    sendWake,
 		query:   Query,
 		guilds:  map[string]bool{},
+		waking:  map[string]waking{},
 
 		wakeEvery: 10 * time.Second,
 		wakeFor:   3 * time.Minute,
@@ -138,6 +156,12 @@ func New(cfg Config, logger *log.Logger) *Bot {
 		b.gateway = strings.TrimRight(cfg.Gateway, "/")
 	}
 	return b
+}
+
+// sendWake sends the wake packet for the game id, or today's packet when
+// id is "" (wol.PacketFor).
+func sendWake(mac net.HardwareAddr, tag []byte, id string, targets []string) error {
+	return wol.SendPacket(wol.PacketFor(mac, tag, id), targets)
 }
 
 type user struct {
@@ -188,10 +212,10 @@ func (b *Bot) Application(ctx context.Context) (string, error) {
 }
 
 // Invite is the link that adds the bot to a Discord server: guild, when
-// given, is the only one it offers. The bot needs no permissions, only
-// to be there to add /valheim.
+// given, is the only one it offers. It asks to see channels and read their
+// history (invitePermissions), for the app's "still playing?" question.
 func Invite(appID, guild string) string {
-	q := url.Values{"client_id": {appID}, "scope": {"bot applications.commands"}, "permissions": {"0"}}
+	q := url.Values{"client_id": {appID}, "scope": {"bot applications.commands"}, "permissions": {invitePermissions}}
 	if guild != "" {
 		q.Set("guild_id", guild)
 		q.Set("disable_guild_select", "true")
@@ -277,9 +301,13 @@ func (b *Bot) dispatch(ctx context.Context, event string, d json.RawMessage) {
 	}
 }
 
-// register sets up /valheim in a Discord server. That's instant, unlike a
-// command for all servers at once.
+// register sets up the commands in a Discord server, all of them in one go:
+// a bulk overwrite, so a command nobody wants any more goes too, and an
+// empty list leaves none. That's instant, unlike a command for all servers
+// at once.
 func (b *Bot) register(ctx context.Context, guild string) {
+	cmds, skipped := b.Config.commands()
+	what := label(cmds)
 	allowed := b.allowed(guild)
 	b.mu.Lock()
 	app := b.appID
@@ -296,11 +324,18 @@ func (b *Bot) register(ctx context.Context, guild string) {
 		// It may be there from before the app limited the bot to one
 		// Discord server: take it away.
 		if err := b.rest(ctx, http.MethodPut, path, true, []any{}, nil); err != nil {
-			b.log.Printf("removing /valheim from a Discord server it isn't for: %v", err)
+			b.log.Printf("removing %s from a Discord server it isn't for: %v", what, err)
 		}
 		return
 	}
-	err := b.rest(ctx, http.MethodPut, path, true, []any{command}, nil)
+	for _, why := range skipped {
+		b.log.Printf("not setting up %s", why)
+	}
+	list := make([]any, len(cmds)) // [] rather than null when there are none
+	for i, c := range cmds {
+		list[i] = c.discord()
+	}
+	err := b.rest(ctx, http.MethodPut, path, true, list, nil)
 	b.mu.Lock()
 	if err != nil {
 		delete(b.guilds, guild) // try again next time
@@ -311,9 +346,9 @@ func (b *Bot) register(ctx context.Context, guild string) {
 	if err != nil {
 		var ae *apiError
 		if errors.As(err, &ae) && ae.Status == http.StatusForbidden {
-			err = errors.New("Discord didn’t let the bot add /valheim: add it again with the link from the app")
+			err = errors.New("Discord didn’t let the bot add " + what + ": add it again with the link from the app")
 		}
-		b.log.Printf("setting up /valheim: %v", err)
+		b.log.Printf("setting up %s: %v", what, err)
 		b.setStatus(func(s *Status) { s.Error = err.Error() })
 		return
 	}
@@ -335,7 +370,18 @@ func (b *Bot) allowed(guild string) bool {
 	return b.Config.Guild == "" || guild == b.Config.Guild
 }
 
-// interaction answers /valheim.
+// find is the command people typed, if the bot has it.
+func (b *Bot) find(name string) (slash, bool) {
+	cmds, _ := b.Config.commands()
+	for _, c := range cmds {
+		if c.Command == name {
+			return c, true
+		}
+	}
+	return slash{}, false
+}
+
+// interaction answers a game's command.
 func (b *Bot) interaction(ctx context.Context, raw json.RawMessage) {
 	var in struct {
 		ID            string `json:"id"`
@@ -343,7 +389,11 @@ func (b *Bot) interaction(ctx context.Context, raw json.RawMessage) {
 		Type          int    `json:"type"`
 		ApplicationID string `json:"application_id"`
 		GuildID       string `json:"guild_id"`
-		Data          struct {
+		ChannelID     string `json:"channel_id"`
+		Channel       *struct {
+			ID string `json:"id"`
+		} `json:"channel"`
+		Data struct {
 			Name string `json:"name"`
 		} `json:"data"`
 		Member *struct {
@@ -352,11 +402,29 @@ func (b *Bot) interaction(ctx context.Context, raw json.RawMessage) {
 		} `json:"member"`
 		User *user `json:"user"`
 	}
-	if json.Unmarshal(raw, &in) != nil || in.Type != 2 || in.Data.Name != commandName {
+	if json.Unmarshal(raw, &in) != nil || in.Type != 2 {
 		return
 	}
+	cmd, ok := b.find(in.Data.Name)
+	if !ok {
+		return // a command from before, not taken away yet
+	}
 	if !b.allowed(in.GuildID) {
-		b.replyOnly(ctx, in.ID, in.Token, "🔒 This only works in the Discord server the Valheim server belongs to.")
+		text := wrongServerText
+		if cmd.legacy {
+			text = "🔒 This only works in the Discord server the Valheim server belongs to."
+		}
+		b.replyOnly(ctx, in.ID, in.Token, text)
+		return
+	}
+	// Each game's command works only in its own channel, where the app
+	// posts about that game, so that's where people see what happens next.
+	channel := in.ChannelID
+	if channel == "" && in.Channel != nil {
+		channel = in.Channel.ID
+	}
+	if !cmd.legacy && channel != cmd.Channel {
+		b.replyOnly(ctx, in.ID, in.Token, wrongChannelText(cmd))
 		return
 	}
 	who := "someone"
@@ -368,28 +436,34 @@ func (b *Bot) interaction(ctx context.Context, raw json.RawMessage) {
 	case in.User != nil:
 		who = in.User.name()
 	}
-	name := "The server"
-	if b.Config.Name != "" {
-		name = "**" + discord.Escape(b.Config.Name) + "**"
-	}
+	name := cmd.title()
 
-	if info, ok := b.up(ctx); ok {
+	if info, ok := b.up(ctx, cmd.Query); ok {
 		b.reply(ctx, in.ID, in.Token, fmt.Sprintf("🟢 %s is already online%s.", name, playing(info)))
 		return
 	}
+	// Waking is per game: /minecraft while /valheim is waking starts
+	// Minecraft too.
 	b.mu.Lock()
-	since, by := b.waking, b.wokenBy
-	if since.IsZero() {
-		b.waking, b.wokenBy = time.Now(), who
+	cur, busy := b.waking[cmd.Command]
+	if !busy {
+		b.waking[cmd.Command] = waking{since: time.Now(), by: who}
 	}
 	b.mu.Unlock()
-	if !since.IsZero() {
-		b.reply(ctx, in.ID, in.Token, fmt.Sprintf("⏰ The server computer is already waking up: %s asked %s.",
-			discord.Escape(by), ago(time.Since(since))))
+	if busy {
+		text := stillWakingText(cmd, cur.by, ago(time.Since(cur.since)))
+		if cmd.legacy {
+			text = fmt.Sprintf("⏰ The server computer is already waking up: %s asked %s.", discord.Escape(cur.by), ago(time.Since(cur.since)))
+		}
+		b.reply(ctx, in.ID, in.Token, text)
 		return
 	}
-	b.reply(ctx, in.ID, in.Token, fmt.Sprintf("⏰ Waking up the server computer for %s… This message changes once Valheim is ready, usually within a few minutes.", discord.Escape(who)))
-	b.wake(ctx, in.ApplicationID, in.Token, name, who)
+	text := wakingText(cmd)
+	if cmd.legacy {
+		text = fmt.Sprintf("⏰ Waking up the server computer for %s… This message changes once Valheim is ready, usually within a few minutes.", discord.Escape(who))
+	}
+	b.reply(ctx, in.ID, in.Token, text)
+	b.wake(ctx, cmd, in.ApplicationID, in.Token, name, who)
 }
 
 func playing(info Info) string {
@@ -412,14 +486,23 @@ func ago(d time.Duration) string {
 	return fmt.Sprintf("%d minutes ago", int(d.Minutes()))
 }
 
-// up reports whether Valheim answers.
-func (b *Bot) up(ctx context.Context) (Info, bool) {
-	if b.Config.Query == "" {
+// minutes says how long d is, to the minute: "10 minutes", "a minute".
+func minutes(d time.Duration) string {
+	if n := int(d.Round(time.Minute) / time.Minute); n > 1 {
+		return fmt.Sprintf("%d minutes", n)
+	}
+	return "a minute"
+}
+
+// up reports whether the game server at addr (its A2S address) answers.
+// A game without one never says.
+func (b *Bot) up(ctx context.Context, addr string) (Info, bool) {
+	if addr == "" {
 		return Info{}, false
 	}
 	qctx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
 	defer cancel()
-	info, err := b.query(qctx, b.Config.Query)
+	info, err := b.query(qctx, addr)
 	if err != nil {
 		return Info{}, false
 	}
@@ -430,28 +513,35 @@ func (b *Bot) up(ctx context.Context) (Info, bool) {
 }
 
 // wake sends Wake-on-LAN packets for a few minutes (the computer may be
-// asleep, or awake with the server stopped: the app starts it either way),
-// then updates the reply once Valheim answers.
-func (b *Bot) wake(ctx context.Context, appID, token, name, who string) {
+// asleep, or awake with the game stopped: the app starts it either way).
+// For a game that answers queries (Valheim) it then updates the reply once
+// the game answers, or says so when it doesn't; for any other game the app
+// posts in the channel itself, so the bot claims nothing more.
+func (b *Bot) wake(ctx context.Context, cmd slash, appID, token, name, who string) {
 	defer func() {
 		b.mu.Lock()
-		b.waking = time.Time{}
+		delete(b.waking, cmd.Command)
 		b.mu.Unlock()
 	}()
 	now := time.Now()
 	b.setStatus(func(s *Status) { s.LastWake, s.WokenBy = &now, who })
-	b.log.Printf("waking the server computer for %s", who)
+	if cmd.legacy {
+		b.log.Printf("waking the server computer for %s", who)
+	} else {
+		b.log.Printf("waking the server computer for %s, who asked for /%s", who, cmd.Command)
+	}
 	mac, _ := wol.ParseMAC(b.Config.MAC)
 	targets := b.Config.Targets
 	if len(targets) == 0 {
 		targets = wol.Broadcasts()
 	}
-	// The same tag on every packet of this wake: the app starts the server
-	// once for it, however many it hears.
+	// The same tag on every packet of this wake: the app starts the game
+	// once for it, however many it hears. A game's packets name it after
+	// the tag (cmd.ID); the legacy /valheim's name none, as always.
 	tag := make([]byte, 6)
 	cryptorand.Read(tag)
 	send := func() {
-		if err := b.send(mac, tag, targets); err != nil {
+		if err := b.send(mac, tag, cmd.ID, targets); err != nil {
 			b.log.Print(err)
 		}
 	}
@@ -468,8 +558,15 @@ func (b *Bot) wake(ctx context.Context, appID, token, name, who string) {
 		if elapsed < b.wakeFor {
 			send()
 		}
-		if info, ok := b.up(ctx); ok {
+		if info, ok := b.up(ctx, cmd.Query); ok {
 			b.edit(ctx, appID, token, fmt.Sprintf("✅ %s is online%s. Have fun!", name, playing(info)))
+			return
+		}
+		if !cmd.legacy && cmd.Query == "" && elapsed >= b.wakeFor {
+			return // the app says in the channel how it went
+		}
+		if !cmd.legacy && elapsed >= b.waitFor {
+			b.edit(ctx, appID, token, timeoutText(cmd, minutes(b.waitFor)))
 			return
 		}
 		if elapsed >= b.waitFor {
@@ -502,7 +599,7 @@ func (b *Bot) answer(ctx context.Context, id, token string, data map[string]any)
 	err := b.rest(ctx, http.MethodPost, "/interactions/"+id+"/"+token+"/callback", false,
 		map[string]any{"type": 4, "data": data}, nil)
 	if err != nil {
-		b.log.Printf("answering /valheim: %v", err)
+		b.log.Printf("answering a command: %v", err)
 	}
 }
 
@@ -515,7 +612,7 @@ func (b *Bot) edit(ctx context.Context, appID, token, text string) {
 	err := b.rest(ctx, http.MethodPatch, "/webhooks/"+appID+"/"+token+"/messages/@original", false,
 		map[string]any{"content": text, "allowed_mentions": noMentions}, nil)
 	if err != nil {
-		b.log.Printf("updating the /valheim answer: %v", err)
+		b.log.Printf("updating a command's answer: %v", err)
 	}
 }
 

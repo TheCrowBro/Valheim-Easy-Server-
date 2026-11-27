@@ -303,7 +303,8 @@ func Install(ctx context.Context, t Target, binary []byte, cfg waker.Config) (wa
 		return st, nil, fmt.Errorf("couldn’t start the waker: %s", orErr(out, err))
 	}
 	// Give it a moment to get into Discord. It says it's in a little before
-	// it has set up /valheim in the Discord servers it's in, so once it's in
+	// it has set up its commands in the Discord servers it's in (even an
+	// empty list counts as set up, when nothing is starred), so once it's in
 	// it gets a few seconds more for that. Otherwise a bot that's already in
 	// the Discord server would look as if it still had to be added there.
 	for i, extra := 0, 0; ; i++ {

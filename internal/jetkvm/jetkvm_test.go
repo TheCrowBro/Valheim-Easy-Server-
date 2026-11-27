@@ -140,6 +140,52 @@ func TestInstall(t *testing.T) {
 	}
 }
 
+// An R3 app's settings, with a command per starred game, reach the JetKVM
+// as they were made, and so does an empty list (nothing starred), which
+// must stay a list: without it the waker would set up /valheim as for an
+// older app (spec 6.4).
+func TestInstallWithGames(t *testing.T) {
+	key := testKey(t)
+	kvm := fakekvm.New(t, key.PublicKey())
+	target := Target{Addr: kvm.Addr, Key: key, Base: kvm.Base, Run: kvm.Run, Arch: "-"}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	games := []waker.GameCommand{
+		{ID: "valheim", Command: "valheim", Description: "Wake the server computer and start Valheim", Name: "Viking's Night", Channel: "111", Query: "192.168.1.20:2457"},
+		{ID: "minecraft", Command: "minecraft", Description: "Wake the server computer and start Minecraft", Name: "Friends' Minecraft", Channel: "222"},
+	}
+	cfg := waker.Config{Token: "secret", MAC: "3C:07:54:5A:21:9F", Guild: "g1", Games: &games}
+	path := filepath.Join(kvm.Base, "valheim-waker", "config.json")
+	for _, c := range []struct {
+		what  string
+		games []waker.GameCommand
+		has   string
+	}{
+		{"two starred games", games, `"command": "minecraft"`},
+		{"nothing starred", []waker.GameCommand{}, `"games": []`},
+	} {
+		cfg.Games = &c.games
+		st, hostKey, err := Install(ctx, target, []byte(fakekvm.Waker), cfg)
+		if err != nil || !st.Connected {
+			t.Fatalf("%s: status %+v, %v", c.what, st, err)
+		}
+		target.HostKey = hostKey
+		data, _ := os.ReadFile(path)
+		if !strings.Contains(string(data), c.has) || strings.Contains(string(data), `"query": ""`) {
+			t.Fatalf("%s: the waker's settings = %s", c.what, data)
+		}
+		got, err := waker.LoadConfig(path)
+		if err != nil || got.Games == nil || len(*got.Games) != len(c.games) || got.Guild != "g1" {
+			t.Fatalf("%s: read back as %+v (%v)", c.what, got, err)
+		}
+		for i, g := range c.games {
+			if (*got.Games)[i] != g {
+				t.Errorf("%s: command %d = %+v, want %+v", c.what, i, (*got.Games)[i], g)
+			}
+		}
+	}
+}
+
 // A bot that isn't in a Discord server yet: Install waits a few seconds
 // for one, then says so, for the app to show how to add it.
 func TestInstallInNoServer(t *testing.T) {
