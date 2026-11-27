@@ -835,7 +835,7 @@ func TestHibernateStopsServerFirst(t *testing.T) {
 		t.Fatalf("server not stopped cleanly before hibernating: %s %+v", st.State, st.LastExit)
 	}
 	m.mu.Lock()
-	resume := m.resumeOnWake
+	resume := len(m.resumeSet) == 1 && m.resumeSet[0] == m.legacyID
 	m.mu.Unlock()
 	if !resume {
 		t.Fatal("should restart the server after waking up")
