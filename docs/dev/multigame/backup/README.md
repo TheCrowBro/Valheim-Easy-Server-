@@ -2,7 +2,7 @@
 
 The owner paused the work on 2026-11-27 at about 03:36 UTC and asked for a backup of everything. This branch, `multigame-backup`, holds all of it. It never releases: only pushes to the default branch release, and this commit says `[skip ci]`.
 
-Its tree is the multigame branch at `732bd85` plus this folder. Every unpushed branch and every unfinished worktree is one of the backup commit's parents, so all of their history is on GitHub.
+Its tree is the multigame branch (now `ae77e63`) plus this folder. Every unpushed branch and every unfinished worktree is one of the backup commit's parents, so all of their history is on GitHub.
 
 ## Restoring
 
@@ -40,7 +40,7 @@ Each snapshot is one commit on top of its branch. It holds the worktree's uncomm
 | mg/ui | 7b1d99f | 01f7355 | UI: the new panel: sidebar with Active/Inactive lists and stars, top bar, Overview, Add a game, a game's page with tabs, App pages |
 | mg/ui-valheim | 86f8b70 | 01f7355 | UIV: Valheim's pages as a module of the new panel (worlds, mods, join code, players, settings) |
 | mg/g-fix-vintagestory | 53f4f26 | f86a110 | Vintage Story's Windows console: how the server reads typed lines, the fix and a Windows facts test |
-| mg/g-fix-enshrouded | cdbe9d5 | f86a110 | Enshrouded's query port that never answered A2S on the real Windows run |
+| mg/g-fix-enshrouded | 0c2b404 (was cdbe9d5) | f86a110 | Enshrouded's query port that never answered A2S on the real Windows run |
 
 UIG (the other 10 games' panel modules) had not started.
 
@@ -55,6 +55,25 @@ UIG (the other 10 games' panel modules) had not started.
 
 - `README.md`: this file.
 - `multigame-streams.js`: the workflow script that runs each stream (build, independent review, follow-up). Its arguments are `{base, streams: [{key, branch, release, ask}]}`.
+
+## Real players' details replaced (2026-11-27)
+
+At the owner's request, made-up IDs and names now replace real players' details copied from public logs:
+
+- Steam IDs (now 76561198000000201 to 207);
+- Minecraft account ids (now 00000000-0000-4000-8000-0000000000a1 to a3);
+- player names.
+
+This touched Core Keeper, Enshrouded, Minecraft, Necesse, Palworld and Vintage Story, plus one Steam ID in the Valheim log parser's test. The fix is commit `ae77e63` on multigame, and this backup's tree carries it.
+
+What still has the old values:
+
+- The Enshrouded snapshot was taken again after its worktree was fixed (`0c2b404`). The older snapshot `cdbe9d5` is still a parent of the first backup commit.
+- The unpushed stream branches above were made before the fix. Merging multigame brings it in.
+- The default branch's copy of the log parser test keeps its one Steam ID until R3 merges. A release only for test data wasn't worth an update during the R2 soak.
+- Git history (older commits on every branch) still holds the old values. Only rewriting the branches would remove them.
+
+To scrub a branch made before the fix, merge multigame into it. For an edit that isn't on a branch, repeat the replacements commit `ae77e63` makes.
 
 ## Picking the work up again
 
@@ -89,4 +108,4 @@ UIG (the other 10 games' panel modules) had not started.
     - folders are spelt in full;
     - the Java option variables are emptied.
 13. Minecraft's stand-in: its RCON "stop" sometimes exits before the reply reaches the client (an occasional takeover-stop failure in TestConformance).
-14. Privacy, before R3: Core Keeper's and Enshrouded's testdata, FACTS.md and tests carry real players' Steam IDs from public logs (e.g. corekeeper's github-2024-10-29 log, enshrouded's 1.0 and jsknnr logs). Replace them with made-up IDs and names, and scan every game's testdata again.
+14. Privacy, before R3: done for the files on multigame (see above). Scan again after merging the stream branches, and check new testdata as it comes in.

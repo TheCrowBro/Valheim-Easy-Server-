@@ -14,7 +14,7 @@ import (
 // wrote it in 2024 and in 1.0 (FACTS.md and testdata/real). Every line
 // starts with a level letter and the time since the server started:
 //
-//	[I 00:01:38,732] [server] Player 'Legiterately' logged in with Permissions:
+//	[I 00:01:38,732] [server] Player 'Eydis' logged in with Permissions:
 //
 // The strings below are in the 1.0 server's program (FACTS.md, "Log
 // lines"), and lines printed before the log opens have no prefix.
@@ -36,7 +36,7 @@ var (
 	// Player 'X'".
 	reLeave = regexp.MustCompile(`^\[server\] Remove (?:Entity for )?Player '(.+)'$`)
 	// The connection before a join, with the player's Steam account: 1.0
-	// writes "Added peer 0(1) (steamid:76561198039777309)"; 2024's servers
+	// writes "Added peer 0(1) (steamid:76561198000000202)"; 2024's servers
 	// wrote "Session accepted with peer ( id 7656… )." then "Added Peer #0.".
 	rePeerAdded    = regexp.MustCompile(`^\[online\] Added peer (\S+) \((?:steamid:)?(\d{5,20})\)`)
 	rePeerAccepted = regexp.MustCompile(`^\[online\] Session accepted with peer \(\s*(?:id )?(\d{5,20})\s*\)`)

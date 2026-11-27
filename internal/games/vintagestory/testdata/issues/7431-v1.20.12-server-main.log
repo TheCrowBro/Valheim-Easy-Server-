@@ -31,15 +31,15 @@
 29.10.2025 17:00:21 [Warning] Server overloaded. A tick took 908ms to complete.
 29.10.2025 17:00:45 [Notification] A Client attempts connecting via TCP on [::ffff:198.51.100.40]:54176, assigning client id 57
 29.10.2025 17:00:45 [Notification] UDP: Client 57 connected via: [::ffff:198.51.100.40]:47064
-29.10.2025 17:00:46 [Notification] Client 57 uid MadeUpUid4AAAAAAAAAAAAAA attempting identification. Name: vfctffu
+29.10.2025 17:00:46 [Notification] Client 57 uid MadeUpUid4AAAAAAAAAAAAAA attempting identification. Name: Ottar
 29.10.2025 17:00:46 [Notification] Sending server identification with remap False. Server control privilege is False
-29.10.2025 17:00:46 [Notification] Placing vfctffu at 120554.84130859375 170.00006103515625 129688.1748046875
+29.10.2025 17:00:46 [Notification] Placing Ottar at 120554.84130859375 170.00006103515625 129688.1748046875
 29.10.2025 17:00:54 [Error] Error while enumerating tickables. Tickables total count is 6655
 29.10.2025 17:01:01 [Notification] A Client attempts connecting via TCP on [::ffff:203.0.113.50]:51084, assigning client id 58
 29.10.2025 17:01:01 [Notification] UDP: Client 58 connected via: [::ffff:203.0.113.50]:58002
 29.10.2025 17:01:01 [Notification] Client 58 uid MadeUpUid5AAAAAAAAAAAAAA attempting identification. Name: sparky4snow
 29.10.2025 17:01:02 [Notification] Delayed join, need to load one spawn chunk first.
-29.10.2025 17:01:08 [Event] vfctffu [::ffff:198.51.100.40]:54176 joins.
+29.10.2025 17:01:08 [Event] Ottar [::ffff:198.51.100.40]:54176 joins.
 29.10.2025 17:01:08 [Warning] Server overloaded. A tick took 860ms to complete.
 29.10.2025 17:01:12 [Event] Leif [::ffff:192.0.2.20]:61243 joins.
 29.10.2025 17:01:16 [Event] The item path is: bread-flax-perfect

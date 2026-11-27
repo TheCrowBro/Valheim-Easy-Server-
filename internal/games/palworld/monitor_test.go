@@ -68,7 +68,7 @@ func TestMonitorRealStartSaveShutdown(t *testing.T) {
 // Real join and leave lines (0.2.0.6, the version that added them).
 func TestMonitorRealJoinLeave(t *testing.T) {
 	m, evs, _ := feed(t, "testdata/monitor/v0.2.0.6-join-leave.log")
-	if got := kinds(evs); got != "join:HunterAP leave:HunterAP" {
+	if got := kinds(evs); got != "join:Thora leave:Thora" {
 		t.Errorf("events = %q", got)
 	}
 	if evs[0].Account != "steam_<redacted>" || evs[0].Time.Format("15:04:05") != "19:26:37" {
@@ -84,10 +84,10 @@ func TestMonitorRealJoinLeave(t *testing.T) {
 // join; the wrapper's "has joined" and the commands are not.
 func TestMonitorRealContainerLog(t *testing.T) {
 	m, evs, _ := feed(t, "testdata/monitor/v0.2-container-wrapper.log")
-	if got := kinds(evs); got != "join:Tanaka Lyanne" {
+	if got := kinds(evs); got != "join:Signy Dahl" {
 		t.Errorf("events = %q", got)
 	}
-	if st := m.State(); len(st.Players) != 1 || st.Players[0].Account != "steam_76561198379551257" {
+	if st := m.State(); len(st.Players) != 1 || st.Players[0].Account != "steam_76561198000000206" {
 		t.Errorf("players = %+v", st.Players)
 	}
 }

@@ -1,13 +1,13 @@
-[2024-04-21 15:53:30] [LOG] Kogoro  executed the command. ShowPlayers
-Kogoro  has joined
-[2024-04-21 15:53:30] [LOG] Kogoro  executed the command. broadcast Kogoro__has_joined
+[2024-04-21 15:53:30] [LOG] Freya  executed the command. ShowPlayers
+Freya  has joined
+[2024-04-21 15:53:30] [LOG] Freya  executed the command. broadcast Freya__has_joined
 Sending Discord json: {"embeds":[{"title":"Player Joined",
-[2024-04-21 15:53:31] [LOG] Tanaka Lyanne joined the server. (User id: steam_76561198379551257)
+[2024-04-21 15:53:31] [LOG] Signy Dahl joined the server. (User id: steam_76561198000000206)
 [2024-04-21 15:53:45] [LOG] RCON executed the command. ShowPlayers
-Kogoro  has left
-[2024-04-21 15:53:45] [LOG] RCON executed the command. broadcast Kogoro__has_left
-Tanaka Lyanne,2C17391D000000000000000000000000,76561198379551257 has joined
+Freya  has left
+[2024-04-21 15:53:45] [LOG] RCON executed the command. broadcast Freya__has_left
+Signy Dahl,0F1E2D3C000000000000000000000000,76561198000000206 has joined
 Sending Discord json: {"embeds":[{"title":"Player Left",
-[2024-04-21 15:53:45] [LOG] RCON executed the command. broadcast Tanaka_Lyanne,2C17391D000000000000000000000000,76561198379551257_has_joined
+[2024-04-21 15:53:45] [LOG] RCON executed the command. broadcast Signy_Dahl,0F1E2D3C000000000000000000000000,76561198000000206_has_joined
 Sending Discord json: {"embeds":[{"title":"Player Joined",
 [2024-04-21 15:54:00] [LOG] RCON executed the command. ShowPlayers

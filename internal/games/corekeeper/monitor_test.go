@@ -112,11 +112,11 @@ func TestMonitorGolden(t *testing.T) {
 // from the join line.
 func TestMonitorRealJoinLeave(t *testing.T) {
 	m, evs, _ := replay(t, filepath.Join("testdata", "forum", "github-2024-10-29-v1.0.0.14-join-leave.log"))
-	want := []string{"code", "online", "join:Gonaeng", "leave:Gonaeng", "stopping"}
+	want := []string{"code", "online", "join:Ragna", "leave:Ragna", "stopping"}
 	if got := kindNames(evs); strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("events %q, want %q", got, want)
 	}
-	if evs[2].Account != "76561198056526695" || evs[3].Account != "76561198056526695" {
+	if evs[2].Account != "76561198000000203" || evs[3].Account != "76561198000000203" {
 		t.Errorf("accounts: join %q, leave %q", evs[2].Account, evs[3].Account)
 	}
 	st := m.State()

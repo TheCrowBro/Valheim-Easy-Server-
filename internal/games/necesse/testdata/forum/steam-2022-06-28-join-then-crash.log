@@ -1,6 +1,6 @@
-[2022-06-28 11:31:41] Client "icytux" connected on slot 1/10.
-[2022-06-28 11:31:43] Loading map for player: AUTH:76561198014526397
-[2022-06-28 11:31:43] Loaded player: 76561198014526397
+[2022-06-28 11:31:41] Client "Sigurd" connected on slot 1/10.
+[2022-06-28 11:31:43] Loading map for player: AUTH:76561198000000201
+[2022-06-28 11:31:43] Loaded player: 76561198000000201
 [2022-06-28 11:31:43] (ERR) Error in server ticking:
 [2022-06-28 11:31:43] (ERR) java.lang.NullPointerException
 [2022-06-28 11:31:43] (ERR) 	at necesse.level.gameTile.LiquidTile.getLiquidColor(LiquidTile.java:97)

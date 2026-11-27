@@ -293,10 +293,10 @@ file, and "Departures from the spec" lists each case.
   escapingnetwork/core-keeper-dedicated#66 ("World save folder not found",
   2024-10-29, version 1.0.0.14-34ff), lines in order in
   `testdata/forum/github-2024-10-29-v1.0.0.14-join-leave.log`: "Connected to
-  userid:76561198056526695", "Successful authentication from
-  userid:76561198056526695", "[userid:76561198056526695] player Gonaeng
-  connected islocalplayer=False", "[userid:76561198056526695] is using new
-  name Gonaeng", then "Disconnected from userid:76561198056526695 with
+  userid:76561198000000203", "Successful authentication from
+  userid:76561198000000203", "[userid:76561198000000203] player Ragna
+  connected islocalplayer=False", "[userid:76561198000000203] is using new
+  name Ragna", then "Disconnected from userid:76561198000000203 with
   reason App_Min". The issue page was read through a summarising fetch, so
   the file holds the lines it listed from that post, in order: its three
   start lines ("Logged in", "Listening on SteamID", "Started session"), then

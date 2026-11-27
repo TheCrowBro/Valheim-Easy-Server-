@@ -1195,7 +1195,7 @@ Top-level fields stay as they are (the legacy instance's, `TestStatusTopLevelKey
       "starred": true, "foreign": "", "disabled": false, "canRun": "yes", "needsText": "",
       "state": "online", "installed": true, "build": {"version": "26.3"},
       "world": "Riverbend", "runningWorld": "Riverbend",
-      "players": [{"name": "Alex", "account": "8667ba71-…", "since": "2026-12-03T19:40:00Z"}],
+      "players": [{"name": "Alex", "account": "00000000-…", "since": "2026-12-03T19:40:00Z"}],
       "count": 1, "maxPlayers": 10, "presence": "names",
       "join": {"how": "address", "address": "203.0.113.25", "lan": ["192.168.1.20:25565"], "port": 25565,
                "password": "", "public": false, "crossplay": false, "steps": ["…"], "hint": "…", "router": true},

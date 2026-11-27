@@ -148,7 +148,7 @@
 [I 00:03:30,477] Machines:
 [I 00:03:30,477]   m#0(128): up 0 (0), down 0 (0), remote 0 (0), limit 2,048, lost 0, ping 9,223,372,036,854 ms, EstablishingBaseline
 [I 00:03:30,477] ---------------------------------------
-[I 00:03:58,983] [online] Session accepted with peer ( id 76561198196714077 ).
+[I 00:03:58,983] [online] Session accepted with peer ( id 76561198000000205 ).
 [I 00:03:58,983] [online] Added Peer #0.
 [I 00:04:00,479] -------------- Session ----------------
 [I 00:04:00,479] Machines:
@@ -164,7 +164,7 @@
 [I 00:04:06,150] Received new Character save game
 [I 00:04:13,878] [server] Machine '1': Player '0(0)' logged in
 [I 00:04:13,881] [ecs] readEntitySerializationContext: Templates: 4  Components: 201  Size: 55,936
-[I 00:04:13,882] [server] Player 'HyRozz' logged in with Permissions:
+[I 00:04:13,882] [server] Player 'Hakon' logged in with Permissions:
 [I 00:04:13,882]         - CanAccessInventories
 [I 00:04:13,882]         - CanEditBase
 [I 00:04:13,882]         - CanExtendBase
