@@ -1,0 +1,6 @@
+# Events the Monitor finds in testdata/real/paused-when-empty.log, then its state at the end.
+online text="The server is online and ready for players."
+stopping
+saved text="World saved."
+state: ready=true version="1.3.3" count=0 players=[] saved=true stopping=true stopCode="SERVER_STOPPED" bindFailed=false
+shown: 19 lines

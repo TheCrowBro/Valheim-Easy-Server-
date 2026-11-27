@@ -1,0 +1,43 @@
+[2022-06-28 11:31:41] Client "icytux" connected on slot 1/10.
+[2022-06-28 11:31:43] Loading map for player: AUTH:76561198014526397
+[2022-06-28 11:31:43] Loaded player: 76561198014526397
+[2022-06-28 11:31:43] (ERR) Error in server ticking:
+[2022-06-28 11:31:43] (ERR) java.lang.NullPointerException
+[2022-06-28 11:31:43] (ERR) 	at necesse.level.gameTile.LiquidTile.getLiquidColor(LiquidTile.java:97)
+[2022-06-28 11:31:43] (ERR) 	at necesse.level.gameTile.WaterTile.getLiquidColor(WaterTile.java:38)
+[2022-06-28 11:31:43] (ERR) 	at necesse.level.gameTile.WaterTile.getMapColor(WaterTile.java:43)
+[2022-06-28 11:31:43] (ERR) 	at necesse.entity.mobs.summon.WoodBoatMob.addParticleEffects(WoodBoatMob.java:183)
+[2022-06-28 11:31:43] (ERR) 	at necesse.entity.mobs.summon.WoodBoatMob.addParticleEffects(WoodBoatMob.java:170)
+[2022-06-28 11:31:43] (ERR) 	at necesse.entity.mobs.summon.WoodBoatMob.tickMovement(WoodBoatMob.java:79)
+[2022-06-28 11:31:43] (ERR) 	at necesse.entity.manager.EntityList.lambda$null$3(EntityList.java:274)
+[2022-06-28 11:31:43] (ERR) 	at necesse.engine.tickManager.PerformanceTimerManager.recordPerformance(PerformanceTimerManager.java:105)
+[2022-06-28 11:31:43] (ERR) 	at necesse.engine.tickManager.Performance.record(Performance.java:10)
+[2022-06-28 11:31:43] (ERR) 	at necesse.entity.manager.EntityList.lambda$frameTick$4(EntityList.java:269)
+[2022-06-28 11:31:43] (ERR) 	at necesse.engine.tickManager.PerformanceTimerManager.recordPerformance(PerformanceTimerManager.java:105)
+[2022-06-28 11:31:43] (ERR) 	at necesse.engine.tickManager.Performance.record(Performance.java:10)
+[2022-06-28 11:31:43] (ERR) 	at necesse.entity.manager.EntityList.frameTick(EntityList.java:268)
+[2022-06-28 11:31:43] (ERR) 	at necesse.entity.manager.EntityManager.frameTick(EntityManager.java:317)
+[2022-06-28 11:31:43] (ERR) 	at necesse.level.maps.Level.frameTick(Level.java:356)
+[2022-06-28 11:31:43] (ERR) 	at necesse.engine.world.LevelManager.frameTick(LevelManager.java:37)
+[2022-06-28 11:31:43] (ERR) 	at necesse.engine.world.World.frameTick(World.java:174)
+[2022-06-28 11:31:43] (ERR) 	at necesse.engine.network.server.Server.frameTick(Server.java:142)
+[2022-06-28 11:31:43] (ERR) 	at necesse.engine.ServerTickThread$1.lambda$null$0(ServerTickThread.java:37)
+[2022-06-28 11:31:43] (ERR) 	at necesse.engine.tickManager.PerformanceTimerManager.recordPerformance(PerformanceTimerManager.java:105)
+[2022-06-28 11:31:43] (ERR) 	at necesse.engine.tickManager.Performance.record(Performance.java:10)
+[2022-06-28 11:31:43] (ERR) 	at necesse.engine.ServerTickThread$1.lambda$update$1(ServerTickThread.java:36)
+[2022-06-28 11:31:43] (ERR) 	at necesse.engine.tickManager.PerformanceTimerManager.recordConstantPerformance(PerformanceTimerManager.java:113)
+[2022-06-28 11:31:43] (ERR) 	at necesse.engine.tickManager.Performance.recordConstant(Performance.java:16)
+[2022-06-28 11:31:43] (ERR) 	at necesse.engine.ServerTickThread$1.update(ServerTickThread.java:33)
+[2022-06-28 11:31:43] (ERR) 	at necesse.engine.tickManager.TickManager.tickLogic(TickManager.java:98)
+[2022-06-28 11:31:43] (ERR) 	at necesse.engine.ServerTickThread.run(ServerTickThread.java:72)
+[2022-06-28 11:31:43] (ERR) Stuck in crash loop, stopping server.
+[2022-06-28 11:31:43] (ERR) Printing crash log to C:\steamcmd\steamapps\common\Necesse Dedicated Server\latest-crash.log
+[2022-06-28 11:31:43] Saved all data.
+[2022-06-28 11:31:43] World time: 546, day 202
+[2022-06-28 11:31:43] Game time: 191629583
+[2022-06-28 11:31:43] Total ticks: 360
+[2022-06-28 11:31:43] Received: 142 B (17 packets)
+[2022-06-28 11:31:43] Sent: 7.16 kB (94 packets)
+[2022-06-28 11:31:43] Stopped server on 2022/06/28 11:31:43 with code: SERVER_ERROR
+[2022-06-28 11:31:44] Server has stopped
+[2022-06-28 11:31:44] Exiting in 2 seconds...	

@@ -1,0 +1,9 @@
+# Events the Monitor finds in testdata/forum/steam-2021-05-09-v0.20.40-join-leave.log, then its state at the end.
+online text="The server is online and ready for players."
+join name="76561198129445960" account=76561198129445960 text="76561198129445960 joined the game."
+leave name="76561198129445960" account=76561198129445960 text="76561198129445960 left the game."
+saved text="World saved."
+stopping
+saved text="World saved."
+state: ready=true version="0.20.40" count=0 players=[] saved=true stopping=true stopCode="SERVER_STOPPED" bindFailed=false
+shown: 44 lines

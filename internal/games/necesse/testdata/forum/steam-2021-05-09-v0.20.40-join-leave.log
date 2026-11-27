@@ -1,0 +1,50 @@
+[2021-05-09 15:34:42] Type a name for the world to create
+[2021-05-09 15:34:52] > FindingPaths
+[2021-05-09 15:34:52] Creating new save: FindingPaths
+[2021-05-09 15:34:52] Custom server options? (y/n)
+[2021-05-09 15:34:57] > n
+[2021-05-09 15:34:57] Creating save with name: FindingPaths
+[2021-05-09 15:34:57] Could not find world file, creating new one: FindingPaths
+[2021-05-09 15:34:57] Could not find Level: -6077x9966d0 file for FindingPaths
+[2021-05-09 15:35:00] Started lan socket at port 55169
+[2021-05-09 15:35:00] Started server using port 14159 with 10 slots on world "FindingPaths", game version 0.20.40.
+[2021-05-09 15:35:00] Found 0 saved players.
+[2021-05-09 15:35:00] Local address: 192.168.0.28:14159
+[2021-05-09 15:35:00] Type help for list of commands.
+[2021-05-09 15:36:00] Unloaded level -6077x9966d0
+[2021-05-09 15:38:50] Client "76561198129445960" with address host.docker.internal:60944 is connecting with version 0.20.40.
+[2021-05-09 15:38:50] Could not find Player: 76561198129445960 in directory
+[2021-05-09 15:38:50] Client "76561198129445960" connected on slot 1/10.
+[2021-05-09 15:38:50] Creating new player: 76561198129445960
+[2021-05-09 15:44:04] Could not find Level: -6077x9966d-1 file for FindingPaths
+[2021-05-09 15:44:06] Changed Robert island to -6077, 9966, -1
+[2021-05-09 15:44:47] Changed Robert island to -6077, 9966, 0
+[2021-05-09 15:45:47] Unloaded level -6077x9966d-1
+[2021-05-09 15:46:20] Settler elder moved in room at 165, 140 on -6077x9966d0
+[2021-05-09 15:47:46] Robert got humiliated by Zombie
+[2021-05-09 15:47:54] Robert got humiliated by Zombie
+[2021-05-09 15:51:03] Changed Robert island to -6077, 9966, -1
+[2021-05-09 15:52:00] Changed Robert island to -6077, 9966, 0
+[2021-05-09 15:53:00] Unloaded level -6077x9966d-1
+[2021-05-09 15:57:19] Changed Robert island to -6077, 9966, -1
+[2021-05-09 16:04:58] Changed Robert island to -6077, 9966, 0
+[2021-05-09 16:05:58] Unloaded level -6077x9966d-1
+[2021-05-09 16:09:26] Changed Robert island to -6077, 9966, -1
+[2021-05-09 16:11:10] Changed Robert island to -6077, 9966, 0
+[2021-05-09 16:12:10] Unloaded level -6077x9966d-1
+[2021-05-09 16:12:21] Changed Robert island to -6077, 9966, -1
+[2021-05-09 16:20:17] Changed Robert island to -6077, 9966, 0
+[2021-05-09 16:21:17] Unloaded level -6077x9966d-1
+[2021-05-09 16:26:42] Player 76561198129445960 ("Robert") disconnected with message: Quit
+[2021-05-09 22:28:12] > save
+[2021-05-09 22:28:13] Saved all data.
+[2021-05-10 08:54:35] > stop
+[2021-05-10 08:54:35] Saved all data.
+[2021-05-10 08:54:35] World time: 274, day 69
+[2021-05-10 08:54:35] Game time: 62374846
+[2021-05-10 08:54:35] Total ticks: 1247497
+[2021-05-10 08:54:35] Received: 311.82 kB (14597 packets)
+[2021-05-10 08:54:35] Sent: 10.10 MB (147585 packets)
+[2021-05-10 08:54:35] Stopped server on 2021/05/10 08:54:35 with code: SERVER_STOPPED
+[2021-05-10 08:54:35] Server has stopped
+[2021-05-10 08:54:35] Exiting in 2 seconds...

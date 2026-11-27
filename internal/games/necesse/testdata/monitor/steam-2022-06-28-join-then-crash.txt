@@ -1,0 +1,5 @@
+# Events the Monitor finds in testdata/forum/steam-2022-06-28-join-then-crash.log, then its state at the end.
+join name="icytux" text="icytux joined the game."
+saved text="World saved."
+state: ready=false version="" count=1 players=["icytux/76561198014526397"] saved=true stopping=false stopCode="SERVER_ERROR" bindFailed=false
+shown: 43 lines

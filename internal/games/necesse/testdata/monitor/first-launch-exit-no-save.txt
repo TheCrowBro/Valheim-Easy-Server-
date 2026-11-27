@@ -1,0 +1,5 @@
+# Events the Monitor finds in testdata/real/first-launch-exit-no-save.log, then its state at the end.
+online text="The server is online and ready for players."
+stopping
+state: ready=true version="1.3.3" count=0 players=[] saved=false stopping=true stopCode="SERVER_STOPPED" bindFailed=false
+shown: 22 lines

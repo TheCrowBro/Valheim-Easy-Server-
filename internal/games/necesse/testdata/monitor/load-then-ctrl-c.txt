@@ -1,0 +1,4 @@
+# Events the Monitor finds in testdata/real/load-then-ctrl-c.log, then its state at the end.
+online text="The server is online and ready for players."
+state: ready=true version="1.3.3" count=0 players=[] saved=false stopping=false stopCode="" bindFailed=false
+shown: 8 lines
