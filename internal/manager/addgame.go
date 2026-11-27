@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -171,16 +170,6 @@ func (m *Manager) serverForGame(g game.Game) (*instance, game.Server) {
 	srv := g.New(game.Env{Instance: info.ID, Data: m.opt.DataDir, Dirs: m.gameDirs(info.ID), Log: m.log})
 	m.life.scratch[info.ID] = srv
 	return found, srv
-}
-
-// gameDirs are a non-legacy instance's folders under games/<id> (spec
-// 3.1). They are where its first world goes when Add a game imports one
-// from the owner's own game, before the instance exists.
-func (m *Manager) gameDirs(id string) game.Dirs {
-	root := filepath.Join(m.opt.DataDir, "games", id)
-	return game.Dirs{Root: root, Server: filepath.Join(root, "server"), Saves: filepath.Join(root, "saves"),
-		Backups: filepath.Join(root, "backups"), Logs: filepath.Join(root, "logs"), Runtime: filepath.Join(root, "runtime"),
-		Staging: filepath.Join(root, "uploads"), SteamCMD: filepath.Join(m.opt.DataDir, "steamcmd")}
 }
 
 // AddGameRequest is POST /api/games.
