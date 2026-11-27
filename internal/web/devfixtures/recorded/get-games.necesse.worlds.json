@@ -1,0 +1,28 @@
+{
+  "route": "GET /api/games/{id}/worlds",
+  "request": "GET /api/games/necesse/worlds",
+  "code": 200,
+  "answer": {
+    "worlds": [
+      {
+        "name": "Riverbend",
+        "format": "files",
+        "size": 22,
+        "modified": "2026-11-27T03:09:27.118022021Z",
+        "neverSaved": true,
+        "backups": []
+      }
+    ],
+    "orphans": [],
+    "selected": "Riverbend",
+    "running": "Riverbend",
+    "folder": "/Users/owner/Library/Application Support/ValheimEasyServer/games/necesse/saves",
+    "schema": {
+      "world": [],
+      "newWorld": []
+    },
+    "values": {
+      "Riverbend": {}
+    }
+  }
+}

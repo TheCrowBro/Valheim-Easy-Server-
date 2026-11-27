@@ -24,72 +24,103 @@ import (
 
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
-	a := mux.HandleFunc
-
-	a("GET /{$}", s.index)
+	mux.HandleFunc("GET /{$}", s.index)
 	mux.Handle("GET /assets/", s.static())
-
-	a("GET /api/status", s.status)
-	a("POST /api/server/start", s.act(func(r *http.Request) error { return s.m.StartServer() }))
-	a("POST /api/server/stop", s.act(func(r *http.Request) error { return s.m.StopServer() }))
-	a("POST /api/server/restart", s.act(func(r *http.Request) error { return s.m.RestartServer() }))
-	a("POST /api/server/force-stop", s.act(func(r *http.Request) error { return s.m.ForceStop() }))
-	a("POST /api/server/install", s.install)
-	a("POST /api/job/cancel", s.act(func(r *http.Request) error { return s.m.CancelJob() }))
-	a("POST /api/power/hibernate", s.act(func(r *http.Request) error { return s.m.Hibernate("") }))
-	a("POST /api/power/keep-awake", s.act(func(r *http.Request) error { s.m.KeepAwake(); return nil }))
-	a("POST /api/power/enable-hibernate", s.act(func(r *http.Request) error { return s.m.EnableHibernation() }))
-	a("POST /api/power/enable-wake-on-lan", s.act(func(r *http.Request) error { return s.m.EnableWakeOnLAN() }))
-
-	a("GET /api/worlds", s.worlds)
-	a("POST /api/worlds/select", s.selectWorld)
-	a("POST /api/worlds/create", s.createWorld)
-	a("POST /api/worlds/options", s.worldOptions)
-	a("POST /api/worlds/mods", s.worldMods)
-	a("POST /api/worlds/rename", s.renameWorld)
-	a("POST /api/worlds/delete", s.worldAction(func(name, _ string) error { return s.m.DeleteWorld(name) }))
-	a("POST /api/worlds/backup", s.worldAction(func(name, _ string) error { return s.m.BackupWorld(name) }))
-	a("POST /api/worlds/restore", s.worldAction(func(name, id string) error { return s.m.RestoreWorld(name, id) }))
-	a("GET /api/worlds/download", s.downloadWorld)
-	a("GET /api/worlds/backup-download", s.downloadBackup)
-	a("POST /api/uploads", s.newUpload)
-	a("POST /api/uploads/{id}/files", s.uploadFiles)
-	a("POST /api/uploads/{id}/scan", s.scanUpload)
-	a("POST /api/uploads/{id}/import", s.importUpload)
-	a("DELETE /api/uploads/{id}", s.discardUpload)
-	a("GET /api/local-worlds", s.localWorlds)
-	a("POST /api/local-worlds/import", s.importLocal)
-
-	a("GET /api/settings", s.getSettings)
-	a("POST /api/settings", s.saveSettings)
-	a("POST /api/discord/test", s.testDiscord)
-	a("GET /api/jetkvm", s.jetkvm)
-	a("POST /api/jetkvm/install", s.installWaker)
-	a("POST /api/jetkvm/remove", s.removeWaker)
-	a("POST /api/jetkvm/post", s.postWakerLink)
-	a("POST /api/app/update", s.updateApp)
-	a("GET /api/lists", s.getLists)
-	a("POST /api/lists", s.saveList)
-	a("GET /api/players", s.players)
-	a("GET /api/records", s.records)
-
-	a("GET /api/stats", s.stats)
-	a("POST /api/stats/reset", s.act(func(r *http.Request) error { s.m.ResetStats(); return nil }))
-	a("GET /api/logs", s.logs)
-	a("GET /api/logs/download", s.downloadLog)
-
-	a("POST /api/system/firewall", s.act(func(r *http.Request) error { return s.m.FixFirewall() }))
-	a("POST /api/system/open-folder", s.openFolder)
-	a("POST /api/system/launch-on-login", s.launchOnLogin)
-	a("POST /api/system/quit", s.quitApp)
-
-	// The new panel's routes (gameroutes.go and approutes.go). They are all
-	// under /api/, so guard checks each of them as it checks the routes
-	// above.
-	for _, rt := range s.newRoutes() {
-		a(rt.pattern, rt.handler)
+	for _, rt := range s.apiRoutes() {
+		mux.HandleFunc(rt.pattern, rt.handler)
 	}
-	return securityHeaders(guard(mux))
+	return Protect(mux)
+}
+
+// Protect wraps the panel's routes in what keeps other websites out
+// (guard) and the security headers every answer carries. The app's own
+// routes go through it, and so does internal/web/devfixtures, the
+// development stand-in that answers the panel from recorded answers, so a
+// panel page that the app would refuse (a change without the X-VES
+// header, say) is refused there too.
+func Protect(h http.Handler) http.Handler { return securityHeaders(guard(h)) }
+
+// apiRoutes are every route under /api/: the old panel's, then the new
+// panel's (gameroutes.go and approutes.go). They are all under /api/, so
+// guard checks each of them the same way.
+func (s *Server) apiRoutes() []route {
+	return append(s.oldRoutes(), s.newRoutes()...)
+}
+
+// Patterns are the ServeMux patterns of every API route ("GET
+// /api/status", "POST /api/games/{id}/start", ...). internal/web/devfixtures
+// answers exactly these, so a panel page that asks for a route the app
+// doesn't have fails there as it would in the app, and its tests check
+// that it has a recorded answer for every one the panel reads.
+func Patterns() []string {
+	// The handlers are only listed, never called, so no manager is needed.
+	var s Server
+	var out []string
+	for _, rt := range s.apiRoutes() {
+		out = append(out, rt.pattern)
+	}
+	return out
+}
+
+// oldRoutes are the routes of the old panel (bed004b's api.go, which an
+// open page keeps calling across an update), each for the legacy game.
+// They answer exactly as they always have (TestLegacyRoutes).
+func (s *Server) oldRoutes() []route {
+	return []route{
+		{"GET /api/status", s.status},
+		{"POST /api/server/start", s.act(func(r *http.Request) error { return s.m.StartServer() })},
+		{"POST /api/server/stop", s.act(func(r *http.Request) error { return s.m.StopServer() })},
+		{"POST /api/server/restart", s.act(func(r *http.Request) error { return s.m.RestartServer() })},
+		{"POST /api/server/force-stop", s.act(func(r *http.Request) error { return s.m.ForceStop() })},
+		{"POST /api/server/install", s.install},
+		{"POST /api/job/cancel", s.act(func(r *http.Request) error { return s.m.CancelJob() })},
+		{"POST /api/power/hibernate", s.act(func(r *http.Request) error { return s.m.Hibernate("") })},
+		{"POST /api/power/keep-awake", s.act(func(r *http.Request) error { s.m.KeepAwake(); return nil })},
+		{"POST /api/power/enable-hibernate", s.act(func(r *http.Request) error { return s.m.EnableHibernation() })},
+		{"POST /api/power/enable-wake-on-lan", s.act(func(r *http.Request) error { return s.m.EnableWakeOnLAN() })},
+
+		{"GET /api/worlds", s.worlds},
+		{"POST /api/worlds/select", s.selectWorld},
+		{"POST /api/worlds/create", s.createWorld},
+		{"POST /api/worlds/options", s.worldOptions},
+		{"POST /api/worlds/mods", s.worldMods},
+		{"POST /api/worlds/rename", s.renameWorld},
+		{"POST /api/worlds/delete", s.worldAction(func(name, _ string) error { return s.m.DeleteWorld(name) })},
+		{"POST /api/worlds/backup", s.worldAction(func(name, _ string) error { return s.m.BackupWorld(name) })},
+		{"POST /api/worlds/restore", s.worldAction(func(name, id string) error { return s.m.RestoreWorld(name, id) })},
+		{"GET /api/worlds/download", s.downloadWorld},
+		{"GET /api/worlds/backup-download", s.downloadBackup},
+		{"POST /api/uploads", s.newUpload},
+		{"POST /api/uploads/{id}/files", s.uploadFiles},
+		{"POST /api/uploads/{id}/scan", s.scanUpload},
+		{"POST /api/uploads/{id}/import", s.importUpload},
+		{"DELETE /api/uploads/{id}", s.discardUpload},
+		{"GET /api/local-worlds", s.localWorlds},
+		{"POST /api/local-worlds/import", s.importLocal},
+
+		{"GET /api/settings", s.getSettings},
+		{"POST /api/settings", s.saveSettings},
+		{"POST /api/discord/test", s.testDiscord},
+		{"GET /api/jetkvm", s.jetkvm},
+		{"POST /api/jetkvm/install", s.installWaker},
+		{"POST /api/jetkvm/remove", s.removeWaker},
+		{"POST /api/jetkvm/post", s.postWakerLink},
+		{"POST /api/app/update", s.updateApp},
+		{"GET /api/lists", s.getLists},
+		{"POST /api/lists", s.saveList},
+		{"GET /api/players", s.players},
+		{"GET /api/records", s.records},
+
+		{"GET /api/stats", s.stats},
+		{"POST /api/stats/reset", s.act(func(r *http.Request) error { s.m.ResetStats(); return nil })},
+		{"GET /api/logs", s.logs},
+		{"GET /api/logs/download", s.downloadLog},
+
+		{"POST /api/system/firewall", s.act(func(r *http.Request) error { return s.m.FixFirewall() })},
+		{"POST /api/system/open-folder", s.openFolder},
+		{"POST /api/system/launch-on-login", s.launchOnLogin},
+		{"POST /api/system/quit", s.quitApp},
+	}
 }
 
 // --- helpers ------------------------------------------------------------

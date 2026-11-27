@@ -1,0 +1,22 @@
+{
+  "route": "GET /api/games/{id}/stats",
+  "request": "GET /api/games/vintagestory/stats",
+  "code": 200,
+  "answer": {
+    "byPlayers": {
+      "since": "2026-11-27T03:09:45.008594479Z",
+      "buckets": []
+    },
+    "machine": {
+      "hostname": "GAMING-PC",
+      "os": "Ubuntu 24.04.5 LTS",
+      "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+      "threads": 4,
+      "memTotal": 16868675584,
+      "gpus": null
+    },
+    "rangeSeconds": 3600,
+    "runningSeconds": 0,
+    "samples": []
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "route": "GET /api/games/{id}/worlds",
+  "request": "GET /api/games/terraria/worlds",
+  "code": 200,
+  "answer": {
+    "worlds": [
+      {
+        "name": "Riverbend",
+        "format": "files",
+        "size": 1026,
+        "modified": "2026-11-27T03:09:44.438698233Z",
+        "backups": []
+      }
+    ],
+    "orphans": [],
+    "selected": "Riverbend",
+    "running": "Riverbend",
+    "folder": "/Users/owner/Library/Application Support/ValheimEasyServer/games/terraria/saves",
+    "schema": {
+      "world": [],
+      "newWorld": [
+        {
+          "key": "size",
+          "scope": "newWorld",
+          "kind": "choice",
+          "label": "World size",
+          "help": "Bigger worlds take longer to make and need more memory.",
+          "default": "medium",
+          "choices": [
+            {
+              "value": "small",
+              "label": "Small"
+            },
+            {
+              "value": "medium",
+              "label": "Medium"
+            },
+            {
+              "value": "large",
+              "label": "Large"
+            }
+          ],
+          "add": true
+        },
+        {
+          "key": "difficulty",
+          "scope": "newWorld",
+          "kind": "choice",
+          "label": "Difficulty",
+          "default": "classic",
+          "choices": [
+            {
+              "value": "classic",
+              "label": "Classic"
+            },
+            {
+              "value": "expert",
+              "label": "Expert"
+            },
+            {
+              "value": "master",
+              "label": "Master"
+            },
+            {
+              "value": "journey",
+              "label": "Journey"
+            }
+          ],
+          "add": true
+        },
+        {
+          "key": "seed",
+          "scope": "newWorld",
+          "kind": "text",
+          "label": "Seed",
+          "help": "Leave it empty for a random world. The same seed makes the same world.",
+          "max": 40,
+          "advanced": true
+        }
+      ]
+    },
+    "values": {
+      "Riverbend": {
+        "difficulty": "classic",
+        "size": "medium"
+      }
+    }
+  }
+}

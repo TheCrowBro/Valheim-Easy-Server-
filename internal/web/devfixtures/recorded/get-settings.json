@@ -1,0 +1,105 @@
+{
+  "route": "GET /api/settings",
+  "request": "GET /api/settings",
+  "code": 200,
+  "answer": {
+    "settings": {
+      "serverName": "Valheim with Friends",
+      "password": "loki-troll-3525",
+      "world": "Midgard",
+      "port": 39153,
+      "public": false,
+      "crossplay": true,
+      "saveIntervalMinutes": 1,
+      "backups": 4,
+      "backupShortMinutes": 120,
+      "backupLongMinutes": 720,
+      "updateOnStart": false,
+      "autoUpdate": true,
+      "autoRestart": true,
+      "startWithApp": false,
+      "startAfterWake": true,
+      "idleHibernate": false,
+      "idleMinutes": 60,
+      "restMode": "sleep",
+      "discord": false,
+      "discordWebhook": "https://discord.com/api/webhooks/123456789012345678/stand-in",
+      "discordPassword": false,
+      "discordStopped": true,
+      "discordDaily": true,
+      "discordWake": false
+    },
+    "presets": [
+      "normal",
+      "casual",
+      "easy",
+      "hard",
+      "hardcore",
+      "immersive",
+      "hammer"
+    ],
+    "modifiers": {
+      "combat": [
+        "veryeasy",
+        "easy",
+        "hard",
+        "veryhard"
+      ],
+      "deathpenalty": [
+        "casual",
+        "veryeasy",
+        "easy",
+        "hard",
+        "hardcore"
+      ],
+      "portals": [
+        "casual",
+        "hard",
+        "veryhard"
+      ],
+      "raids": [
+        "none",
+        "muchless",
+        "less",
+        "more",
+        "muchmore"
+      ],
+      "resources": [
+        "muchless",
+        "less",
+        "more",
+        "muchmore",
+        "most"
+      ]
+    },
+    "modifierOrder": [
+      "combat",
+      "deathpenalty",
+      "resources",
+      "raids",
+      "portals"
+    ],
+    "keys": [
+      "nobuildcost",
+      "playerevents",
+      "passivemobs",
+      "nomap",
+      "fire"
+    ],
+    "paths": {
+      "data": "/Users/owner/Library/Application Support/ValheimEasyServer",
+      "server": "/Users/owner/Library/Application Support/ValheimEasyServer/server",
+      "save": "/Users/owner/Library/Application Support/ValheimEasyServer/saves",
+      "worlds": "/Users/owner/Library/Application Support/ValheimEasyServer/saves/worlds_local",
+      "backups": "/Users/owner/Library/Application Support/ValheimEasyServer/backups",
+      "logs": "/Users/owner/Library/Application Support/ValheimEasyServer/logs",
+      "steamcmd": "/Users/owner/Library/Application Support/ValheimEasyServer/steamcmd",
+      "staging": "/Users/owner/Library/Application Support/ValheimEasyServer/uploads",
+      "settings": "/Users/owner/Library/Application Support/ValheimEasyServer/settings.json",
+      "serverExe": "/Users/owner/Library/Application Support/ValheimEasyServer/server/valheim_server.x86_64",
+      "steamcmdExe": "/Users/owner/Library/Application Support/ValheimEasyServer/steamcmd/steamcmd.sh"
+    },
+    "launchOnLogin": false,
+    "version": "test"
+  }
+}

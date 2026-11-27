@@ -1,0 +1,110 @@
+{
+  "route": "GET /api/games/{id}/logs",
+  "request": "GET /api/games/necesse/logs",
+  "code": 200,
+  "answer": {
+    "last": 20,
+    "lines": [
+      {
+        "seq": 1,
+        "time": "2026-11-27T03:09:20Z",
+        "text": "Launched game with arguments: -Xmx2048M -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:+ExplicitGCInvokesConcurrent -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M -jar Server.jar -nogui -datadir /Users/owner/Library/Application Support/ValheimEasyServer/games/necesse/saves -world Riverbend -port 14165 -slots 10 -password ••• -motd Friends' Necesse -logging 0 -zipsaves 1 -language en"
+      },
+      {
+        "seq": 2,
+        "time": "2026-11-27T03:09:20Z",
+        "text": "Loading dedicated server on version 1.3.3."
+      },
+      {
+        "seq": 3,
+        "time": "2026-11-27T03:09:22Z",
+        "text": "Creating new world at /Users/owner/Library/Application Support/ValheimEasyServer/games/necesse/saves/saves/worlds/Riverbend.zip"
+      },
+      {
+        "seq": 4,
+        "time": "2026-11-27T03:09:22Z",
+        "text": "Creating save with name: Riverbend.zip"
+      },
+      {
+        "seq": 5,
+        "time": "2026-11-27T03:09:22Z",
+        "text": "Could not find world file, creating new one: Riverbend.zip"
+      },
+      {
+        "seq": 6,
+        "time": "2026-11-27T03:09:22Z",
+        "text": "Could not find Level: Riverbend/levels/surface.dat file for Riverbend.zip"
+      },
+      {
+        "seq": 7,
+        "time": "2026-11-27T03:09:22Z",
+        "text": "Finding spawn position..."
+      },
+      {
+        "seq": 8,
+        "time": "2026-11-27T03:09:22Z",
+        "text": "This may take a moment"
+      },
+      {
+        "seq": 9,
+        "time": "2026-11-27T03:09:27Z",
+        "text": "Found spawn tile at: 2712, -136"
+      },
+      {
+        "seq": 10,
+        "time": "2026-11-27T03:09:27Z",
+        "text": "Started lan socket at port 55169"
+      },
+      {
+        "seq": 11,
+        "time": "2026-11-27T03:09:27Z",
+        "text": "Started server using port 14165 with 10 slots on world \"Riverbend.zip\" with password \"•••\", game version 1.3.3."
+      },
+      {
+        "seq": 12,
+        "time": "2026-11-27T03:09:27Z",
+        "text": "Found 0 saved players."
+      },
+      {
+        "seq": 13,
+        "time": "2026-11-27T03:09:27Z",
+        "text": "Local address: 127.0.0.1:14165"
+      },
+      {
+        "seq": 14,
+        "time": "2026-11-27T03:09:27Z",
+        "text": "Type help for list of commands."
+      },
+      {
+        "seq": 15,
+        "time": "2026-11-27T03:09:27Z",
+        "text": "Client \"Alex\" with address 127.0.0.1:50000 is connecting with version 1.3.3."
+      },
+      {
+        "seq": 16,
+        "time": "2026-11-27T03:09:27Z",
+        "text": "Client \"Alex\" connected on slot 1/10."
+      },
+      {
+        "seq": 17,
+        "time": "2026-11-27T03:09:27Z",
+        "text": "Loaded player: 76561198008213605"
+      },
+      {
+        "seq": 18,
+        "time": "2026-11-27T03:09:27Z",
+        "text": "Client \"Sam\" with address 127.0.0.1:50001 is connecting with version 1.3.3."
+      },
+      {
+        "seq": 19,
+        "time": "2026-11-27T03:09:27Z",
+        "text": "Client \"Sam\" connected on slot 2/10."
+      },
+      {
+        "seq": 20,
+        "time": "2026-11-27T03:09:27Z",
+        "text": "Loaded player: 76561198067922812"
+      }
+    ]
+  }
+}

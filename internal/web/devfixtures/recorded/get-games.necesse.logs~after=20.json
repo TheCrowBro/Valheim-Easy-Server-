@@ -1,0 +1,9 @@
+{
+  "route": "GET /api/games/{id}/logs",
+  "request": "GET /api/games/necesse/logs?after=20",
+  "code": 200,
+  "answer": {
+    "last": 20,
+    "lines": []
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "route": "GET /api/games/{id}/lists",
+  "request": "GET /api/games/valheim/lists",
+  "code": 200,
+  "answer": [
+    {
+      "kind": {
+        "id": "admins",
+        "label": "Admins",
+        "placeholder": "Steam_76561198000000000",
+        "help": "Admins can kick and ban players in the game.",
+        "live": false
+      },
+      "ids": []
+    },
+    {
+      "kind": {
+        "id": "banned",
+        "label": "Banned players",
+        "placeholder": "Steam_76561198000000000",
+        "help": "Banned players can't join.",
+        "live": false
+      },
+      "ids": []
+    },
+    {
+      "kind": {
+        "id": "permitted",
+        "label": "Allowed players",
+        "placeholder": "Steam_76561198000000000",
+        "help": "When anyone is listed, only they can join.",
+        "live": false
+      },
+      "ids": []
+    }
+  ]
+}

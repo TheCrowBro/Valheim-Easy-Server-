@@ -1,0 +1,16 @@
+{
+  "route": "GET /api/games/{id}/players",
+  "request": "GET /api/games/terraria/players",
+  "code": 200,
+  "answer": {
+    "players": [
+      {
+        "name": "Alex",
+        "firstSeen": "2026-11-27T03:09:44.822348672Z",
+        "lastSeen": "2026-11-27T03:09:44.822348672Z",
+        "playSeconds": 0,
+        "sessions": 1
+      }
+    ]
+  }
+}

@@ -1143,10 +1143,18 @@ func fakeGames(t *testing.T, script string) func(*manager.Options) {
 	prog := gametest.BuildFakeserver(t)
 	t.Setenv("EGS_DEV_FAKE_SERVERS", prog)
 	return func(o *manager.Options) {
-		f := reflect.ValueOf(o).Elem().FieldByName("Fake")
-		if f.IsValid() && f.Type() == reflect.TypeFor[*game.Fake]() {
-			f.Set(reflect.ValueOf(&game.Fake{Program: prog, Script: script, Delay: 100 * time.Millisecond}))
-		}
+		setOption(o, "Fake", &game.Fake{Program: prog, Script: script, Delay: 100 * time.Millisecond})
+	}
+}
+
+// setOption sets one of the manager's Options by its name, when this
+// build's manager has it with that type, and does nothing when it doesn't
+// (Fake and Games come with stream M3), so these tests build against
+// either.
+func setOption[T any](o *manager.Options, name string, v T) {
+	f := reflect.ValueOf(o).Elem().FieldByName(name)
+	if f.IsValid() && f.Type() == reflect.TypeFor[T]() {
+		f.Set(reflect.ValueOf(v))
 	}
 }
 

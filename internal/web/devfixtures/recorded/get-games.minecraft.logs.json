@@ -1,0 +1,135 @@
+{
+  "route": "GET /api/games/{id}/logs",
+  "request": "GET /api/games/minecraft/logs",
+  "code": 200,
+  "answer": {
+    "last": 25,
+    "lines": [
+      {
+        "seq": 1,
+        "time": "2026-11-27T03:09:28Z",
+        "text": "No existing world data, creating new world"
+      },
+      {
+        "seq": 2,
+        "time": "2026-11-27T03:09:28Z",
+        "text": "Starting minecraft server version 26.3"
+      },
+      {
+        "seq": 3,
+        "time": "2026-11-27T03:09:28Z",
+        "text": "Loading properties"
+      },
+      {
+        "seq": 4,
+        "time": "2026-11-27T03:09:28Z",
+        "text": "Default game type: SURVIVAL"
+      },
+      {
+        "seq": 5,
+        "time": "2026-11-27T03:09:28Z",
+        "text": "Generating keypair"
+      },
+      {
+        "seq": 6,
+        "time": "2026-11-27T03:09:28Z",
+        "text": "Starting Minecraft server on *:25565"
+      },
+      {
+        "seq": 7,
+        "time": "2026-11-27T03:09:28Z",
+        "text": "Preparing level \"Riverbend\""
+      },
+      {
+        "seq": 8,
+        "time": "2026-11-27T03:09:33Z",
+        "text": "Preparing spawn area: 100%"
+      },
+      {
+        "seq": 9,
+        "time": "2026-11-27T03:09:33Z",
+        "text": "Time elapsed: 5004 ms"
+      },
+      {
+        "seq": 10,
+        "time": "2026-11-27T03:09:33Z",
+        "text": "Done (5.004s)! For help, type \"help\""
+      },
+      {
+        "seq": 11,
+        "time": "2026-11-27T03:09:33Z",
+        "text": "Starting remote control listener"
+      },
+      {
+        "seq": 12,
+        "time": "2026-11-27T03:09:33Z",
+        "text": "Thread RCON Listener started"
+      },
+      {
+        "seq": 13,
+        "time": "2026-11-27T03:09:33Z",
+        "text": "RCON running on 0.0.0.0:25575"
+      },
+      {
+        "seq": 14,
+        "time": "2026-11-27T03:09:33Z",
+        "text": "Saving chunks for level 'ServerLevel[Riverbend]'/minecraft:overworld"
+      },
+      {
+        "seq": 15,
+        "time": "2026-11-27T03:09:33Z",
+        "text": "Saving chunks for level 'ServerLevel[Riverbend]'/minecraft:the_nether"
+      },
+      {
+        "seq": 16,
+        "time": "2026-11-27T03:09:33Z",
+        "text": "Saving chunks for level 'ServerLevel[Riverbend]'/minecraft:the_end"
+      },
+      {
+        "seq": 17,
+        "time": "2026-11-27T03:09:33Z",
+        "text": "[Rcon: Stopping the server]"
+      },
+      {
+        "seq": 18,
+        "time": "2026-11-27T03:09:33Z",
+        "text": "Stopping server"
+      },
+      {
+        "seq": 19,
+        "time": "2026-11-27T03:09:33Z",
+        "text": "Saving players"
+      },
+      {
+        "seq": 20,
+        "time": "2026-11-27T03:09:33Z",
+        "text": "Saving worlds"
+      },
+      {
+        "seq": 21,
+        "time": "2026-11-27T03:09:33Z",
+        "text": "Saving chunks for level 'ServerLevel[Riverbend]'/minecraft:overworld"
+      },
+      {
+        "seq": 22,
+        "time": "2026-11-27T03:09:33Z",
+        "text": "Saving chunks for level 'ServerLevel[Riverbend]'/minecraft:the_nether"
+      },
+      {
+        "seq": 23,
+        "time": "2026-11-27T03:09:33Z",
+        "text": "Saving chunks for level 'ServerLevel[Riverbend]'/minecraft:the_end"
+      },
+      {
+        "seq": 24,
+        "time": "2026-11-27T03:09:33Z",
+        "text": "Thread RCON Listener stopped"
+      },
+      {
+        "seq": 25,
+        "time": "2026-11-27T03:09:33.884850883Z",
+        "text": "fakeserver: exiting now (code 0)"
+      }
+    ]
+  }
+}

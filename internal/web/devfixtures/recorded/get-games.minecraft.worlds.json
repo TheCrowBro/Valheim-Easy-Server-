@@ -1,0 +1,126 @@
+{
+  "route": "GET /api/games/{id}/worlds",
+  "request": "GET /api/games/minecraft/worlds",
+  "code": 200,
+  "answer": {
+    "worlds": [
+      {
+        "name": "Riverbend",
+        "format": "folder",
+        "size": 5707,
+        "modified": "2026-11-27T03:09:33.4940224Z",
+        "backups": []
+      }
+    ],
+    "orphans": [],
+    "selected": "Riverbend",
+    "running": "",
+    "folder": "/Users/owner/Library/Application Support/ValheimEasyServer/games/minecraft/saves",
+    "schema": {
+      "world": [
+        {
+          "key": "difficulty",
+          "scope": "world",
+          "kind": "choice",
+          "label": "Difficulty",
+          "default": "normal",
+          "choices": [
+            {
+              "value": "peaceful",
+              "label": "Peaceful"
+            },
+            {
+              "value": "easy",
+              "label": "Easy"
+            },
+            {
+              "value": "normal",
+              "label": "Normal"
+            },
+            {
+              "value": "hard",
+              "label": "Hard"
+            }
+          ],
+          "restart": true
+        },
+        {
+          "key": "gamemode",
+          "scope": "world",
+          "kind": "choice",
+          "label": "Game mode",
+          "help": "For players joining this world for the first time.",
+          "default": "survival",
+          "choices": [
+            {
+              "value": "survival",
+              "label": "Survival"
+            },
+            {
+              "value": "creative",
+              "label": "Creative"
+            },
+            {
+              "value": "adventure",
+              "label": "Adventure"
+            }
+          ],
+          "restart": true
+        }
+      ],
+      "newWorld": [
+        {
+          "key": "seed",
+          "scope": "newWorld",
+          "kind": "text",
+          "label": "Seed",
+          "help": "Leave it empty for a random world.",
+          "max": 64,
+          "advanced": true
+        },
+        {
+          "key": "levelType",
+          "scope": "newWorld",
+          "kind": "choice",
+          "label": "World type",
+          "default": "normal",
+          "choices": [
+            {
+              "value": "normal",
+              "label": "Normal"
+            },
+            {
+              "value": "flat",
+              "label": "Flat"
+            },
+            {
+              "value": "large_biomes",
+              "label": "Large biomes"
+            },
+            {
+              "value": "amplified",
+              "label": "Amplified"
+            }
+          ],
+          "advanced": true
+        },
+        {
+          "key": "hardcore",
+          "scope": "newWorld",
+          "kind": "bool",
+          "label": "Hardcore (one life; the world is lost when you die)",
+          "default": "false",
+          "advanced": true
+        }
+      ]
+    },
+    "values": {
+      "Riverbend": {
+        "difficulty": "normal",
+        "gamemode": "survival",
+        "hardcore": "false",
+        "levelType": "normal"
+      }
+    }
+  }
+}

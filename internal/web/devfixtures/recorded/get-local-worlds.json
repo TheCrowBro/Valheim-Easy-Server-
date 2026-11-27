@@ -1,0 +1,8 @@
+{
+  "route": "GET /api/local-worlds",
+  "request": "GET /api/local-worlds",
+  "code": 200,
+  "answer": {
+    "candidates": []
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "route": "GET /api/lists",
+  "request": "GET /api/lists",
+  "code": 200,
+  "answer": {
+    "admins": [],
+    "banned": [],
+    "permitted": []
+  }
+}

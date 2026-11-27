@@ -1,0 +1,8 @@
+{
+  "route": "GET /api/games/{id}/local-worlds",
+  "request": "GET /api/games/valheim/local-worlds",
+  "code": 200,
+  "answer": {
+    "candidates": []
+  }
+}

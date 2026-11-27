@@ -1,0 +1,9 @@
+{
+  "route": "GET /api/games/{id}/logs",
+  "request": "GET /api/games/terraria/logs?after=15",
+  "code": 200,
+  "answer": {
+    "last": 15,
+    "lines": []
+  }
+}

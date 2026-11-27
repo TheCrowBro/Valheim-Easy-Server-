@@ -1,0 +1,9 @@
+{
+  "route": "GET /api/games/{id}/logs",
+  "request": "GET /api/games/valheim/logs?after=18",
+  "code": 200,
+  "answer": {
+    "last": 18,
+    "lines": []
+  }
+}

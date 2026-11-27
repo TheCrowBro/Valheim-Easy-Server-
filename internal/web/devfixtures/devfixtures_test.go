@@ -1,386 +1,285 @@
 package main
 
+// devfixtures answers with the recordings, and keeps only the stars and
+// the sidebar. (internal/web's tests check that the recordings cover the
+// app's routes and still have its fields.)
+
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"mime/multipart"
+	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
-	"valheim-easy-server/internal/game"
-	"valheim-easy-server/internal/manager"
-	"valheim-easy-server/internal/worlds"
+	"valheim-easy-server/internal/web"
 )
 
-type fixtures struct {
-	t  *testing.T
-	st *state
-	h  http.Handler
-}
-
-func newFixtures(t *testing.T, change ...func(*options)) *fixtures {
+func newFixtures(t *testing.T) (*fixtures, http.Handler) {
 	t.Helper()
-	opt := options{GOOS: "windows", GOARCH: "amd64", FreeMB: 12000, Step: 5 * time.Millisecond, Dir: t.TempDir()}
-	for _, c := range change {
-		c(&opt)
+	f, err := load(besideSource("devfixtures/recorded"), besideSource("ui"), log.New(io.Discard, "", 0))
+	if err != nil {
+		t.Fatal(err)
 	}
-	st := newState(opt)
-	return &fixtures{t: t, st: st, h: newHandler(st, defaultUI())}
+	return f, f.handler()
 }
 
 // call asks as the panel does: from this computer, with X-VES on changes.
-func (f *fixtures) call(method, path, body string) *httptest.ResponseRecorder {
-	f.t.Helper()
+func call(h http.Handler, method, path, body string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.RemoteAddr = "127.0.0.1:50000"
+	req.Host = "127.0.0.1:8457"
 	if method != http.MethodGet {
 		req.Header.Set("X-VES", "1")
 		req.Header.Set("Content-Type", "application/json")
 	}
 	rec := httptest.NewRecorder()
-	f.h.ServeHTTP(rec, req)
+	h.ServeHTTP(rec, req)
 	return rec
 }
 
-// strict decodes an answer as exactly the app's type: a key the type
-// doesn't have fails.
-func strict[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
+func jsonEqual(t *testing.T, a, b []byte) bool {
 	t.Helper()
-	var v T
-	if rec.Code != http.StatusOK {
-		t.Fatalf("%d %s", rec.Code, rec.Body)
+	var x, y any
+	if err := json.Unmarshal(a, &x); err != nil {
+		t.Fatalf("%v\n%s", err, a)
 	}
-	dec := json.NewDecoder(bytes.NewReader(rec.Body.Bytes()))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&v); err != nil {
-		t.Fatalf("doesn't read as %T: %v\n%s", v, err, rec.Body)
+	if err := json.Unmarshal(b, &y); err != nil {
+		t.Fatalf("%v\n%s", err, b)
 	}
-	return v
+	xb, _ := json.Marshal(x)
+	yb, _ := json.Marshal(y)
+	return bytes.Equal(xb, yb)
 }
 
-func (f *fixtures) status() manager.Status {
-	f.t.Helper()
-	return strict[manager.Status](f.t, f.call("GET", "/api/status", ""))
+type statusPart struct {
+	Stars []string `json:"stars"`
+	Games []struct {
+		ID      string `json:"id"`
+		Starred bool   `json:"starred"`
+	} `json:"games"`
+	Sidebar struct {
+		ActiveOpen   bool `json:"activeOpen"`
+		InactiveOpen bool `json:"inactiveOpen"`
+	} `json:"sidebar"`
 }
 
-func (f *fixtures) gameOf(id string) (manager.GameStatus, bool) {
-	for _, g := range f.status().Games {
-		if g.ID == id {
-			return g, true
-		}
-	}
-	return manager.GameStatus{}, false
-}
-
-func (f *fixtures) waitFor(what string, cond func() bool) {
-	f.t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		if cond() {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	f.t.Fatalf("timed out waiting for %s", what)
-}
-
-// appRoutes are the app's route patterns, read from internal/web's source:
-// every new route (newRoutes' lists) and the old GET routes.
-func appRoutes(t *testing.T) []string {
+func status(t *testing.T, h http.Handler) statusPart {
 	t.Helper()
-	var out []string
-	for file, re := range map[string]*regexp.Regexp{
-		"gameroutes.go": regexp.MustCompile(`\{"((?:GET|POST|DELETE) /api/[^"]+)"`),
-		"approutes.go":  regexp.MustCompile(`\{"((?:GET|POST|DELETE) /api/[^"]+)"`),
-		"api.go":        regexp.MustCompile(`a\("(GET /api/[^"]+)"`),
-	} {
-		b, err := os.ReadFile(filepath.Join("..", file))
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, m := range re.FindAllStringSubmatch(string(b), -1) {
-			out = append(out, m[1])
-		}
+	rec := call(h, "GET", "/api/status", "")
+	var st statusPart
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &st) != nil {
+		t.Fatalf("status = %d %s", rec.Code, rec.Body)
 	}
-	if len(out) < 50 {
-		t.Fatalf("found only %d routes in internal/web", len(out))
-	}
-	slices.Sort(out)
-	return out
+	return st
 }
 
-// Every route of the app has a made-up answer here, of the kind the app
-// gives, so the panel can be built against all of them.
-func TestEveryAppRouteHasAnAnswer(t *testing.T) {
-	f := newFixtures(t)
-	legacy := game.Legacy().Info().ID
-	var up struct{ ID string }
-	json.Unmarshal(f.call("POST", "/api/games/"+legacy+"/uploads", "").Body.Bytes(), &up)
-	for _, p := range appRoutes(t) {
+// Each recorded request gets exactly the answer the app gave it.
+func TestAnswersAsRecorded(t *testing.T) {
+	f, h := newFixtures(t)
+	var all []recording
+	for _, d := range f.gets {
+		all = append(all, d)
+	}
+	for _, list := range f.changes {
+		all = append(all, list...)
+	}
+	if len(all) < 20 {
+		t.Fatalf("only %d recordings", len(all))
+	}
+	for _, d := range all {
+		method, path, _ := strings.Cut(d.Request, " ")
+		rec := call(h, method, path, string(d.Body))
+		if rec.Code != d.Code {
+			t.Errorf("%s = %d, recorded %d", d.Request, rec.Code, d.Code)
+			continue
+		}
+		if !jsonEqual(t, rec.Body.Bytes(), d.Answer) {
+			t.Errorf("%s answers\n%s\nrecorded\n%s", d.Request, rec.Body, d.Answer)
+		}
+	}
+}
+
+// A log asked for after its last line has nothing new, so a panel that
+// polls it doesn't show the same lines again and again.
+func TestLogPollingEnds(t *testing.T) {
+	f, h := newFixtures(t)
+	n := 0
+	for req, d := range f.gets {
+		if !strings.HasSuffix(req, "/logs") {
+			continue
+		}
+		var all struct {
+			Last json.Number `json:"last"`
+		}
+		json.Unmarshal(d.Answer, &all)
+		var next struct {
+			Lines []any       `json:"lines"`
+			Last  json.Number `json:"last"`
+		}
+		path := strings.TrimPrefix(req, "GET ") + "?after=" + all.Last.String()
+		rec := call(h, "GET", path, "")
+		if json.Unmarshal(rec.Body.Bytes(), &next) != nil || len(next.Lines) != 0 || next.Last != all.Last {
+			t.Errorf("%s = %s", path, rec.Body)
+		}
+		n++
+	}
+	if n == 0 {
+		t.Fatal("no log is recorded")
+	}
+}
+
+// The stars and the sidebar's lists change as the panel asks, and nothing
+// else does.
+func TestStarsAndSidebar(t *testing.T) {
+	_, h := newFixtures(t)
+	before := status(t, h)
+	var id string
+	for _, g := range before.Games {
+		if !g.Starred {
+			id = g.ID
+			break
+		}
+	}
+	if id == "" {
+		t.Fatal("every recorded game is starred; the recordings need an unstarred one")
+	}
+	starred := func() (inList, flag bool) {
+		st := status(t, h)
+		for _, g := range st.Games {
+			if g.ID == id {
+				flag = g.Starred
+			}
+		}
+		return slices.Contains(st.Stars, id), flag
+	}
+
+	if rec := call(h, "POST", "/api/games/"+id+"/star", `{"on":true}`); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"ok":true`) {
+		t.Fatalf("star = %d %s", rec.Code, rec.Body)
+	}
+	if inList, flag := starred(); !inList || !flag {
+		t.Fatalf("after starring %s: in stars %v, starred %v", id, inList, flag)
+	}
+	call(h, "POST", "/api/games/"+id+"/star", `{"on":true}`)
+	if st := status(t, h); len(st.Stars) != len(before.Stars)+1 {
+		t.Errorf("starring twice: stars %v", st.Stars)
+	}
+	call(h, "POST", "/api/games/"+id+"/star", `{"on":false}`)
+	if inList, flag := starred(); inList || flag {
+		t.Fatalf("after unstarring %s: in stars %v, starred %v", id, inList, flag)
+	}
+	if rec := call(h, "POST", "/api/games/"+id+"/star", `{}`); rec.Code != http.StatusBadRequest {
+		t.Errorf("a star without on = %d %s", rec.Code, rec.Body)
+	}
+	if rec := call(h, "POST", "/api/games/nosuchgame/star", `{"on":true}`); rec.Code != http.StatusNotImplemented {
+		t.Errorf("starring a game that isn't recorded = %d %s", rec.Code, rec.Body)
+	}
+
+	// One list at a time: the other stays as it was.
+	call(h, "POST", "/api/app/sidebar", `{"inactiveOpen":true}`)
+	if st := status(t, h); !st.Sidebar.InactiveOpen || st.Sidebar.ActiveOpen != before.Sidebar.ActiveOpen {
+		t.Errorf("sidebar after opening Inactive: %+v", st.Sidebar)
+	}
+	call(h, "POST", "/api/app/sidebar", `{"activeOpen":false}`)
+	if st := status(t, h); !st.Sidebar.InactiveOpen || st.Sidebar.ActiveOpen {
+		t.Errorf("sidebar after closing Active: %+v", st.Sidebar)
+	}
+
+	// Another change answers as the app does and changes nothing.
+	after := call(h, "GET", "/api/status", "").Body.Bytes()
+	if rec := call(h, "POST", "/api/games/"+id+"/start", `{"memory":"anyway"}`); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"ok":true`) {
+		t.Errorf("start = %d %s", rec.Code, rec.Body)
+	}
+	if again := call(h, "GET", "/api/status", "").Body.Bytes(); !bytes.Equal(again, after) {
+		t.Error("a start changed the status")
+	}
+}
+
+// The start refused for memory is answered to the request it was
+// recorded for, written either way the panel may write it, and not to a
+// start that says to go ahead.
+func TestMemoryRefusal(t *testing.T) {
+	f, h := newFixtures(t)
+	var refused *recording
+	for _, list := range f.changes {
+		for i, d := range list {
+			if d.Route == "POST /api/games/{id}/start" && d.Code == http.StatusBadRequest {
+				refused = &list[i]
+			}
+		}
+	}
+	if refused == nil {
+		t.Fatal("no refused start is recorded")
+	}
+	path := strings.TrimPrefix(refused.Request, "POST ")
+	for _, body := range []string{`{"memory":""}`, `{}`, ``} {
+		rec := call(h, "POST", path, body)
+		if rec.Code != http.StatusBadRequest || !jsonEqual(t, rec.Body.Bytes(), refused.Answer) {
+			t.Errorf("start %s = %d %s", body, rec.Code, rec.Body)
+		}
+	}
+	var answer struct {
+		Action string `json:"action"`
+		Data   struct {
+			Running []struct {
+				ID string `json:"id"`
+			} `json:"running"`
+		} `json:"data"`
+	}
+	json.Unmarshal(refused.Answer, &answer)
+	if answer.Action != "memory" || len(answer.Data.Running) == 0 {
+		t.Fatalf("the recorded refusal isn't the memory warning: %s", refused.Answer)
+	}
+	for _, body := range []string{`{"memory":"anyway"}`, `{"memory":"stop:` + answer.Data.Running[0].ID + `"}`} {
+		if rec := call(h, "POST", path, body); rec.Code != http.StatusOK {
+			t.Errorf("start %s = %d %s", body, rec.Code, rec.Body)
+		}
+	}
+}
+
+// Only the app's routes answer, behind the app's guard; what isn't
+// recorded says so rather than pretending.
+func TestOnlyTheAppsRoutes(t *testing.T) {
+	_, h := newFixtures(t)
+	if rec := call(h, "POST", "/api/games/x/no-such-route", `{}`); rec.Code != http.StatusNotFound {
+		t.Errorf("a route the app doesn't have = %d %s", rec.Code, rec.Body)
+	}
+	if rec := call(h, "GET", "/api/games/x/start", ``); rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("a GET of a change = %d %s", rec.Code, rec.Body)
+	}
+
+	req := httptest.NewRequest("POST", "/api/games/x/stop", strings.NewReader(`{}`))
+	req.RemoteAddr, req.Host = "127.0.0.1:50000", "127.0.0.1:8457"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("a change without X-VES = %d %s", rec.Code, rec.Body)
+	}
+
+	st := status(t, h)
+	download := "/api/games/" + st.Games[0].ID + "/logs/download"
+	if rec := call(h, "GET", download, ""); rec.Code != http.StatusNotImplemented || !strings.Contains(rec.Body.String(), "devfixtures: ") {
+		t.Errorf("a download = %d %s", rec.Code, rec.Body)
+	}
+
+	// Every route of the app answers something other than 404 or 405.
+	for _, p := range web.Patterns() {
 		method, path, _ := strings.Cut(p, " ")
-		path = strings.NewReplacer("{id}", legacy, "{game}", legacy, "{upload}", up.ID).Replace(path)
-		if strings.Contains(path, "download") {
-			path += "?name=Midgard&id=auto-1"
-		}
-		body := `{}`
-		if strings.HasSuffix(path, "/files") {
-			continue // multipart: TestUpload
-		}
-		rec := f.call(method, path, body)
-		switch rec.Code {
-		case http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented, http.StatusForbidden, http.StatusInternalServerError:
-			t.Errorf("%s: %d %s", p, rec.Code, rec.Body)
-		}
-		if ct := rec.Header().Get("Content-Type"); ct == "" {
-			t.Errorf("%s: no Content-Type", p)
+		path = strings.NewReplacer("{id}", st.Games[0].ID, "{game}", st.Games[0].ID, "{upload}", "u1").Replace(path)
+		if rec := call(h, method, path, `{}`); rec.Code == http.StatusNotFound || rec.Code == http.StatusMethodNotAllowed {
+			t.Errorf("%s = %d", p, rec.Code)
 		}
 	}
 }
 
-// The answers are the app's own types, so the panel built on them works
-// with the app.
-func TestAnswersAreTheAppsTypes(t *testing.T) {
-	f := newFixtures(t)
-	st := f.status()
-	if len(st.Games) < 4 {
-		t.Fatalf("only %d made-up games", len(st.Games))
-	}
-	strict[[]manager.CatalogGame](t, f.call("GET", "/api/catalog", ""))
-	strict[manager.RouterView](t, f.call("GET", "/api/router", ""))
-	for _, g := range st.Games {
-		base := "/api/games/" + g.ID
-		s := strict[manager.GameSettingsView](t, f.call("GET", base+"/settings", ""))
-		if s.Values.Server["serverName"] == "" || len(s.Ports) == 0 {
-			t.Errorf("%s settings: %+v", g.ID, s)
+func TestPanelLoads(t *testing.T) {
+	_, h := newFixtures(t)
+	for _, p := range []string{"/", "/assets/app.js"} {
+		if rec := call(h, "GET", p, ""); rec.Code != http.StatusOK || rec.Body.Len() == 0 {
+			t.Errorf("GET %s = %d", p, rec.Code)
 		}
-		wv := strict[manager.GameWorldsView](t, f.call("GET", base+"/worlds", ""))
-		if wv.Selected == "" || len(wv.Worlds) == 0 {
-			t.Errorf("%s worlds: %+v", g.ID, wv)
-		}
-		strict[[]manager.GameList](t, f.call("GET", base+"/lists", ""))
-		strict[struct {
-			Players []manager.KnownPlayer `json:"players"`
-		}](t, f.call("GET", base+"/players", ""))
-		strict[struct {
-			Lines []manager.LogLine `json:"lines"`
-			Last  int64             `json:"last"`
-		}](t, f.call("GET", base+"/logs?after=0", ""))
-		if rec := f.call("GET", base+"/records?period=week", ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"players"`) {
-			t.Errorf("%s records: %d %s", g.ID, rec.Code, rec.Body)
-		}
-		if rec := f.call("GET", base+"/stats?range=1h", ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"samples"`) {
-			t.Errorf("%s stats: %d", g.ID, rec.Code)
-		}
-		if g.Join.LAN == nil || g.Join.Steps == nil || g.Ports == nil || g.Players == nil || g.Reminder == nil || g.Warnings == nil {
-			t.Errorf("%s has a null list: %+v", g.ID, g)
-		}
-	}
-}
-
-// The made-up games show every state the new panel draws.
-func TestFixturesShowEveryState(t *testing.T) {
-	f := newFixtures(t, func(o *options) { o.GOOS, o.GOARCH = "darwin", "amd64" })
-	st := f.status()
-	has := func(what string, ok func(g manager.GameStatus) bool) {
-		t.Helper()
-		if !slices.ContainsFunc(st.Games, ok) {
-			t.Errorf("no made-up game is %s", what)
-		}
-	}
-	has("starred and online with players", func(g manager.GameStatus) bool {
-		return g.Starred && g.State == manager.StateOnline && g.Count > 0 && g.Join.How != ""
-	})
-	has("starred and stopped", func(g manager.GameStatus) bool { return g.Starred && g.State == manager.StateStopped })
-	has("running without a star", func(g manager.GameStatus) bool { return !g.Starred && g.State == manager.StateOnline })
-	has("stopped without a star", func(g manager.GameStatus) bool { return !g.Starred && g.State == manager.StateStopped && g.Installed })
-	has("not installed", func(g manager.GameStatus) bool { return !g.Installed })
-	has("one that needs Windows on this Mac", func(g manager.GameStatus) bool {
-		return g.CanRun == game.CantRun && g.NeedsText != ""
-	})
-	if st.Online < 2 || st.Playing < 2 || len(st.Stars) < 2 || !st.Sidebar.ActiveOpen || st.Sidebar.InactiveOpen || st.Machine.Hostname == "" {
-		t.Errorf("status: online %d, playing %d, stars %v, sidebar %+v, machine %+v", st.Online, st.Playing, st.Stars, st.Sidebar, st.Machine)
-	}
-	catalog := strict[[]manager.CatalogGame](t, f.call("GET", "/api/catalog", ""))
-	if !slices.ContainsFunc(catalog, func(c manager.CatalogGame) bool { return c.CanRun == game.CantRun && c.NeedsText != "" }) ||
-		!slices.ContainsFunc(catalog, func(c manager.CatalogGame) bool { return c.Added }) ||
-		!slices.ContainsFunc(catalog, func(c manager.CatalogGame) bool { return !c.Added }) {
-		t.Errorf("catalog = %+v", catalog)
-	}
-	for _, c := range catalog {
-		if !slices.ContainsFunc(c.Schema, func(fl game.Field) bool { return fl.Add }) && len(c.Schema) > 0 {
-			t.Errorf("%s: the catalog's schema has fields Add a game doesn't ask", c.ID)
-		}
-	}
-}
-
-// A start that doesn't fit in the free memory shows the warning, with the
-// running games to stop; its buttons start the game.
-func TestMemoryWarning(t *testing.T) {
-	f := newFixtures(t, func(o *options) { o.FreeMB = 1000 })
-	var stopped manager.GameStatus
-	for _, g := range f.status().Games {
-		if g.State == manager.StateStopped && g.Installed && g.CanRun == game.Runs {
-			stopped = g
-			break
-		}
-	}
-	if stopped.ID == "" {
-		t.Fatal("no stopped game to start")
-	}
-	rec := f.call("POST", "/api/games/"+stopped.ID+"/start", `{"memory":""}`)
-	var a struct {
-		Error  string              `json:"error"`
-		Action string              `json:"action"`
-		Data   manager.MemoryShort `json:"data"`
-	}
-	json.Unmarshal(rec.Body.Bytes(), &a)
-	if rec.Code != http.StatusBadRequest || a.Action != "memory" || a.Data.NeedMB != stopped.NeedMB || len(a.Data.Running) == 0 || !strings.Contains(a.Error, "memory") {
-		t.Fatalf("start = %d %s", rec.Code, rec.Body)
-	}
-	other := a.Data.Running[0].ID
-	if rec := f.call("POST", "/api/games/"+stopped.ID+"/start", `{"memory":"stop:`+other+`"}`); rec.Code != http.StatusOK {
-		t.Fatalf("stop and start = %d %s", rec.Code, rec.Body)
-	}
-	if g, _ := f.gameOf(other); g.State != manager.StateStopped {
-		t.Fatalf("%s wasn't stopped: %s", other, g.State)
-	}
-	f.waitFor("the start", func() bool { g, _ := f.gameOf(stopped.ID); return g.State == manager.StateOnline })
-}
-
-// Stars, the sidebar and a settings save change only what they're asked.
-func TestChanges(t *testing.T) {
-	f := newFixtures(t)
-	st := f.status()
-	g := st.Games[1]
-	f.call("POST", "/api/games/"+g.ID+"/star", `{"on":false}`)
-	if s := f.status(); slices.Contains(s.Stars, g.ID) {
-		t.Fatalf("still starred: %v", s.Stars)
-	}
-	if rec := f.call("POST", "/api/games/"+g.ID+"/star", `{}`); rec.Code != http.StatusBadRequest {
-		t.Fatalf("a star without on = %d", rec.Code)
-	}
-	f.call("POST", "/api/app/sidebar", `{"inactiveOpen":true}`)
-	if s := f.status().Sidebar; !s.ActiveOpen || !s.InactiveOpen {
-		t.Fatalf("sidebar = %+v", s)
-	}
-
-	before := strict[manager.GameSettingsView](t, f.call("GET", "/api/games/"+g.ID+"/settings", ""))
-	if rec := f.call("POST", "/api/games/"+g.ID+"/settings", `{"values":{"serverName":"Late Owls"},"autoStopMinutes":0}`); rec.Code != http.StatusOK {
-		t.Fatalf("save = %d %s", rec.Code, rec.Body)
-	}
-	after := strict[manager.GameSettingsView](t, f.call("GET", "/api/games/"+g.ID+"/settings", ""))
-	want := before.Values.Server.Clone()
-	want["serverName"] = "Late Owls"
-	if after.AutoStopMinutes != 0 || after.StartWithApp != before.StartWithApp || after.Discord != before.Discord ||
-		fmt.Sprint(after.Values.Server) != fmt.Sprint(want) {
-		t.Fatalf("after the save: %+v", after)
-	}
-	rec := f.call("POST", "/api/games/"+g.ID+"/settings", `{"values":{"nosuchsetting":"1"}}`)
-	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"server.nosuchsetting"`) {
-		t.Fatalf("an unknown setting = %d %s", rec.Code, rec.Body)
-	}
-}
-
-// Add a game, its install, a start and a stop, and removing it.
-func TestAddStartStopRemove(t *testing.T) {
-	f := newFixtures(t)
-	var pick manager.CatalogGame
-	for _, c := range strict[[]manager.CatalogGame](t, f.call("GET", "/api/catalog", "")) {
-		if !c.Added && c.CanRun == game.Runs {
-			pick = c
-			break
-		}
-	}
-	if pick.ID == "" {
-		t.Skip("every game is added already")
-	}
-	if rec := f.call("POST", "/api/games", `{"game":"`+pick.ID+`","world":{"mode":"new"}}`); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"server.serverName"`) {
-		t.Fatalf("add without a name = %d %s", rec.Code, rec.Body)
-	}
-	body, _ := json.Marshal(map[string]any{"game": pick.ID, "serverName": "Night Owls", "password": "nightowls42", "eula": true,
-		"world": map[string]any{"mode": "new", "name": "Riverbend", "values": map[string]any{"seed": 12345}}})
-	added := strict[manager.AddedGame](t, f.call("POST", "/api/games", string(body)))
-	f.waitFor("the install", func() bool { g, _ := f.gameOf(added.ID); return g.Installed })
-	if g, _ := f.gameOf(added.ID); g.Starred || g.World != "Riverbend" || g.ServerName != "Night Owls" {
-		t.Fatalf("added: %+v", g)
-	}
-	if rec := f.call("POST", "/api/games/"+added.ID+"/start", `{"memory":"anyway"}`); rec.Code != http.StatusOK {
-		t.Fatalf("start = %d %s", rec.Code, rec.Body)
-	}
-	f.waitFor("online", func() bool { g, _ := f.gameOf(added.ID); return g.State == manager.StateOnline })
-	f.call("POST", "/api/games/"+added.ID+"/stop", `{}`)
-	f.waitFor("stopped", func() bool { g, _ := f.gameOf(added.ID); return g.State == manager.StateStopped })
-	f.call("POST", "/api/games/"+added.ID+"/remove", `{}`)
-	f.waitFor("removed", func() bool { _, still := f.gameOf(added.ID); return !still })
-}
-
-func TestUpload(t *testing.T) {
-	f := newFixtures(t)
-	legacy := game.Legacy().Info().ID
-	var up struct{ ID string }
-	json.Unmarshal(f.call("POST", "/api/games/"+legacy+"/uploads", "").Body.Bytes(), &up)
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	w, _ := mw.CreateFormFile("file", "World/world.db")
-	w.Write([]byte("data"))
-	mw.Close()
-	req := httptest.NewRequest("POST", "/api/games/"+legacy+"/uploads/"+up.ID+"/files", &buf)
-	req.RemoteAddr = "127.0.0.1:50000"
-	req.Header.Set("X-VES", "1")
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-	rec := httptest.NewRecorder()
-	f.h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"files":1`) {
-		t.Fatalf("files = %d %s", rec.Code, rec.Body)
-	}
-	scan := strict[struct {
-		Candidates []worlds.Candidate `json:"candidates"`
-	}](t, f.call("POST", "/api/games/"+legacy+"/uploads/"+up.ID+"/scan", ""))
-	if len(scan.Candidates) != 1 {
-		t.Fatalf("scan = %+v", scan)
-	}
-}
-
-// The guard refuses what the app's does.
-func TestGuard(t *testing.T) {
-	f := newFixtures(t)
-	req := httptest.NewRequest("POST", "/api/power/stop-all", strings.NewReader("{}"))
-	req.RemoteAddr = "127.0.0.1:50000"
-	rec := httptest.NewRecorder()
-	f.h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("a change without X-VES = %d", rec.Code)
-	}
-	req = httptest.NewRequest("GET", "/api/status", nil)
-	req.RemoteAddr = "192.0.2.10:50000"
-	rec = httptest.NewRecorder()
-	f.h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("another computer = %d", rec.Code)
-	}
-	if f.status().Online == 0 {
-		t.Fatal("a refused stop-all stopped the games")
-	}
-}
-
-// The panel's own files are served from internal/web/ui.
-func TestPanelFiles(t *testing.T) {
-	f := newFixtures(t)
-	if rec := f.call("GET", "/", ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "<html") {
-		t.Fatalf("index = %d", rec.Code)
-	}
-	if rec := f.call("GET", "/assets/app.js", ""); rec.Code != http.StatusOK {
-		t.Fatalf("app.js = %d", rec.Code)
-	}
-	if rec := f.call("GET", "/api/nothing-here", ""); rec.Code != http.StatusNotImplemented {
-		t.Fatalf("an unknown read = %d", rec.Code)
 	}
 }

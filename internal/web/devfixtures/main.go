@@ -1,25 +1,35 @@
-// Command devfixtures serves the control panel with made-up games, so the
-// new panel (docs/dev/multigame/spec.md 6.1) can be built and looked at
-// without real servers, before the manager runs every game (6.2: "the UI
-// stream works against recorded status and settings JSON fixtures served
-// by a small dev handler").
+// Command devfixtures serves the control panel with answers recorded from
+// the app, so the new panel (docs/dev/multigame/spec.md 6.1) can be built
+// and looked at before the manager runs every game (6.2: "the UI stream
+// works against recorded status and settings JSON fixtures served by a
+// small dev handler").
 //
-//	go run ./internal/web/devfixtures                  # http://127.0.0.1:8457/
-//	go run ./internal/web/devfixtures -os darwin -arch amd64   # as the Mac Pro: Windows-only games greyed
-//	go run ./internal/web/devfixtures -free 3000       # little free memory: starts show the memory warning
+//	go run ./internal/web/devfixtures            # http://127.0.0.1:8457/
 //
-// The panel's files are read from internal/web/ui on every request, so a
-// change shows on reload. Every answer is made from the app's own types
-// (manager.Status, manager.GameSettingsView, …) and each game's own
-// adapter (its schema, ports, lists and how friends join), so the shapes
-// are the real ones; only the numbers, names and timings are made up.
-// Changes the panel asks for (stars, the sidebar, starting and stopping,
-// settings, worlds, adding and removing a game) change these made-up games
-// until it is stopped. It never starts a server, opens a port beyond its
-// own or writes outside a temporary folder.
+// Every answer in recorded/ is one the app itself gave: internal/web's
+// TestRecordDevFixtures runs the app's own manager and routes with the
+// stand-in servers, puts a few games in the states the panel shows, and
+// writes down what each route answered. To record them again (after the
+// app's answers change, which internal/web's tests point out):
 //
-// For the app itself with stand-in servers, run the app with
-// --dev-fake-server and EGS_DEV_FAKE_SERVERS (spec 7.1) instead.
+//	go test ./internal/web -run TestRecordDevFixtures -record-devfixtures
+//
+// This program makes up no answer of its own, so it can't drift from the
+// app the way a second copy of the manager would. It keeps two things in
+// memory, because they are the panel's own choices and the sidebar can't
+// be tried without them: the stars, and which sidebar lists are open. Any
+// other change is answered as the app answered that very request when it
+// was recorded (the start refused for want of memory), or else with the
+// app's {"ok": true}, and changes nothing. To watch a game install, start
+// and stop, run the app itself with --dev-fake-server and
+// EGS_DEV_FAKE_SERVERS (spec 7.1).
+//
+// It answers exactly the app's routes (web.Patterns) behind the app's own
+// guard (web.Protect): a route the app doesn't have is a 404, and a change
+// without the panel's X-VES header is refused, as in the app. A message
+// it writes itself starts with "devfixtures:", so it is never mistaken for
+// one of the app's. The panel's files are read from internal/web/ui on
+// every request, so a change shows on reload.
 //
 // It is never shipped: nothing in the app imports it.
 package main
@@ -34,47 +44,39 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
-
-	_ "valheim-easy-server/internal/games/all" // every game the app registers
 )
 
 func main() {
 	port := flag.Int("port", 8457, "the port to listen on (this computer only)")
-	goos := flag.String("os", runtime.GOOS, "the system to pretend to be: windows, darwin or linux")
-	goarch := flag.String("arch", runtime.GOARCH, "the processor to pretend to have: amd64 or arm64")
-	free := flag.Int("free", 12000, "free memory in MB, for the memory warning")
-	ui := flag.String("ui", defaultUI(), "the panel's folder (internal/web/ui)")
-	speed := flag.Duration("step", 2*time.Second, "how long each pretend install, start and stop takes")
+	ui := flag.String("ui", besideSource("ui"), "the panel's folder (internal/web/ui)")
+	recorded := flag.String("recorded", besideSource("devfixtures/recorded"), "the recorded answers")
 	flag.Parse()
 
 	if _, err := os.Stat(filepath.Join(*ui, "index.html")); err != nil {
 		log.Fatalf("no panel at %s: run this from the repository, or give -ui", *ui)
 	}
-	tmp, err := os.MkdirTemp("", "egs-devfixtures-")
+	f, err := load(*recorded, *ui, log.Default())
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer os.RemoveAll(tmp)
-
-	st := newState(options{GOOS: *goos, GOARCH: *goarch, FreeMB: *free, Step: *speed, Dir: tmp})
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", *port))
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("the control panel with made-up games: http://%s/ (as %s/%s, %d MB free)", ln.Addr(), *goos, *goarch, *free)
-	srv := &http.Server{Handler: newHandler(st, *ui), ReadHeaderTimeout: 15 * time.Second}
+	log.Printf("the control panel with recorded answers: http://%s/", ln.Addr())
+	srv := &http.Server{Handler: f.handler(), ReadHeaderTimeout: 15 * time.Second}
 	log.Fatal(srv.Serve(ln))
 }
 
-// defaultUI is internal/web/ui next to this file's folder, found from where
-// the source is, so `go run` works from anywhere in the repository; else
-// the same path from the working folder.
-func defaultUI() string {
+// besideSource is a folder of internal/web, found from where this file's
+// source is, so `go run` works from anywhere in the repository; else the
+// same path from the working folder.
+func besideSource(rel string) string {
 	if _, file, _, ok := runtime.Caller(0); ok {
-		dir := filepath.Join(filepath.Dir(file), "..", "ui")
+		dir := filepath.Join(filepath.Dir(file), "..", filepath.FromSlash(rel))
 		if _, err := os.Stat(dir); err == nil {
 			return dir
 		}
 	}
-	return filepath.Join("internal", "web", "ui")
+	return filepath.Join("internal", "web", filepath.FromSlash(rel))
 }

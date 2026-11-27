@@ -1,0 +1,28 @@
+{
+  "route": "GET /api/jetkvm",
+  "request": "GET /api/jetkvm",
+  "code": 200,
+  "answer": {
+    "on": false,
+    "address": "",
+    "token": false,
+    "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL6qZa8F4oR3zVoNPeWW9p8GA/ZklJa6cggfpvVOjsBt valheim-easy-server",
+    "guild": false,
+    "busy": false,
+    "canPost": true,
+    "commands": [
+      {
+        "game": "valheim",
+        "command": "valheim"
+      },
+      {
+        "game": "necesse",
+        "command": "necesse"
+      },
+      {
+        "game": "minecraft",
+        "command": "minecraft"
+      }
+    ]
+  }
+}

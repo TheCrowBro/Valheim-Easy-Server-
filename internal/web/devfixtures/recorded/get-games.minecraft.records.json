@@ -1,0 +1,11 @@
+{
+  "route": "GET /api/games/{id}/records",
+  "request": "GET /api/games/minecraft/records",
+  "code": 200,
+  "answer": {
+    "from": "1970-01-01T00:00:00Z",
+    "to": "2026-11-28T00:00:00Z",
+    "players": [],
+    "records": []
+  }
+}

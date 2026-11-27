@@ -1,0 +1,696 @@
+{
+  "route": "GET /api/catalog",
+  "request": "GET /api/catalog",
+  "note": "recorded out of fake mode, so canRun and needsText say what the recording computer runs; the games marked added were added in fake mode and run as stand-ins",
+  "code": 200,
+  "answer": [
+    {
+      "id": "valheim",
+      "name": "Valheim",
+      "short": "Valheim",
+      "letter": "V",
+      "color": "#f2a33a",
+      "stage": "ready",
+      "canRun": "yes",
+      "needsText": "",
+      "downloadMB": 2100,
+      "diskMB": 2500,
+      "memoryMB": 4096,
+      "maxPlayers": 10,
+      "friendsNeed": "Valheim on Steam or Xbox (crossplay), the same version as the server",
+      "password": {
+        "use": "required",
+        "min": 5,
+        "max": 64,
+        "help": "At least 5 characters, without spaces or quotes. It can't be part of the server name or the world name."
+      },
+      "schema": [
+        {
+          "key": "serverName",
+          "scope": "server",
+          "kind": "text",
+          "label": "Server name",
+          "max": 64,
+          "restart": true,
+          "add": true
+        },
+        {
+          "key": "password",
+          "scope": "server",
+          "kind": "password",
+          "label": "Password",
+          "help": "At least 5 characters, without spaces or quotes. It can't be part of the server name or the world name.",
+          "min": 5,
+          "max": 64,
+          "restart": true,
+          "add": true
+        }
+      ],
+      "ports": [
+        {
+          "role": "game",
+          "label": "Game port",
+          "protos": [
+            "udp"
+          ],
+          "default": 2456,
+          "public": true
+        },
+        {
+          "role": "query",
+          "label": "Query port",
+          "protos": [
+            "udp"
+          ],
+          "default": 2457,
+          "tie": "game+1",
+          "public": true
+        }
+      ],
+      "import": true,
+      "added": true
+    },
+    {
+      "id": "necesse",
+      "name": "Necesse",
+      "short": "Necesse",
+      "letter": "N",
+      "color": "#8e44ad",
+      "stage": "preview",
+      "canRun": "no",
+      "needsText": "Needs Windows or an Intel Mac",
+      "downloadMB": 100,
+      "diskMB": 600,
+      "memoryMB": 2048,
+      "maxPlayers": 10,
+      "friendsNeed": "Necesse on PC or Mac, the same version as the server",
+      "password": {
+        "use": "optional",
+        "max": 64,
+        "help": "Friends type it when they join. Leave it empty for no password."
+      },
+      "schema": [
+        {
+          "key": "serverName",
+          "scope": "server",
+          "kind": "text",
+          "label": "Server name",
+          "help": "Friends see it as the welcome message when they join.",
+          "default": "Necesse server",
+          "max": 100,
+          "restart": true,
+          "add": true
+        },
+        {
+          "key": "password",
+          "scope": "server",
+          "kind": "password",
+          "label": "Password",
+          "help": "Friends type it when they join. Leave it empty for no password.",
+          "max": 64,
+          "restart": true,
+          "add": true
+        }
+      ],
+      "ports": [
+        {
+          "role": "game",
+          "label": "Game port",
+          "protos": [
+            "udp"
+          ],
+          "default": 14159,
+          "public": true
+        }
+      ],
+      "import": true,
+      "added": true
+    },
+    {
+      "id": "minecraft",
+      "name": "Minecraft: Java Edition",
+      "short": "Minecraft",
+      "letter": "M",
+      "color": "#5b8731",
+      "stage": "preview",
+      "canRun": "no",
+      "needsText": "",
+      "downloadMB": 120,
+      "diskMB": 500,
+      "memoryMB": 3072,
+      "maxPlayers": 10,
+      "friendsNeed": "Minecraft: Java Edition on PC or Mac, the same version as the server",
+      "password": {
+        "use": "none",
+        "help": "Minecraft servers have no password.",
+        "noneText": "Minecraft uses an allow list instead of a password: friends are added on the Players tab."
+      },
+      "schema": [
+        {
+          "key": "serverName",
+          "scope": "server",
+          "kind": "text",
+          "label": "Server name",
+          "help": "Shown under the server in friends' server list.",
+          "default": "Minecraft server",
+          "max": 59,
+          "restart": true,
+          "add": true
+        }
+      ],
+      "ports": [
+        {
+          "role": "game",
+          "label": "Game port",
+          "protos": [
+            "tcp"
+          ],
+          "default": 25565,
+          "public": true
+        },
+        {
+          "role": "rcon",
+          "label": "RCON port (for the app)",
+          "protos": [
+            "tcp"
+          ],
+          "default": 25575,
+          "public": false
+        }
+      ],
+      "import": true,
+      "added": true
+    },
+    {
+      "id": "terraria",
+      "name": "Terraria",
+      "short": "Terraria",
+      "letter": "T",
+      "color": "#2c7fb8",
+      "stage": "preview",
+      "canRun": "no",
+      "needsText": "Needs Windows or an Intel Mac",
+      "downloadMB": 57,
+      "diskMB": 300,
+      "memoryMB": 1536,
+      "maxPlayers": 8,
+      "friendsNeed": "Terraria on PC or Mac, the same version as the server",
+      "password": {
+        "use": "optional",
+        "max": 64,
+        "help": "Friends type it when they join. Leave it empty for no password."
+      },
+      "schema": [
+        {
+          "key": "serverName",
+          "scope": "server",
+          "kind": "text",
+          "label": "Server name",
+          "help": "Friends see it as the welcome message when they join.",
+          "default": "Terraria server",
+          "max": 64,
+          "restart": true,
+          "add": true
+        },
+        {
+          "key": "password",
+          "scope": "server",
+          "kind": "password",
+          "label": "Password",
+          "help": "Friends type it when they join. Leave it empty for no password.",
+          "max": 64,
+          "restart": true,
+          "add": true
+        },
+        {
+          "key": "size",
+          "scope": "newWorld",
+          "kind": "choice",
+          "label": "World size",
+          "help": "Bigger worlds take longer to make and need more memory.",
+          "default": "medium",
+          "choices": [
+            {
+              "value": "small",
+              "label": "Small"
+            },
+            {
+              "value": "medium",
+              "label": "Medium"
+            },
+            {
+              "value": "large",
+              "label": "Large"
+            }
+          ],
+          "add": true
+        },
+        {
+          "key": "difficulty",
+          "scope": "newWorld",
+          "kind": "choice",
+          "label": "Difficulty",
+          "default": "classic",
+          "choices": [
+            {
+              "value": "classic",
+              "label": "Classic"
+            },
+            {
+              "value": "expert",
+              "label": "Expert"
+            },
+            {
+              "value": "master",
+              "label": "Master"
+            },
+            {
+              "value": "journey",
+              "label": "Journey"
+            }
+          ],
+          "add": true
+        }
+      ],
+      "ports": [
+        {
+          "role": "game",
+          "label": "Game port",
+          "protos": [
+            "tcp",
+            "udp"
+          ],
+          "default": 7777,
+          "public": true
+        }
+      ],
+      "import": true,
+      "added": true
+    },
+    {
+      "id": "vintagestory",
+      "name": "Vintage Story",
+      "short": "Vintage Story",
+      "letter": "VS",
+      "color": "#8a6d3b",
+      "stage": "preview",
+      "canRun": "no",
+      "needsText": "Needs Windows",
+      "downloadMB": 100,
+      "diskMB": 2000,
+      "memoryMB": 3072,
+      "maxPlayers": 16,
+      "friendsNeed": "Vintage Story on PC or Mac (each friend needs their own account), the same version as the server",
+      "password": {
+        "use": "required",
+        "min": 1,
+        "max": 64,
+        "help": "Friends type it when they join. It's what keeps strangers out, so it can't be empty."
+      },
+      "schema": [
+        {
+          "key": "serverName",
+          "scope": "server",
+          "kind": "text",
+          "label": "Server name",
+          "help": "Friends see it in their list of servers.",
+          "default": "Vintage Story server",
+          "max": 80,
+          "restart": true,
+          "add": true
+        },
+        {
+          "key": "password",
+          "scope": "server",
+          "kind": "password",
+          "label": "Password",
+          "help": "Friends type it when they join. It's what keeps strangers out, so it can't be empty, and it can't have spaces.",
+          "min": 1,
+          "max": 64,
+          "restart": true,
+          "add": true
+        }
+      ],
+      "ports": [
+        {
+          "role": "game",
+          "label": "Game port",
+          "protos": [
+            "tcp",
+            "udp"
+          ],
+          "default": 42420,
+          "public": true
+        }
+      ],
+      "import": true,
+      "added": true
+    },
+    {
+      "id": "zomboid",
+      "name": "Project Zomboid",
+      "short": "Project Zomboid",
+      "letter": "PZ",
+      "color": "#b03a2e",
+      "stage": "preview",
+      "canRun": "no",
+      "needsText": "Needs Windows",
+      "downloadMB": 7100,
+      "diskMB": 10000,
+      "memoryMB": 8192,
+      "maxPlayers": 16,
+      "friendsNeed": "Project Zomboid (Build 42) on PC or Mac, the same version as the server",
+      "password": {
+        "use": "optional",
+        "max": 64,
+        "help": "Friends type it when they join. Leave it empty for no password."
+      },
+      "schema": [
+        {
+          "key": "serverName",
+          "scope": "server",
+          "kind": "text",
+          "label": "Server name",
+          "help": "The name the game shows for the server.",
+          "default": "Project Zomboid server",
+          "max": 64,
+          "restart": true,
+          "add": true
+        },
+        {
+          "key": "password",
+          "scope": "server",
+          "kind": "password",
+          "label": "Password",
+          "help": "Friends type it when they join. Leave it empty for no password.",
+          "max": 64,
+          "restart": true,
+          "add": true
+        }
+      ],
+      "ports": [
+        {
+          "role": "game",
+          "label": "Game port",
+          "protos": [
+            "udp"
+          ],
+          "default": 16261,
+          "public": true
+        },
+        {
+          "role": "direct",
+          "label": "Direct connection port",
+          "protos": [
+            "udp"
+          ],
+          "default": 16262,
+          "tie": "game+1",
+          "public": true
+        },
+        {
+          "role": "rcon",
+          "label": "RCON port (this computer only)",
+          "protos": [
+            "tcp"
+          ],
+          "default": 27015,
+          "public": false
+        }
+      ],
+      "import": false,
+      "added": false
+    },
+    {
+      "id": "enshrouded",
+      "name": "Enshrouded",
+      "short": "Enshrouded",
+      "letter": "E",
+      "color": "#16a085",
+      "stage": "preview",
+      "canRun": "no",
+      "needsText": "Needs Windows",
+      "downloadMB": 8100,
+      "diskMB": 13000,
+      "memoryMB": 6144,
+      "maxPlayers": 16,
+      "friendsNeed": "Enshrouded on Steam, kept up to date: it must be the same version as the server",
+      "password": {
+        "use": "required",
+        "min": 5,
+        "max": 32,
+        "help": "Friends type this when they join. It lets them build, open chests and place Flame Altars, but not kick or ban anyone."
+      },
+      "schema": [
+        {
+          "key": "serverName",
+          "scope": "server",
+          "kind": "text",
+          "label": "Server name",
+          "help": "Friends see this name in Enshrouded's list of servers.",
+          "default": "Enshrouded server",
+          "max": 60,
+          "restart": true,
+          "add": true
+        },
+        {
+          "key": "password",
+          "scope": "server",
+          "kind": "password",
+          "label": "Password",
+          "help": "Friends type this when they join (5 to 32 characters).",
+          "min": 5,
+          "max": 32,
+          "restart": true,
+          "add": true
+        }
+      ],
+      "ports": [
+        {
+          "role": "query",
+          "label": "Port",
+          "protos": [
+            "udp"
+          ],
+          "default": 15637,
+          "public": true
+        }
+      ],
+      "import": false,
+      "added": false
+    },
+    {
+      "id": "corekeeper",
+      "name": "Core Keeper",
+      "short": "Core Keeper",
+      "letter": "C",
+      "color": "#c9a227",
+      "stage": "preview",
+      "canRun": "no",
+      "needsText": "Needs Windows",
+      "downloadMB": 490,
+      "diskMB": 1500,
+      "memoryMB": 2048,
+      "maxPlayers": 8,
+      "friendsNeed": "Core Keeper on Steam, the same version as the server",
+      "password": {
+        "use": "none",
+        "help": "Core Keeper has no password when friends join with the Game ID.",
+        "noneText": "Friends join with the Game ID: share it only with them."
+      },
+      "schema": [
+        {
+          "key": "serverName",
+          "scope": "server",
+          "kind": "text",
+          "label": "Server name",
+          "help": "Friends see this name in Core Keeper when they join.",
+          "default": "Core Keeper server",
+          "max": 60,
+          "restart": true,
+          "add": true
+        }
+      ],
+      "ports": [],
+      "import": false,
+      "added": false
+    },
+    {
+      "id": "palworld",
+      "name": "Palworld",
+      "short": "Palworld",
+      "letter": "P",
+      "color": "#d6408b",
+      "stage": "preview",
+      "canRun": "no",
+      "needsText": "Needs Windows",
+      "downloadMB": 4700,
+      "diskMB": 9000,
+      "memoryMB": 10240,
+      "maxPlayers": 32,
+      "friendsNeed": "Palworld on PC or Mac, exactly the same version as the server (Xbox and PlayStation can't join by address)",
+      "password": {
+        "use": "optional",
+        "max": 64,
+        "help": "Friends type it when they join. Leave it empty for no password."
+      },
+      "schema": [
+        {
+          "key": "serverName",
+          "scope": "server",
+          "kind": "text",
+          "label": "Server name",
+          "help": "Friends see it when they join.",
+          "default": "Palworld server",
+          "max": 64,
+          "restart": true,
+          "add": true
+        },
+        {
+          "key": "password",
+          "scope": "server",
+          "kind": "password",
+          "label": "Password",
+          "help": "Friends type it when they join. Leave it empty for no password.",
+          "max": 64,
+          "restart": true,
+          "add": true
+        }
+      ],
+      "ports": [
+        {
+          "role": "game",
+          "label": "Game port",
+          "protos": [
+            "udp"
+          ],
+          "default": 8211,
+          "public": true
+        },
+        {
+          "role": "rest",
+          "label": "REST API port (only for the app)",
+          "protos": [
+            "tcp"
+          ],
+          "default": 8212,
+          "public": false
+        }
+      ],
+      "import": false,
+      "added": false
+    },
+    {
+      "id": "satisfactory",
+      "name": "Satisfactory",
+      "short": "Satisfactory",
+      "letter": "S",
+      "color": "#d35400",
+      "stage": "preview",
+      "canRun": "no",
+      "needsText": "Needs Windows",
+      "downloadMB": 3700,
+      "diskMB": 17000,
+      "memoryMB": 12288,
+      "maxPlayers": 4,
+      "friendsNeed": "Satisfactory on PC (Steam or Epic), the same version as the server",
+      "password": {
+        "use": "optional",
+        "max": 64,
+        "help": "Friends type it when they join. Leave it empty for no password."
+      },
+      "schema": [
+        {
+          "key": "serverName",
+          "scope": "server",
+          "kind": "text",
+          "label": "Server name",
+          "help": "Friends see it in the game's Server Manager.",
+          "default": "Satisfactory server",
+          "max": 64,
+          "restart": true,
+          "add": true
+        },
+        {
+          "key": "password",
+          "scope": "server",
+          "kind": "password",
+          "label": "Password",
+          "help": "Friends type it when they join. Leave it empty for no password.",
+          "max": 64,
+          "restart": true,
+          "add": true
+        }
+      ],
+      "ports": [
+        {
+          "role": "game",
+          "label": "Game port (also the server's API)",
+          "protos": [
+            "udp",
+            "tcp"
+          ],
+          "default": 7777,
+          "public": true
+        },
+        {
+          "role": "reliable",
+          "label": "Reliable messaging port",
+          "protos": [
+            "tcp"
+          ],
+          "default": 8888,
+          "public": true
+        }
+      ],
+      "import": true,
+      "added": false
+    },
+    {
+      "id": "windrose",
+      "name": "Windrose",
+      "short": "Windrose",
+      "letter": "W",
+      "color": "#34495e",
+      "stage": "preview",
+      "canRun": "no",
+      "needsText": "Needs Windows",
+      "downloadMB": 3105,
+      "diskMB": 35000,
+      "memoryMB": 12288,
+      "maxPlayers": 4,
+      "friendsNeed": "Windrose (on Steam, Epic Games Store or Stove), the same version as the server",
+      "password": {
+        "use": "optional",
+        "max": 64,
+        "help": "Friends type it when they join. Leave it empty so the invite code is all they need."
+      },
+      "schema": [
+        {
+          "key": "serverName",
+          "scope": "server",
+          "kind": "text",
+          "label": "Server name",
+          "help": "Friends see this name in Windrose when they connect.",
+          "default": "Windrose server",
+          "max": 64,
+          "restart": true,
+          "add": true
+        },
+        {
+          "key": "password",
+          "scope": "server",
+          "kind": "password",
+          "label": "Password",
+          "help": "Friends type it when they connect. Leave it empty so the invite code is all they need.",
+          "max": 64,
+          "restart": true,
+          "add": true
+        }
+      ],
+      "ports": [],
+      "import": false,
+      "added": false
+    }
+  ]
+}

@@ -1,0 +1,799 @@
+{
+  "route": "GET /api/status",
+  "request": "GET /api/status",
+  "code": 200,
+  "answer": {
+    "platform": "linux",
+    "state": "online",
+    "installed": true,
+    "job": {
+      "id": 1795748955807,
+      "game": "valheim",
+      "kind": "start",
+      "title": "Starting the server",
+      "message": "Making the new world… A world’s first start takes a few minutes.",
+      "percent": 100,
+      "started": "2026-11-27T03:09:15.893388222Z",
+      "finished": "2026-11-27T03:09:19.096541973Z",
+      "cancellable": false,
+      "result": "The server is online."
+    },
+    "serverName": "Valheim with Friends",
+    "world": "Midgard",
+    "runningWorld": "Midgard",
+    "players": [
+      {
+        "name": "Astrid",
+        "platformId": "Steam_76561198000038147",
+        "since": "2026-11-27T03:09:19Z"
+      },
+      {
+        "name": "Bjorn",
+        "platformId": "Steam_76561198000052904",
+        "since": "2026-11-27T03:09:19Z"
+      }
+    ],
+    "join": {
+      "crossplay": true,
+      "code": "921069",
+      "lanAddrs": [
+        "192.168.1.20:39153"
+      ],
+      "port": 39153,
+      "password": "loki-troll-3525",
+      "public": false
+    },
+    "app": {
+      "version": "",
+      "build": 0
+    },
+    "version": "1.0.20",
+    "build": "20412345",
+    "buildDate": "2026-11-27T03:09:15Z",
+    "startedAt": "2026-11-27T03:09:15.894859146Z",
+    "needsRestart": false,
+    "live": {
+      "t": 1795748984809,
+      "cpu": 3.750036619107585,
+      "cpuSys": 78.75,
+      "mem": 286703616,
+      "memSys": 2630365184,
+      "gpu": 0,
+      "netUp": 280493.2481118131,
+      "netDown": 660.0076428885046,
+      "players": 2,
+      "running": true,
+      "memTotal": 16868675584,
+      "gpus": null,
+      "gpuOk": false,
+      "netOk": true,
+      "cores": 0.1500014647643034
+    },
+    "hibernate": {
+      "available": true
+    },
+    "sleep": {
+      "available": true
+    },
+    "restMode": "sleep",
+    "canHibernate": false,
+    "network": [
+      {
+        "name": "Ethernet",
+        "description": "Stand-in",
+        "mac": "3C:07:54:5A:21:9F",
+        "ipv4": [
+          "192.168.1.20"
+        ],
+        "wired": true,
+        "connected": true,
+        "wakeArmed": true
+      }
+    ],
+    "checklist": {
+      "installed": true,
+      "firewall": true,
+      "hibernate": true,
+      "wired": true,
+      "wakeOnLan": true,
+      "launchOnLogin": false,
+      "freeDiskGB": 36.571842193603516
+    },
+    "warnings": [],
+    "activity": [
+      {
+        "seq": 23,
+        "time": "2026-11-27T03:09:44.952329202Z",
+        "kind": "update",
+        "text": "The Vintage Story server is installed and up to date.",
+        "game": "vintagestory"
+      },
+      {
+        "seq": 22,
+        "time": "2026-11-27T03:09:44.846816713Z",
+        "kind": "info",
+        "text": "Vintage Story was added. Its ports: game port 42420.",
+        "game": "vintagestory"
+      },
+      {
+        "seq": 21,
+        "time": "2026-11-27T03:09:44.822348672Z",
+        "kind": "join",
+        "name": "Alex",
+        "text": "Alex joined the game.",
+        "game": "terraria"
+      },
+      {
+        "seq": 20,
+        "time": "2026-11-27T03:09:44.822336929Z",
+        "kind": "online",
+        "text": "The server is online and ready for players.",
+        "game": "terraria"
+      },
+      {
+        "seq": 19,
+        "time": "2026-11-27T03:09:34.421954442Z",
+        "kind": "starting",
+        "text": "Starting Terraria with the world \"Riverbend\".",
+        "game": "terraria"
+      },
+      {
+        "seq": 18,
+        "time": "2026-11-27T03:09:34.367916832Z",
+        "kind": "update",
+        "text": "The Terraria server is installed and up to date.",
+        "game": "terraria"
+      },
+      {
+        "seq": 17,
+        "time": "2026-11-27T03:09:34.262643157Z",
+        "kind": "info",
+        "text": "Terraria was added. Its ports: game port 7778.",
+        "game": "terraria"
+      },
+      {
+        "seq": 16,
+        "time": "2026-11-27T03:09:34.207691774Z",
+        "kind": "stopped",
+        "text": "Minecraft stopped.",
+        "game": "minecraft"
+      },
+      {
+        "seq": 15,
+        "time": "2026-11-27T03:09:33Z",
+        "kind": "online",
+        "text": "The server is online.",
+        "game": "minecraft"
+      },
+      {
+        "seq": 14,
+        "time": "2026-11-27T03:09:28.283479202Z",
+        "kind": "starting",
+        "text": "Starting Minecraft with the world \"Riverbend\".",
+        "game": "minecraft"
+      },
+      {
+        "seq": 13,
+        "time": "2026-11-27T03:09:28.23014053Z",
+        "kind": "update",
+        "text": "The Minecraft server is installed and up to date.",
+        "game": "minecraft"
+      },
+      {
+        "seq": 12,
+        "time": "2026-11-27T03:09:28.123649462Z",
+        "kind": "info",
+        "text": "Minecraft was added. Its ports: game port 25565, rcon port (for the app) 25575.",
+        "game": "minecraft"
+      },
+      {
+        "seq": 11,
+        "time": "2026-11-27T03:09:27Z",
+        "kind": "join",
+        "name": "Sam",
+        "text": "Sam joined the game.",
+        "game": "necesse"
+      },
+      {
+        "seq": 10,
+        "time": "2026-11-27T03:09:27Z",
+        "kind": "join",
+        "name": "Alex",
+        "text": "Alex joined the game.",
+        "game": "necesse"
+      },
+      {
+        "seq": 9,
+        "time": "2026-11-27T03:09:27Z",
+        "kind": "online",
+        "text": "The server is online and ready for players.",
+        "game": "necesse"
+      },
+      {
+        "seq": 8,
+        "time": "2026-11-27T03:09:20.092701453Z",
+        "kind": "starting",
+        "text": "Starting Necesse with the world \"Riverbend\".",
+        "game": "necesse"
+      },
+      {
+        "seq": 7,
+        "time": "2026-11-27T03:09:20.042776827Z",
+        "kind": "update",
+        "text": "The Necesse server is installed and up to date.",
+        "game": "necesse"
+      },
+      {
+        "seq": 6,
+        "time": "2026-11-27T03:09:19.937781444Z",
+        "kind": "info",
+        "text": "Necesse was added. Its ports: game port 14165.",
+        "game": "necesse"
+      },
+      {
+        "seq": 5,
+        "time": "2026-11-27T03:09:19Z",
+        "kind": "join",
+        "name": "Bjorn",
+        "text": "Bjorn joined the game."
+      },
+      {
+        "seq": 4,
+        "time": "2026-11-27T03:09:19Z",
+        "kind": "join",
+        "name": "Astrid",
+        "text": "Astrid joined the game."
+      },
+      {
+        "seq": 3,
+        "time": "2026-11-27T03:09:18Z",
+        "kind": "online",
+        "text": "The server is online and ready for players."
+      },
+      {
+        "seq": 2,
+        "time": "2026-11-27T03:09:15.895631217Z",
+        "kind": "starting",
+        "text": "Starting the server with the world \"Midgard\"."
+      },
+      {
+        "seq": 1,
+        "time": "2026-11-27T03:09:15.883347543Z",
+        "kind": "update",
+        "text": "The Valheim server is installed and up to date."
+      }
+    ],
+    "machine": {
+      "hostname": "GAMING-PC",
+      "os": "Ubuntu 24.04.5 LTS",
+      "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+      "threads": 4,
+      "memTotal": 16868675584,
+      "gpus": null
+    },
+    "now": "2026-11-27T03:09:45.004402243Z",
+    "games": [
+      {
+        "id": "valheim",
+        "game": "valheim",
+        "name": "Valheim",
+        "short": "Valheim",
+        "letter": "V",
+        "color": "#f2a33a",
+        "stage": "ready",
+        "serverName": "Valheim with Friends",
+        "starred": true,
+        "foreign": "",
+        "disabled": false,
+        "canRun": "yes",
+        "needsText": "",
+        "state": "online",
+        "installed": true,
+        "build": {
+          "build": "20412345",
+          "date": "2026-11-27T03:09:15Z"
+        },
+        "world": "Midgard",
+        "runningWorld": "Midgard",
+        "players": [
+          {
+            "name": "Astrid",
+            "account": "Steam_76561198000038147",
+            "since": "2026-11-27T03:09:19Z"
+          },
+          {
+            "name": "Bjorn",
+            "account": "Steam_76561198000052904",
+            "since": "2026-11-27T03:09:19Z"
+          }
+        ],
+        "count": 2,
+        "maxPlayers": 10,
+        "presence": "names",
+        "join": {
+          "how": "code",
+          "codeLabel": "Join code",
+          "code": "921069",
+          "lan": [
+            "192.168.1.20:39153"
+          ],
+          "port": 39153,
+          "password": "loki-troll-3525",
+          "public": false,
+          "crossplay": true,
+          "steps": [
+            "In Valheim, go to Join Game and join by code."
+          ],
+          "hint": "In Valheim, go to Join Game and join by code.",
+          "router": false
+        },
+        "ports": [
+          {
+            "role": "game",
+            "protos": [
+              "udp"
+            ],
+            "port": 39153,
+            "public": true,
+            "chosen": true
+          },
+          {
+            "role": "query",
+            "protos": [
+              "udp"
+            ],
+            "port": 39154,
+            "public": true,
+            "chosen": true
+          }
+        ],
+        "job": {
+          "id": 1795748955807,
+          "game": "valheim",
+          "kind": "start",
+          "title": "Starting the server",
+          "message": "Making the new world… A world’s first start takes a few minutes.",
+          "percent": 100,
+          "started": "2026-11-27T03:09:15.893388222Z",
+          "finished": "2026-11-27T03:09:19.096541973Z",
+          "cancellable": false,
+          "result": "The server is online."
+        },
+        "lastExit": null,
+        "needsRestart": false,
+        "memMB": 273,
+        "cpu": 3.750036619107585,
+        "needMB": 4096,
+        "autoStop": {
+          "minutes": 60
+        },
+        "ask": null,
+        "discord": null,
+        "reminder": [],
+        "warnings": []
+      },
+      {
+        "id": "necesse",
+        "game": "necesse",
+        "name": "Necesse",
+        "short": "Necesse",
+        "letter": "N",
+        "color": "#8e44ad",
+        "stage": "preview",
+        "serverName": "Friends' Necesse",
+        "starred": true,
+        "foreign": "",
+        "disabled": false,
+        "canRun": "yes",
+        "needsText": "",
+        "state": "online",
+        "installed": true,
+        "build": {
+          "build": "1",
+          "date": "2026-11-27T03:09:20Z"
+        },
+        "world": "Riverbend",
+        "runningWorld": "Riverbend",
+        "players": [
+          {
+            "name": "Alex",
+            "account": "76561198008213605",
+            "since": "2026-11-27T03:09:27Z"
+          },
+          {
+            "name": "Sam",
+            "account": "76561198067922812",
+            "since": "2026-11-27T03:09:27Z"
+          }
+        ],
+        "count": 2,
+        "maxPlayers": 10,
+        "presence": "names",
+        "join": {
+          "how": "address",
+          "lan": [
+            "192.168.1.20:14165"
+          ],
+          "port": 14165,
+          "password": "owlowlowl",
+          "public": true,
+          "crossplay": false,
+          "steps": [
+            "In Necesse, choose Multiplayer, then Join a server.",
+            "Choose Direct join, type this computer's address as the IP address and 14165 as the port number.",
+            "Type the password when it asks.",
+            "Use Necesse 1.3.3: it must be the same version as the server."
+          ],
+          "hint": "Necesse: Multiplayer → Join a server → Direct join, IP this computer's address, port 14165",
+          "router": true
+        },
+        "ports": [
+          {
+            "role": "game",
+            "protos": [
+              "udp"
+            ],
+            "port": 14165,
+            "public": true,
+            "chosen": false
+          }
+        ],
+        "job": {
+          "id": 1795748955809,
+          "game": "necesse",
+          "kind": "start",
+          "title": "Starting Necesse",
+          "message": "Making the new world… A world’s first start takes a few minutes.",
+          "percent": 100,
+          "started": "2026-11-27T03:09:20.090917877Z",
+          "finished": "2026-11-27T03:09:27.293452204Z",
+          "cancellable": false,
+          "result": "The server is online."
+        },
+        "lastExit": null,
+        "needsRestart": false,
+        "memMB": 64,
+        "cpu": 0,
+        "needMB": 2048,
+        "autoStop": {
+          "minutes": 60
+        },
+        "ask": null,
+        "discord": {},
+        "reminder": [],
+        "warnings": [],
+        "consoleInUse": true
+      },
+      {
+        "id": "minecraft",
+        "game": "minecraft",
+        "name": "Minecraft: Java Edition",
+        "short": "Minecraft",
+        "letter": "M",
+        "color": "#5b8731",
+        "stage": "preview",
+        "serverName": "Friends' Minecraft",
+        "starred": true,
+        "foreign": "",
+        "disabled": false,
+        "canRun": "yes",
+        "needsText": "",
+        "state": "stopped",
+        "installed": true,
+        "build": {
+          "version": "fake",
+          "date": "2026-11-27T03:09:28Z"
+        },
+        "world": "Riverbend",
+        "runningWorld": "",
+        "players": [],
+        "count": 0,
+        "maxPlayers": 10,
+        "presence": "names",
+        "join": {
+          "how": "address",
+          "lan": [
+            "192.168.1.20:25565"
+          ],
+          "port": 25565,
+          "public": false,
+          "crossplay": false,
+          "steps": [
+            "In Minecraft: Multiplayer → Add Server, type the address this computer's internet address.",
+            "Use the same Minecraft version as the server.",
+            "If it says you're not white-listed, ask the server's owner to add you; they'll see an Allow button."
+          ],
+          "hint": "Minecraft: Multiplayer → Add Server → this computer's internet address",
+          "router": true
+        },
+        "ports": [
+          {
+            "role": "game",
+            "protos": [
+              "tcp"
+            ],
+            "port": 25565,
+            "public": true,
+            "chosen": false
+          },
+          {
+            "role": "rcon",
+            "protos": [
+              "tcp"
+            ],
+            "port": 25575,
+            "public": false,
+            "chosen": false
+          }
+        ],
+        "job": {
+          "id": 1795748955812,
+          "game": "minecraft",
+          "kind": "stop",
+          "title": "Stopping Minecraft",
+          "message": "Saving the world and shutting down… Please don't turn off the computer.",
+          "percent": 100,
+          "started": "2026-11-27T03:09:33.497362945Z",
+          "finished": "2026-11-27T03:09:34.21028168Z",
+          "cancellable": false,
+          "result": "The world was saved and the server stopped."
+        },
+        "lastExit": {
+          "at": "2026-11-27T03:09:34.207351184Z",
+          "code": 0,
+          "expected": true,
+          "world": "Riverbend",
+          "uptime": 5.924504745
+        },
+        "needsRestart": false,
+        "memMB": 0,
+        "cpu": 0,
+        "needMB": 19456,
+        "autoStop": null,
+        "ask": null,
+        "discord": {},
+        "reminder": [],
+        "warnings": []
+      },
+      {
+        "id": "terraria",
+        "game": "terraria",
+        "name": "Terraria",
+        "short": "Terraria",
+        "letter": "T",
+        "color": "#2c7fb8",
+        "stage": "preview",
+        "serverName": "Friends' Terraria",
+        "starred": false,
+        "foreign": "",
+        "disabled": false,
+        "canRun": "yes",
+        "needsText": "",
+        "state": "online",
+        "installed": true,
+        "build": {
+          "version": "fake",
+          "date": "2026-11-27T03:09:34Z"
+        },
+        "world": "Riverbend",
+        "runningWorld": "Riverbend",
+        "players": [
+          {
+            "name": "Alex",
+            "since": "2026-11-27T03:09:44.822348672Z"
+          }
+        ],
+        "count": 1,
+        "maxPlayers": 8,
+        "presence": "names",
+        "join": {
+          "how": "address",
+          "lan": [
+            "192.168.1.20:7778"
+          ],
+          "port": 7778,
+          "password": "owlowlowl",
+          "public": true,
+          "crossplay": false,
+          "steps": [
+            "In Terraria, open Multiplayer and add a server: the address is this computer's address and the port is 7778.",
+            "Type the server's password when Terraria asks for it.",
+            "Use Terraria 1.4.6.1: it must be the same version as the server."
+          ],
+          "hint": "Add the server this computer's address, port 7778, in Terraria's Multiplayer menu.",
+          "router": true
+        },
+        "ports": [
+          {
+            "role": "game",
+            "protos": [
+              "tcp",
+              "udp"
+            ],
+            "port": 7778,
+            "public": true,
+            "chosen": false
+          }
+        ],
+        "job": {
+          "id": 1795748955814,
+          "game": "terraria",
+          "kind": "start",
+          "title": "Starting Terraria",
+          "message": "Making the new world… A world’s first start takes a few minutes.",
+          "percent": 100,
+          "started": "2026-11-27T03:09:34.418989693Z",
+          "finished": "2026-11-27T03:09:44.822433047Z",
+          "cancellable": false,
+          "result": "The server is online."
+        },
+        "lastExit": null,
+        "needsRestart": false,
+        "memMB": 36,
+        "cpu": 0,
+        "needMB": 1536,
+        "autoStop": {
+          "minutes": 60
+        },
+        "ask": null,
+        "discord": {},
+        "reminder": [],
+        "warnings": [],
+        "consoleInUse": true
+      },
+      {
+        "id": "vintagestory",
+        "game": "vintagestory",
+        "name": "Vintage Story",
+        "short": "Vintage Story",
+        "letter": "VS",
+        "color": "#8a6d3b",
+        "stage": "preview",
+        "serverName": "Friends' Vintage Story",
+        "starred": false,
+        "foreign": "",
+        "disabled": true,
+        "canRun": "yes",
+        "needsText": "",
+        "state": "stopped",
+        "installed": true,
+        "build": {
+          "version": "fake",
+          "date": "2026-11-27T03:09:44Z"
+        },
+        "world": "Riverbend",
+        "runningWorld": "",
+        "players": [],
+        "count": 0,
+        "maxPlayers": 16,
+        "presence": "names",
+        "join": {
+          "how": "address",
+          "lan": [
+            "192.168.1.20:42420"
+          ],
+          "port": 42420,
+          "password": "owlowlowl",
+          "public": false,
+          "crossplay": false,
+          "steps": [
+            "In Vintage Story, choose Multiplayer, then Add New Server.",
+            "Type this computer's address as the Host / IP Address, and the server's password as the Server Password.",
+            "Use Vintage Story fake: it must be the same version as the server."
+          ],
+          "hint": "Vintage Story: Multiplayer → Add New Server, host this computer's address",
+          "router": true
+        },
+        "ports": [
+          {
+            "role": "game",
+            "protos": [
+              "tcp",
+              "udp"
+            ],
+            "port": 42420,
+            "public": true,
+            "chosen": false
+          }
+        ],
+        "job": {
+          "id": 1795748955815,
+          "game": "vintagestory",
+          "kind": "install",
+          "title": "Installing the Vintage Story server",
+          "message": "Installing the stand-in server",
+          "percent": 100,
+          "started": "2026-11-27T03:09:44.846830844Z",
+          "finished": "2026-11-27T03:09:44.952357632Z",
+          "cancellable": false,
+          "result": "The Vintage Story server is installed and up to date."
+        },
+        "lastExit": null,
+        "needsRestart": false,
+        "memMB": 0,
+        "cpu": 0,
+        "needMB": 3072,
+        "autoStop": null,
+        "ask": null,
+        "discord": {},
+        "reminder": [],
+        "warnings": []
+      }
+    ],
+    "jobs": [
+      {
+        "id": 1795748955807,
+        "game": "valheim",
+        "kind": "start",
+        "title": "Starting the server",
+        "message": "Making the new world… A world’s first start takes a few minutes.",
+        "percent": 100,
+        "started": "2026-11-27T03:09:15.893388222Z",
+        "finished": "2026-11-27T03:09:19.096541973Z",
+        "cancellable": false,
+        "result": "The server is online."
+      },
+      {
+        "id": 1795748955809,
+        "game": "necesse",
+        "kind": "start",
+        "title": "Starting Necesse",
+        "message": "Making the new world… A world’s first start takes a few minutes.",
+        "percent": 100,
+        "started": "2026-11-27T03:09:20.090917877Z",
+        "finished": "2026-11-27T03:09:27.293452204Z",
+        "cancellable": false,
+        "result": "The server is online."
+      },
+      {
+        "id": 1795748955812,
+        "game": "minecraft",
+        "kind": "stop",
+        "title": "Stopping Minecraft",
+        "message": "Saving the world and shutting down… Please don't turn off the computer.",
+        "percent": 100,
+        "started": "2026-11-27T03:09:33.497362945Z",
+        "finished": "2026-11-27T03:09:34.21028168Z",
+        "cancellable": false,
+        "result": "The world was saved and the server stopped."
+      },
+      {
+        "id": 1795748955814,
+        "game": "terraria",
+        "kind": "start",
+        "title": "Starting Terraria",
+        "message": "Making the new world… A world’s first start takes a few minutes.",
+        "percent": 100,
+        "started": "2026-11-27T03:09:34.418989693Z",
+        "finished": "2026-11-27T03:09:44.822433047Z",
+        "cancellable": false,
+        "result": "The server is online."
+      },
+      {
+        "id": 1795748955815,
+        "game": "vintagestory",
+        "kind": "install",
+        "title": "Installing the Vintage Story server",
+        "message": "Installing the stand-in server",
+        "percent": 100,
+        "started": "2026-11-27T03:09:44.846830844Z",
+        "finished": "2026-11-27T03:09:44.952357632Z",
+        "cancellable": false,
+        "result": "The Vintage Story server is installed and up to date."
+      }
+    ],
+    "stars": [
+      "valheim",
+      "necesse",
+      "minecraft"
+    ],
+    "sidebar": {
+      "activeOpen": true,
+      "inactiveOpen": false
+    },
+    "online": 3,
+    "playing": 5,
+    "router": null,
+    "safeMode": ""
+  }
+}

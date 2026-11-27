@@ -1,0 +1,8 @@
+{
+  "route": "GET /api/games/{id}/players",
+  "request": "GET /api/games/vintagestory/players",
+  "code": 200,
+  "answer": {
+    "players": []
+  }
+}

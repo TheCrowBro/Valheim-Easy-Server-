@@ -1,0 +1,114 @@
+{
+  "route": "GET /api/worlds",
+  "request": "GET /api/worlds",
+  "code": 200,
+  "answer": {
+    "worlds": [
+      {
+        "name": "Midgard",
+        "format": "folder",
+        "size": 35579,
+        "modified": "2026-11-27T03:09:15.974021358Z",
+        "seed": "SBwVAt3Zse",
+        "backups": []
+      }
+    ],
+    "orphans": [],
+    "selected": "Midgard",
+    "running": "Midgard",
+    "options": {},
+    "mods": [
+      {
+        "id": "riverheim",
+        "package": "Gurebu-Riverheim",
+        "name": "Riverheim",
+        "author": "Gurebu",
+        "short": "New landscapes: bigger continents, long rivers, epic mountains.",
+        "summary": "Shapes the land differently: larger continents, rivers that fork and join on their way to the sea, bigger mountains and lakes, and biomes that suit the land around them. It's for new worlds only: a world made with Riverheim always needs it, and a world made without it won't load with it.",
+        "url": "https://thunderstore.io/c/valheim/p/Gurebu/Riverheim/",
+        "group": "world",
+        "players": "required",
+        "newWorlds": true
+      },
+      {
+        "id": "moreworldlocations",
+        "package": "warpalicious-More_World_Locations_AIO",
+        "name": "More World Locations",
+        "author": "warpalicious",
+        "short": "190 new places to explore: ruins, towers, dungeons, traders and more.",
+        "summary": "Adds 190 new places to explore in every biome: ruins, towers, camps and two new dungeons, with traders and trainers who sell Blacksmith Stones and skill books, shipping ports, shrines and waystones. The places are added when a world is created, so a world made before the mod was turned on doesn't get them.",
+        "url": "https://thunderstore.io/c/valheim/p/warpalicious/More_World_Locations_AIO/",
+        "group": "world",
+        "players": "required",
+        "newPlaces": true
+      },
+      {
+        "id": "advancedportals",
+        "package": "RandyKnapp-AdvancedPortals",
+        "name": "Advanced Portals",
+        "author": "RandyKnapp",
+        "short": "Portals that let metal through.",
+        "summary": "Three new portals that let metal through: the Ancient Portal takes copper and tin, the Obsidian Portal iron, and the Black Marble Portal anything.",
+        "url": "https://thunderstore.io/c/valheim/p/RandyKnapp/AdvancedPortals/",
+        "group": "play",
+        "players": "required"
+      },
+      {
+        "id": "planteverything",
+        "package": "Advize-PlantEverything",
+        "name": "Plant Everything",
+        "author": "Advize",
+        "short": "Plant berry bushes, mushrooms, flowers and more kinds of trees.",
+        "summary": "Lets the cultivator plant berry bushes, mushrooms, thistle, dandelions, flowers and trees you normally can't, and shows how long crops have left to grow. Players need it to plant the extra things.",
+        "url": "https://thunderstore.io/c/valheim/p/Advize/PlantEverything/",
+        "group": "play",
+        "players": "recommended"
+      },
+      {
+        "id": "heightmapunlimited",
+        "package": "Digitalroot-Heightmap_Unlimited_JvL",
+        "name": "Heightmap Unlimited",
+        "author": "Digitalroot",
+        "short": "Raise and dig the ground as far as you like.",
+        "summary": "Removes the limit on how far the ground can be raised with the hoe or dug with the pickaxe (200 m either way unless changed in its settings). Players need it to go past the normal limit.",
+        "url": "https://thunderstore.io/c/valheim/p/Digitalroot/Heightmap_Unlimited_JvL/",
+        "group": "play",
+        "players": "recommended"
+      },
+      {
+        "id": "seasonality",
+        "package": "RustyMods-Seasonality",
+        "name": "Seasonality",
+        "author": "RustyMods",
+        "short": "Winter, spring, summer and fall.",
+        "summary": "Four seasons, winter, spring, summer and fall: the world’s colors and textures change as the in-game days pass, with seasonal weather and effects.",
+        "url": "https://thunderstore.io/c/valheim/p/RustyMods/Seasonality/",
+        "group": "look",
+        "players": "required"
+      },
+      {
+        "id": "gammaofnightlights",
+        "package": "shudnal-GammaOfNightLights",
+        "name": "Gamma of Night Lights",
+        "author": "shudnal",
+        "short": "Darker nights with moonlight, and longer or shorter days.",
+        "summary": "Changes how bright it is at night, morning and evening and indoors, adds real moonlight and sunlight, and can make days and nights longer or shorter. The server shares its settings with players who have the mod; players need it to see the difference.",
+        "url": "https://thunderstore.io/c/valheim/p/shudnal/GammaOfNightLights/",
+        "group": "look",
+        "players": "recommended"
+      },
+      {
+        "id": "farlands",
+        "package": "Ivvty-FarLands",
+        "name": "FarLands",
+        "author": "Ivvty",
+        "short": "See mountains, coasts and forests all the way to the horizon.",
+        "summary": "Draws the land far beyond where Valheim normally stops: distant mountains, coasts and forests made from the world's own heights, colors, trees and rocks, with clearer air and long shadows. It only changes what each player sees in their own game, so the server doesn't need it and players can join with or without it.",
+        "url": "https://thunderstore.io/c/valheim/p/Ivvty/FarLands/",
+        "group": "look",
+        "players": "players"
+      }
+    ],
+    "folder": "/Users/owner/Library/Application Support/ValheimEasyServer/saves/worlds_local"
+  }
+}

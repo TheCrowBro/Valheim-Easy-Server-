@@ -1,0 +1,25 @@
+{
+  "route": "GET /api/games/{id}/players",
+  "request": "GET /api/games/valheim/players",
+  "code": 200,
+  "answer": {
+    "players": [
+      {
+        "name": "Astrid",
+        "platformId": "Steam_76561198000038147",
+        "firstSeen": "2026-11-27T03:09:19Z",
+        "lastSeen": "2026-11-27T03:09:19Z",
+        "playSeconds": 0,
+        "sessions": 1
+      },
+      {
+        "name": "Bjorn",
+        "platformId": "Steam_76561198000052904",
+        "firstSeen": "2026-11-27T03:09:19Z",
+        "lastSeen": "2026-11-27T03:09:19Z",
+        "playSeconds": 0,
+        "sessions": 1
+      }
+    ]
+  }
+}

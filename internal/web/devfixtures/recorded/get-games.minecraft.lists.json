@@ -1,0 +1,37 @@
+{
+  "route": "GET /api/games/{id}/lists",
+  "request": "GET /api/games/minecraft/lists",
+  "code": 200,
+  "answer": [
+    {
+      "kind": {
+        "id": "allowed",
+        "label": "Allow list",
+        "placeholder": "Minecraft name",
+        "help": "While the allow list is on, only these players can join.",
+        "live": true
+      },
+      "ids": []
+    },
+    {
+      "kind": {
+        "id": "admins",
+        "label": "Admins",
+        "placeholder": "Minecraft name",
+        "help": "Admins (operators) can use every command in the game, such as /gamemode, /kick and /ban.",
+        "live": true
+      },
+      "ids": []
+    },
+    {
+      "kind": {
+        "id": "banned",
+        "label": "Banned",
+        "placeholder": "Minecraft name",
+        "help": "Banned players can't join, even when they're on the allow list.",
+        "live": true
+      },
+      "ids": []
+    }
+  ]
+}

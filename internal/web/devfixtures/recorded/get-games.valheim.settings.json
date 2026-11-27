@@ -1,0 +1,428 @@
+{
+  "route": "GET /api/games/{id}/settings",
+  "request": "GET /api/games/valheim/settings",
+  "code": 200,
+  "answer": {
+    "schema": [
+      {
+        "key": "serverName",
+        "scope": "server",
+        "kind": "text",
+        "label": "Server name",
+        "max": 64,
+        "restart": true,
+        "add": true
+      },
+      {
+        "key": "password",
+        "scope": "server",
+        "kind": "password",
+        "label": "Password",
+        "help": "At least 5 characters, without spaces or quotes. It can't be part of the server name or the world name.",
+        "min": 5,
+        "max": 64,
+        "restart": true,
+        "add": true
+      },
+      {
+        "key": "crossplay",
+        "scope": "server",
+        "kind": "bool",
+        "label": "Crossplay (join code)",
+        "help": "Friends join with a code, also from Xbox and Game Pass.",
+        "default": "true",
+        "restart": true
+      },
+      {
+        "key": "public",
+        "scope": "server",
+        "kind": "bool",
+        "label": "Show in the public server list",
+        "restart": true
+      },
+      {
+        "key": "port",
+        "scope": "server",
+        "kind": "number",
+        "label": "Game port",
+        "default": "2456",
+        "min": 1024,
+        "max": 65534,
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "updateOnStart",
+        "scope": "server",
+        "kind": "bool",
+        "label": "Update the server when it starts",
+        "default": "true"
+      },
+      {
+        "key": "autoRestart",
+        "scope": "server",
+        "kind": "bool",
+        "label": "Restart it if it crashes",
+        "default": "true"
+      },
+      {
+        "key": "saveIntervalMinutes",
+        "scope": "server",
+        "kind": "number",
+        "label": "Save every (minutes)",
+        "default": "20",
+        "min": 1,
+        "max": 240,
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "backups",
+        "scope": "server",
+        "kind": "number",
+        "label": "Automatic backups to keep",
+        "default": "4",
+        "max": 50,
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "backupShortMinutes",
+        "scope": "server",
+        "kind": "number",
+        "label": "First backup after (minutes)",
+        "default": "120",
+        "min": 5,
+        "max": 1440,
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "backupLongMinutes",
+        "scope": "server",
+        "kind": "number",
+        "label": "Then back up every (minutes)",
+        "default": "720",
+        "min": 30,
+        "max": 10080,
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "extraArgs",
+        "scope": "server",
+        "kind": "text",
+        "label": "Extra launch options",
+        "max": 1000,
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "serverDir",
+        "scope": "server",
+        "kind": "text",
+        "label": "Server folder",
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "saveDir",
+        "scope": "server",
+        "kind": "text",
+        "label": "Worlds folder",
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "preset",
+        "scope": "world",
+        "kind": "choice",
+        "label": "Difficulty",
+        "choices": [
+          {
+            "value": "",
+            "label": "Default"
+          },
+          {
+            "value": "normal",
+            "label": "Normal"
+          },
+          {
+            "value": "casual",
+            "label": "Casual"
+          },
+          {
+            "value": "easy",
+            "label": "Easy"
+          },
+          {
+            "value": "hard",
+            "label": "Hard"
+          },
+          {
+            "value": "hardcore",
+            "label": "Hardcore"
+          },
+          {
+            "value": "immersive",
+            "label": "Immersive"
+          },
+          {
+            "value": "hammer",
+            "label": "Hammer"
+          }
+        ],
+        "restart": true
+      },
+      {
+        "key": "modifier.combat",
+        "scope": "world",
+        "kind": "choice",
+        "label": "combat",
+        "choices": [
+          {
+            "value": "",
+            "label": "Default"
+          },
+          {
+            "value": "veryeasy",
+            "label": "Veryeasy"
+          },
+          {
+            "value": "easy",
+            "label": "Easy"
+          },
+          {
+            "value": "hard",
+            "label": "Hard"
+          },
+          {
+            "value": "veryhard",
+            "label": "Veryhard"
+          }
+        ],
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "modifier.deathpenalty",
+        "scope": "world",
+        "kind": "choice",
+        "label": "deathpenalty",
+        "choices": [
+          {
+            "value": "",
+            "label": "Default"
+          },
+          {
+            "value": "casual",
+            "label": "Casual"
+          },
+          {
+            "value": "veryeasy",
+            "label": "Veryeasy"
+          },
+          {
+            "value": "easy",
+            "label": "Easy"
+          },
+          {
+            "value": "hard",
+            "label": "Hard"
+          },
+          {
+            "value": "hardcore",
+            "label": "Hardcore"
+          }
+        ],
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "modifier.resources",
+        "scope": "world",
+        "kind": "choice",
+        "label": "resources",
+        "choices": [
+          {
+            "value": "",
+            "label": "Default"
+          },
+          {
+            "value": "muchless",
+            "label": "Muchless"
+          },
+          {
+            "value": "less",
+            "label": "Less"
+          },
+          {
+            "value": "more",
+            "label": "More"
+          },
+          {
+            "value": "muchmore",
+            "label": "Muchmore"
+          },
+          {
+            "value": "most",
+            "label": "Most"
+          }
+        ],
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "modifier.raids",
+        "scope": "world",
+        "kind": "choice",
+        "label": "raids",
+        "choices": [
+          {
+            "value": "",
+            "label": "Default"
+          },
+          {
+            "value": "none",
+            "label": "None"
+          },
+          {
+            "value": "muchless",
+            "label": "Muchless"
+          },
+          {
+            "value": "less",
+            "label": "Less"
+          },
+          {
+            "value": "more",
+            "label": "More"
+          },
+          {
+            "value": "muchmore",
+            "label": "Muchmore"
+          }
+        ],
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "modifier.portals",
+        "scope": "world",
+        "kind": "choice",
+        "label": "portals",
+        "choices": [
+          {
+            "value": "",
+            "label": "Default"
+          },
+          {
+            "value": "casual",
+            "label": "Casual"
+          },
+          {
+            "value": "hard",
+            "label": "Hard"
+          },
+          {
+            "value": "veryhard",
+            "label": "Veryhard"
+          }
+        ],
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "key.nobuildcost",
+        "scope": "world",
+        "kind": "bool",
+        "label": "nobuildcost",
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "key.playerevents",
+        "scope": "world",
+        "kind": "bool",
+        "label": "playerevents",
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "key.passivemobs",
+        "scope": "world",
+        "kind": "bool",
+        "label": "passivemobs",
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "key.nomap",
+        "scope": "world",
+        "kind": "bool",
+        "label": "nomap",
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "key.fire",
+        "scope": "world",
+        "kind": "bool",
+        "label": "fire",
+        "restart": true,
+        "advanced": true
+      }
+    ],
+    "values": {
+      "server": {
+        "autoRestart": "true",
+        "backupLongMinutes": "720",
+        "backupShortMinutes": "120",
+        "backups": "4",
+        "crossplay": "true",
+        "extraArgs": "",
+        "password": "loki-troll-3525",
+        "port": "39153",
+        "public": "false",
+        "saveDir": "",
+        "saveIntervalMinutes": "1",
+        "serverDir": "",
+        "serverName": "Valheim with Friends",
+        "updateOnStart": "false"
+      },
+      "worlds": {},
+      "world": "Midgard"
+    },
+    "ports": [
+      {
+        "role": "game",
+        "protos": [
+          "udp"
+        ],
+        "port": 39153,
+        "public": true,
+        "chosen": true
+      },
+      {
+        "role": "query",
+        "protos": [
+          "udp"
+        ],
+        "port": 39154,
+        "public": true,
+        "chosen": true
+      }
+    ],
+    "autoStopMinutes": 60,
+    "startWithApp": false,
+    "disabled": false,
+    "discord": {
+      "on": false,
+      "webhook": "",
+      "stopped": true,
+      "daily": true,
+      "password": false,
+      "guildOK": true
+    }
+  }
+}

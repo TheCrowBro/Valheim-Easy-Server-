@@ -1,0 +1,85 @@
+{
+  "route": "GET /api/games/{id}/logs",
+  "request": "GET /api/games/terraria/logs",
+  "code": 200,
+  "answer": {
+    "last": 15,
+    "lines": [
+      {
+        "seq": 1,
+        "time": "2026-11-27T03:09:34.822705636Z",
+        "text": "Error Logging Enabled."
+      },
+      {
+        "seq": 2,
+        "time": "2026-11-27T03:09:34.822725561Z",
+        "text": "Terraria Server v1.4.6.1"
+      },
+      {
+        "seq": 3,
+        "time": "2026-11-27T03:09:34.822731728Z",
+        "text": "Creating world - Seed: 1209230930, Width: 6400, Height: 1800, Evil: -1, Difficulty: 0"
+      },
+      {
+        "seq": 4,
+        "time": "2026-11-27T03:09:34.822736916Z",
+        "text": "Resetting game objects 1%"
+      },
+      {
+        "seq": 5,
+        "time": "2026-11-27T03:09:36.822763863Z",
+        "text": "0.0% - Generating world terrain - 9.0%"
+      },
+      {
+        "seq": 6,
+        "time": "2026-11-27T03:09:38.822194676Z",
+        "text": "0.4% - Adding sand - 0.0%"
+      },
+      {
+        "seq": 7,
+        "time": "2026-11-27T03:09:40.822592666Z",
+        "text": "50.0% - Settling liquids - 47.5%"
+      },
+      {
+        "seq": 8,
+        "time": "2026-11-27T03:09:42.822514747Z",
+        "text": "99.9% - Final clean up - 97.0%"
+      },
+      {
+        "seq": 9,
+        "time": "2026-11-27T03:09:44.822319515Z",
+        "text": "100.0% - Finalizing world - 100.0%"
+      },
+      {
+        "seq": 10,
+        "time": "2026-11-27T03:09:44.822327501Z",
+        "text": "Terraria Server v1.4.6.1"
+      },
+      {
+        "seq": 11,
+        "time": "2026-11-27T03:09:44.822333295Z",
+        "text": "Listening on port 7778"
+      },
+      {
+        "seq": 12,
+        "time": "2026-11-27T03:09:44.822335999Z",
+        "text": "Type 'help' for a list of commands."
+      },
+      {
+        "seq": 13,
+        "time": "2026-11-27T03:09:44.822337477Z",
+        "text": "Server started"
+      },
+      {
+        "seq": 14,
+        "time": "2026-11-27T03:09:44.822348224Z",
+        "text": "127.0.0.1:56163 is connecting..."
+      },
+      {
+        "seq": 15,
+        "time": "2026-11-27T03:09:44.822351999Z",
+        "text": "Alex has joined."
+      }
+    ]
+  }
+}

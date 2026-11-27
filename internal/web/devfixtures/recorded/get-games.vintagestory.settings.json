@@ -1,0 +1,133 @@
+{
+  "route": "GET /api/games/{id}/settings",
+  "request": "GET /api/games/vintagestory/settings",
+  "code": 200,
+  "answer": {
+    "schema": [
+      {
+        "key": "serverName",
+        "scope": "server",
+        "kind": "text",
+        "label": "Server name",
+        "help": "Friends see it in their list of servers.",
+        "default": "Vintage Story server",
+        "max": 80,
+        "restart": true,
+        "add": true
+      },
+      {
+        "key": "password",
+        "scope": "server",
+        "kind": "password",
+        "label": "Password",
+        "help": "Friends type it when they join. It's what keeps strangers out, so it can't be empty, and it can't have spaces.",
+        "min": 1,
+        "max": 64,
+        "restart": true,
+        "add": true
+      },
+      {
+        "key": "maxPlayers",
+        "scope": "server",
+        "kind": "number",
+        "label": "Most players at once",
+        "default": "16",
+        "min": 1,
+        "max": 128,
+        "restart": true
+      },
+      {
+        "key": "updateOnStart",
+        "scope": "server",
+        "kind": "bool",
+        "label": "Update the server when it starts",
+        "help": "Friends need the same version of Vintage Story as the server, and the game updates itself.",
+        "default": "true"
+      },
+      {
+        "key": "autoRestart",
+        "scope": "server",
+        "kind": "bool",
+        "label": "Start it again if it crashes",
+        "default": "true"
+      },
+      {
+        "key": "playStyle",
+        "scope": "newWorld",
+        "kind": "choice",
+        "label": "Play style",
+        "help": "The game's own presets. A world keeps its style.",
+        "default": "surviveandbuild",
+        "choices": [
+          {
+            "value": "surviveandbuild",
+            "label": "Standard"
+          },
+          {
+            "value": "exploration",
+            "label": "Exploration (less fighting)"
+          },
+          {
+            "value": "wildernesssurvival",
+            "label": "Wilderness survival (harder)"
+          },
+          {
+            "value": "homosapiens",
+            "label": "Homo sapiens (no lore, very hard)"
+          },
+          {
+            "value": "creativebuilding",
+            "label": "Creative building (flat, unlimited blocks)"
+          }
+        ]
+      },
+      {
+        "key": "seed",
+        "scope": "newWorld",
+        "kind": "text",
+        "label": "Seed",
+        "help": "Leave it empty for a random world.",
+        "max": 64,
+        "advanced": true
+      }
+    ],
+    "values": {
+      "server": {
+        "autoRestart": "true",
+        "maxPlayers": "16",
+        "password": "owlowlowl",
+        "serverName": "Friends' Vintage Story",
+        "updateOnStart": "true"
+      },
+      "worlds": {
+        "Riverbend": {
+          "playStyle": "surviveandbuild"
+        }
+      },
+      "world": "Riverbend"
+    },
+    "ports": [
+      {
+        "role": "game",
+        "protos": [
+          "tcp",
+          "udp"
+        ],
+        "port": 42420,
+        "public": true,
+        "chosen": false
+      }
+    ],
+    "autoStopMinutes": 60,
+    "startWithApp": false,
+    "disabled": true,
+    "discord": {
+      "on": true,
+      "webhook": "",
+      "stopped": true,
+      "daily": true,
+      "password": false,
+      "guildOK": true
+    }
+  }
+}

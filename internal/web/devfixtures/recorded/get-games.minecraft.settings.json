@@ -1,0 +1,235 @@
+{
+  "route": "GET /api/games/{id}/settings",
+  "request": "GET /api/games/minecraft/settings",
+  "code": 200,
+  "answer": {
+    "schema": [
+      {
+        "key": "serverName",
+        "scope": "server",
+        "kind": "text",
+        "label": "Server name",
+        "help": "Shown under the server in friends' server list.",
+        "default": "Minecraft server",
+        "max": 59,
+        "restart": true,
+        "add": true
+      },
+      {
+        "key": "maxPlayers",
+        "scope": "server",
+        "kind": "number",
+        "label": "Most players at once",
+        "default": "10",
+        "min": 1,
+        "max": 100,
+        "restart": true
+      },
+      {
+        "key": "allowList",
+        "scope": "server",
+        "kind": "choice",
+        "label": "Allow list",
+        "help": "Only players on the list can join. Add friends on the Players tab, or click Allow when someone is turned away.",
+        "default": "auto",
+        "choices": [
+          {
+            "value": "auto",
+            "label": "On once friends outside can reach the server"
+          },
+          {
+            "value": "on",
+            "label": "Always on"
+          },
+          {
+            "value": "off",
+            "label": "Off: anyone with the address can join"
+          }
+        ],
+        "restart": true
+      },
+      {
+        "key": "updateOnStart",
+        "scope": "server",
+        "kind": "bool",
+        "label": "Update Minecraft when the server starts",
+        "help": "Friends' Minecraft updates itself to the newest version, so the server should too.",
+        "default": "true"
+      },
+      {
+        "key": "autoRestart",
+        "scope": "server",
+        "kind": "bool",
+        "label": "Start it again if it crashes",
+        "default": "true"
+      },
+      {
+        "key": "viewDistance",
+        "scope": "server",
+        "kind": "number",
+        "label": "View distance (chunks)",
+        "help": "How far players see. Lower it if the server struggles.",
+        "default": "10",
+        "min": 3,
+        "max": 32,
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "memoryMB",
+        "scope": "server",
+        "kind": "number",
+        "label": "Memory for the server (MB)",
+        "help": "The most memory Java may use for the server.",
+        "default": "2048",
+        "min": 1024,
+        "max": 32768,
+        "restart": true,
+        "advanced": true
+      },
+      {
+        "key": "difficulty",
+        "scope": "world",
+        "kind": "choice",
+        "label": "Difficulty",
+        "default": "normal",
+        "choices": [
+          {
+            "value": "peaceful",
+            "label": "Peaceful"
+          },
+          {
+            "value": "easy",
+            "label": "Easy"
+          },
+          {
+            "value": "normal",
+            "label": "Normal"
+          },
+          {
+            "value": "hard",
+            "label": "Hard"
+          }
+        ],
+        "restart": true
+      },
+      {
+        "key": "gamemode",
+        "scope": "world",
+        "kind": "choice",
+        "label": "Game mode",
+        "help": "For players joining this world for the first time.",
+        "default": "survival",
+        "choices": [
+          {
+            "value": "survival",
+            "label": "Survival"
+          },
+          {
+            "value": "creative",
+            "label": "Creative"
+          },
+          {
+            "value": "adventure",
+            "label": "Adventure"
+          }
+        ],
+        "restart": true
+      },
+      {
+        "key": "seed",
+        "scope": "newWorld",
+        "kind": "text",
+        "label": "Seed",
+        "help": "Leave it empty for a random world.",
+        "max": 64,
+        "advanced": true
+      },
+      {
+        "key": "levelType",
+        "scope": "newWorld",
+        "kind": "choice",
+        "label": "World type",
+        "default": "normal",
+        "choices": [
+          {
+            "value": "normal",
+            "label": "Normal"
+          },
+          {
+            "value": "flat",
+            "label": "Flat"
+          },
+          {
+            "value": "large_biomes",
+            "label": "Large biomes"
+          },
+          {
+            "value": "amplified",
+            "label": "Amplified"
+          }
+        ],
+        "advanced": true
+      },
+      {
+        "key": "hardcore",
+        "scope": "newWorld",
+        "kind": "bool",
+        "label": "Hardcore (one life; the world is lost when you die)",
+        "default": "false",
+        "advanced": true
+      }
+    ],
+    "values": {
+      "server": {
+        "allowList": "auto",
+        "autoRestart": "true",
+        "maxPlayers": "10",
+        "memoryMB": "2048",
+        "serverName": "Friends' Minecraft",
+        "updateOnStart": "true",
+        "viewDistance": "10"
+      },
+      "worlds": {
+        "Riverbend": {
+          "difficulty": "normal",
+          "gamemode": "survival",
+          "hardcore": "false",
+          "levelType": "normal"
+        }
+      },
+      "world": "Riverbend"
+    },
+    "ports": [
+      {
+        "role": "game",
+        "protos": [
+          "tcp"
+        ],
+        "port": 25565,
+        "public": true,
+        "chosen": false
+      },
+      {
+        "role": "rcon",
+        "protos": [
+          "tcp"
+        ],
+        "port": 25575,
+        "public": false,
+        "chosen": false
+      }
+    ],
+    "autoStopMinutes": 60,
+    "startWithApp": false,
+    "disabled": false,
+    "discord": {
+      "on": true,
+      "webhook": "",
+      "stopped": true,
+      "daily": true,
+      "password": false,
+      "guildOK": true
+    }
+  }
+}

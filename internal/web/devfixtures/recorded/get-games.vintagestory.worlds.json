@@ -1,0 +1,61 @@
+{
+  "route": "GET /api/games/{id}/worlds",
+  "request": "GET /api/games/vintagestory/worlds",
+  "code": 200,
+  "answer": {
+    "worlds": [],
+    "orphans": [],
+    "selected": "Riverbend",
+    "running": "",
+    "folder": "/Users/owner/Library/Application Support/ValheimEasyServer/games/vintagestory/saves",
+    "schema": {
+      "world": [],
+      "newWorld": [
+        {
+          "key": "playStyle",
+          "scope": "newWorld",
+          "kind": "choice",
+          "label": "Play style",
+          "help": "The game's own presets. A world keeps its style.",
+          "default": "surviveandbuild",
+          "choices": [
+            {
+              "value": "surviveandbuild",
+              "label": "Standard"
+            },
+            {
+              "value": "exploration",
+              "label": "Exploration (less fighting)"
+            },
+            {
+              "value": "wildernesssurvival",
+              "label": "Wilderness survival (harder)"
+            },
+            {
+              "value": "homosapiens",
+              "label": "Homo sapiens (no lore, very hard)"
+            },
+            {
+              "value": "creativebuilding",
+              "label": "Creative building (flat, unlimited blocks)"
+            }
+          ]
+        },
+        {
+          "key": "seed",
+          "scope": "newWorld",
+          "kind": "text",
+          "label": "Seed",
+          "help": "Leave it empty for a random world.",
+          "max": 64,
+          "advanced": true
+        }
+      ]
+    },
+    "values": {
+      "Riverbend": {
+        "playStyle": "surviveandbuild"
+      }
+    }
+  }
+}

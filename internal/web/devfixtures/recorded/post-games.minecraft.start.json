@@ -1,0 +1,34 @@
+{
+  "route": "POST /api/games/{id}/start",
+  "request": "POST /api/games/minecraft/start",
+  "body": {
+    "memory": ""
+  },
+  "note": "recorded with minecraft's memory need raised above this computer's memory, so the app's own check refuses it",
+  "code": 400,
+  "answer": {
+    "action": "memory",
+    "data": {
+      "needMB": 19456,
+      "freeMB": 13578,
+      "running": [
+        {
+          "id": "valheim",
+          "name": "Valheim",
+          "memMB": 273
+        },
+        {
+          "id": "necesse",
+          "name": "Necesse",
+          "memMB": 64
+        },
+        {
+          "id": "terraria",
+          "name": "Terraria",
+          "memMB": 36
+        }
+      ]
+    },
+    "error": "There may not be enough memory to start Minecraft: it needs about 19 GB and 13.3 GB is free."
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "route": "GET /api/router",
+  "request": "GET /api/router",
+  "code": 200,
+  "answer": {
+    "kind": "",
+    "externalIP": "",
+    "publicIP": "",
+    "cgnat": false,
+    "gateway": "",
+    "lan": [],
+    "mappings": [],
+    "steam": [],
+    "on": false,
+    "checking": false,
+    "checked": null,
+    "nat": "",
+    "problem": "",
+    "games": []
+  }
+}

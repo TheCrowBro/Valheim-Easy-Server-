@@ -1,0 +1,103 @@
+{
+  "route": "GET /api/games/{id}/settings",
+  "request": "GET /api/games/necesse/settings",
+  "code": 200,
+  "answer": {
+    "schema": [
+      {
+        "key": "serverName",
+        "scope": "server",
+        "kind": "text",
+        "label": "Server name",
+        "help": "Friends see it as the welcome message when they join.",
+        "default": "Necesse server",
+        "max": 100,
+        "restart": true,
+        "add": true
+      },
+      {
+        "key": "password",
+        "scope": "server",
+        "kind": "password",
+        "label": "Password",
+        "help": "Friends type it when they join. Leave it empty for no password.",
+        "max": 64,
+        "restart": true,
+        "add": true
+      },
+      {
+        "key": "maxPlayers",
+        "scope": "server",
+        "kind": "number",
+        "label": "Most players at once",
+        "default": "10",
+        "min": 1,
+        "max": 250,
+        "restart": true
+      },
+      {
+        "key": "updateOnStart",
+        "scope": "server",
+        "kind": "bool",
+        "label": "Update the server when it starts",
+        "help": "Friends need the same version of Necesse as the server, and Necesse on Steam updates itself.",
+        "default": "true"
+      },
+      {
+        "key": "autoRestart",
+        "scope": "server",
+        "kind": "bool",
+        "label": "Start it again if it crashes",
+        "default": "true"
+      },
+      {
+        "key": "memoryMB",
+        "scope": "server",
+        "kind": "number",
+        "label": "Java memory (MB)",
+        "help": "The most memory the server may use. Raise it only if a big world runs out.",
+        "default": "2048",
+        "min": 1024,
+        "max": 16384,
+        "restart": true,
+        "advanced": true
+      }
+    ],
+    "values": {
+      "server": {
+        "autoRestart": "true",
+        "maxPlayers": "10",
+        "memoryMB": "2048",
+        "password": "owlowlowl",
+        "serverName": "Friends' Necesse",
+        "updateOnStart": "true"
+      },
+      "worlds": {
+        "Riverbend": {}
+      },
+      "world": "Riverbend"
+    },
+    "ports": [
+      {
+        "role": "game",
+        "protos": [
+          "udp"
+        ],
+        "port": 14165,
+        "public": true,
+        "chosen": false
+      }
+    ],
+    "autoStopMinutes": 60,
+    "startWithApp": false,
+    "disabled": false,
+    "discord": {
+      "on": true,
+      "webhook": "",
+      "stopped": true,
+      "daily": true,
+      "password": false,
+      "guildOK": true
+    }
+  }
+}

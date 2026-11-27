@@ -1,0 +1,23 @@
+{
+  "route": "GET /api/games/{id}/players",
+  "request": "GET /api/games/necesse/players",
+  "code": 200,
+  "answer": {
+    "players": [
+      {
+        "name": "Alex",
+        "firstSeen": "2026-11-27T03:09:27Z",
+        "lastSeen": "2026-11-27T03:09:27Z",
+        "playSeconds": 0,
+        "sessions": 1
+      },
+      {
+        "name": "Sam",
+        "firstSeen": "2026-11-27T03:09:27Z",
+        "lastSeen": "2026-11-27T03:09:27Z",
+        "playSeconds": 0,
+        "sessions": 1
+      }
+    ]
+  }
+}

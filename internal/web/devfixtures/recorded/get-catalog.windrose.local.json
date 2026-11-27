@@ -1,0 +1,8 @@
+{
+  "route": "GET /api/catalog/{game}/local",
+  "request": "GET /api/catalog/windrose/local",
+  "code": 200,
+  "answer": {
+    "candidates": []
+  }
+}

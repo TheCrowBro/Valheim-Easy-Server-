@@ -1,0 +1,152 @@
+{
+  "route": "GET /api/games/{id}/settings",
+  "request": "GET /api/games/terraria/settings",
+  "code": 200,
+  "answer": {
+    "schema": [
+      {
+        "key": "serverName",
+        "scope": "server",
+        "kind": "text",
+        "label": "Server name",
+        "help": "Friends see it as the welcome message when they join.",
+        "default": "Terraria server",
+        "max": 64,
+        "restart": true,
+        "add": true
+      },
+      {
+        "key": "password",
+        "scope": "server",
+        "kind": "password",
+        "label": "Password",
+        "help": "Friends type it when they join. Leave it empty for no password.",
+        "max": 64,
+        "restart": true,
+        "add": true
+      },
+      {
+        "key": "maxPlayers",
+        "scope": "server",
+        "kind": "number",
+        "label": "Most players at once",
+        "default": "8",
+        "min": 1,
+        "max": 255,
+        "restart": true
+      },
+      {
+        "key": "updateOnStart",
+        "scope": "server",
+        "kind": "bool",
+        "label": "Update the server when it starts",
+        "help": "Friends need the same version of Terraria as the server, and Terraria on Steam updates itself.",
+        "default": "true"
+      },
+      {
+        "key": "autoRestart",
+        "scope": "server",
+        "kind": "bool",
+        "label": "Start it again if it crashes",
+        "default": "true"
+      },
+      {
+        "key": "size",
+        "scope": "newWorld",
+        "kind": "choice",
+        "label": "World size",
+        "help": "Bigger worlds take longer to make and need more memory.",
+        "default": "medium",
+        "choices": [
+          {
+            "value": "small",
+            "label": "Small"
+          },
+          {
+            "value": "medium",
+            "label": "Medium"
+          },
+          {
+            "value": "large",
+            "label": "Large"
+          }
+        ],
+        "add": true
+      },
+      {
+        "key": "difficulty",
+        "scope": "newWorld",
+        "kind": "choice",
+        "label": "Difficulty",
+        "default": "classic",
+        "choices": [
+          {
+            "value": "classic",
+            "label": "Classic"
+          },
+          {
+            "value": "expert",
+            "label": "Expert"
+          },
+          {
+            "value": "master",
+            "label": "Master"
+          },
+          {
+            "value": "journey",
+            "label": "Journey"
+          }
+        ],
+        "add": true
+      },
+      {
+        "key": "seed",
+        "scope": "newWorld",
+        "kind": "text",
+        "label": "Seed",
+        "help": "Leave it empty for a random world. The same seed makes the same world.",
+        "max": 40,
+        "advanced": true
+      }
+    ],
+    "values": {
+      "server": {
+        "autoRestart": "true",
+        "maxPlayers": "8",
+        "password": "owlowlowl",
+        "serverName": "Friends' Terraria",
+        "updateOnStart": "true"
+      },
+      "worlds": {
+        "Riverbend": {
+          "difficulty": "classic",
+          "size": "medium"
+        }
+      },
+      "world": "Riverbend"
+    },
+    "ports": [
+      {
+        "role": "game",
+        "protos": [
+          "tcp",
+          "udp"
+        ],
+        "port": 7778,
+        "public": true,
+        "chosen": false
+      }
+    ],
+    "autoStopMinutes": 60,
+    "startWithApp": false,
+    "disabled": false,
+    "discord": {
+      "on": true,
+      "webhook": "",
+      "stopped": true,
+      "daily": true,
+      "password": false,
+      "guildOK": true
+    }
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "route": "GET /api/games/{id}/logs",
+  "request": "GET /api/games/valheim/logs",
+  "code": 200,
+  "answer": {
+    "last": 18,
+    "lines": [
+      {
+        "seq": 1,
+        "time": "2026-11-27T03:09:15Z",
+        "text": "Valheim version: l-1.0.20 (network version 41)"
+      },
+      {
+        "seq": 2,
+        "time": "2026-11-27T03:09:15Z",
+        "text": "Using savedir: /Users/owner/Library/Application Support/ValheimEasyServer/saves"
+      },
+      {
+        "seq": 3,
+        "time": "2026-11-27T03:09:15Z",
+        "text": "Fake server \"Valheim with Friends\" starting on port 39153"
+      },
+      {
+        "seq": 4,
+        "time": "2026-11-27T03:09:15Z",
+        "text": "Creating new world Midgard"
+      },
+      {
+        "seq": 5,
+        "time": "2026-11-27T03:09:16Z",
+        "text": "Game server connected"
+      },
+      {
+        "seq": 6,
+        "time": "2026-11-27T03:09:17Z",
+        "text": "ZNet.LoadWorld: Midgard"
+      },
+      {
+        "seq": 7,
+        "time": "2026-11-27T03:09:17Z",
+        "text": "DungeonDB Start"
+      },
+      {
+        "seq": 8,
+        "time": "2026-11-27T03:09:18Z",
+        "text": "Opened PlayFab server"
+      },
+      {
+        "seq": 9,
+        "time": "2026-11-27T03:09:18Z",
+        "text": "New session server \"Valheim with Friends\" that has join code , now 0 player(s)"
+      },
+      {
+        "seq": 10,
+        "time": "2026-11-27T03:09:18Z",
+        "text": "Session \"Valheim with Friends\" registered with join code 921069"
+      },
+      {
+        "seq": 11,
+        "time": "2026-11-27T03:09:19Z",
+        "text": "Got connection SteamID 76561198000038147"
+      },
+      {
+        "seq": 12,
+        "time": "2026-11-27T03:09:19Z",
+        "text": "Got handshake from client 76561198000038147"
+      },
+      {
+        "seq": 13,
+        "time": "2026-11-27T03:09:19Z",
+        "text": "Server: New peer connected,sending global keys"
+      },
+      {
+        "seq": 14,
+        "time": "2026-11-27T03:09:19Z",
+        "text": "Got character ZDOID from Astrid : -88586470:1"
+      },
+      {
+        "seq": 15,
+        "time": "2026-11-27T03:09:19Z",
+        "text": "Got connection SteamID 76561198000052904"
+      },
+      {
+        "seq": 16,
+        "time": "2026-11-27T03:09:19Z",
+        "text": "Got handshake from client 76561198000052904"
+      },
+      {
+        "seq": 17,
+        "time": "2026-11-27T03:09:19Z",
+        "text": "Server: New peer connected,sending global keys"
+      },
+      {
+        "seq": 18,
+        "time": "2026-11-27T03:09:19Z",
+        "text": "Got character ZDOID from Bjorn : -20468904:1"
+      }
+    ]
+  }
+}

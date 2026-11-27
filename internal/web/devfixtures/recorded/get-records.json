@@ -1,0 +1,50 @@
+{
+  "route": "GET /api/records",
+  "request": "GET /api/records",
+  "code": 200,
+  "answer": {
+    "from": "1970-01-01T00:00:00Z",
+    "to": "2026-11-28T00:00:00Z",
+    "players": [
+      {
+        "name": "Astrid",
+        "deaths": 0,
+        "playSeconds": 26.006123886,
+        "visits": 1,
+        "days": 1,
+        "longestLife": 26.006123886,
+        "longestSession": 26.006123886,
+        "firstIn": 1,
+        "latest": "2026-11-27T03:09:45.006123886Z"
+      },
+      {
+        "name": "Bjorn",
+        "deaths": 0,
+        "playSeconds": 26.006123886,
+        "visits": 1,
+        "days": 1,
+        "longestLife": 26.006123886,
+        "longestSession": 26.006123886,
+        "firstIn": 0,
+        "latest": "2026-11-27T03:09:45.006123886Z"
+      }
+    ],
+    "records": [
+      {
+        "id": "firstIn",
+        "names": [
+          "Astrid"
+        ],
+        "value": 1
+      },
+      {
+        "id": "nightOwl",
+        "names": [
+          "Astrid"
+        ],
+        "value": 909,
+        "at": "2026-11-27T03:09:45.006123886Z"
+      }
+    ]
+  }
+}
