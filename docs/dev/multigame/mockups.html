@@ -1,0 +1,729 @@
+<!--
+  The owner's approved panel mockups (the "Several Games Design" page, 2026-11-21).
+  Build the panel from the chosen option A "Your version: Active and Inactive, with stars"
+  and the Overview, game page, Add a game and memory-warning mockups below.
+  Superseded by docs/dev/multigame/decisions.md wherever they differ, notably:
+  - NO tunnel of any kind (section 7's "Free tunnel" row was dropped);
+  - Discord: one command per STARRED game (/valheim, /minecraft, ...) working only in
+    that game's channel, and a channel per game (section 5 shows an older /start idea);
+  - Vintage Story and Project Zomboid are "Needs Windows" on macOS;
+  - auto-stop after 1 hour empty is ON by default for all games (section 6 says off).
+-->
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Several Games Design</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: one reading column of decisions; each decision shows options as framed panel mockups drawn in the app's own dark style. */
+:root {
+  --bg: #f2f4f6;
+  --fg: #151a1f;
+  --muted: #586470;
+  --line: #d6dce2;
+  --card: #ffffff;
+  --accent: #a85f08;
+  --rec-bg: #e3f2e7;
+  --rec-fg: #1d6630;
+  --chip-bg: #e8ecf0;
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --display: "Space Grotesk", "Inter", system-ui, sans-serif;
+
+  /* The control panel itself is dark in every theme: these draw the mockups. */
+  --a-bg: #0f1418;
+  --a-side: #0d1216;
+  --a-surface: #161d23;
+  --a-surface2: #1c242b;
+  --a-line: rgba(255, 255, 255, .08);
+  --a-text: #e9eef2;
+  --a-muted: #8b96a1;
+  --a-accent: #f2a33a;
+  --a-accent-ink: #1a1206;
+  --a-good: #0ca30c;
+  --a-good-text: #5fd07a;
+  --a-good-soft: rgba(12, 163, 12, .15);
+  --a-warn: #fab219;
+  --a-warn-soft: rgba(250, 178, 25, .13);
+  --a-info: #3987e5;
+  --a-info-text: #8fbcf2;
+  --a-info-soft: rgba(57, 135, 229, .14);
+  --a-off: #4a5560;
+  --g-valheim: #f2a33a;
+  --g-minecraft: #62bd4f;
+  --g-vintage: #ad8fe0;
+  --g-enshrouded: #4cb4cf;
+  --d-bg: #313338;
+  --d-surface: #2b2d31;
+  --d-text: #dbdee1;
+  --d-muted: #949ba4;
+  --d-blurple: #5865f2;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b0f12; --fg: #e5eaee; --muted: #94a1ac; --line: #232c34; --card: #11171c;
+    --accent: #f2a33a; --rec-bg: rgba(95, 208, 122, .13); --rec-fg: #7fdc98; --chip-bg: #1a2228;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b0f12; --fg: #e5eaee; --muted: #94a1ac; --line: #232c34; --card: #11171c;
+  --accent: #f2a33a; --rec-bg: rgba(95, 208, 122, .13); --rec-fg: #7fdc98; --chip-bg: #1a2228;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 80px;
+}
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 56px; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 3rem); letter-spacing: -.02em; }
+h2 { font-size: 1.6rem; letter-spacing: -.01em; }
+h3 { font-size: 1.12rem; }
+p { margin: 0; }
+.prose { max-width: 66ch; display: grid; gap: 12px; }
+.muted { color: var(--muted); }
+.eyebrow { font-size: .78rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+header { display: grid; gap: 16px; }
+.lead { font-size: 1.12rem; max-width: 62ch; }
+.note { font-size: .88rem; color: var(--muted); }
+
+.glance { border: 1px solid var(--line); border-radius: 12px; background: var(--card); overflow-x: auto; }
+.glance table { width: 100%; border-collapse: collapse; min-width: 560px; }
+.glance th, .glance td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: .95rem; }
+.glance tr:last-child td { border-bottom: 0; }
+.glance th { font-size: .75rem; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.glance td:first-child { font-weight: 600; white-space: nowrap; }
+.glance a { color: inherit; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.glance a:hover { text-decoration-color: var(--accent); }
+
+section { display: grid; gap: 20px; scroll-margin-top: 16px; }
+.sec-head { display: grid; gap: 8px; }
+.num { font-family: var(--display); font-size: .9rem; color: var(--accent); font-weight: 600; }
+.options { display: grid; gap: 28px; }
+.option { display: grid; gap: 12px; }
+.option-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; }
+.rec { font-size: .74rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; background: var(--rec-bg); color: var(--rec-fg); padding: 2px 9px; border-radius: 999px; }
+.proscons { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; font-size: .94rem; }
+.proscons > div { min-width: 0; }
+.proscons b { display: block; font-size: .74rem; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+ul.plain { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+.cols > * { min-width: 0; }
+.cmp { border: 1px solid var(--line); border-radius: 12px; background: var(--card); overflow-x: auto; }
+.cmp table { width: 100%; border-collapse: collapse; min-width: 640px; font-size: .92rem; }
+.cmp th, .cmp td { padding: 11px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.cmp tr:last-child td { border-bottom: 0; }
+.cmp thead th { font-size: .74rem; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { background: var(--chip-bg); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: .9rem; }
+.chip.on { border-color: var(--accent); }
+@media (max-width: 720px) {
+  .proscons, .cols { grid-template-columns: 1fr; }
+  body { padding-block: 24px 56px; }
+}
+
+/* ---------- Panel mockups (the app's own look) ---------- */
+.shot { overflow-x: auto; border-radius: 12px; border: 1px solid var(--line); }
+.cap { font-size: .86rem; color: var(--muted); }
+.app { background: var(--a-bg); color: var(--a-text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 12.5px; line-height: 1.45; min-width: 780px; display: grid; grid-template-columns: 188px 1fr; }
+.app.notop { grid-template-columns: 172px 1fr; }
+.app svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.side { background: var(--a-side); border-right: 1px solid var(--a-line); padding: 16px 10px; display: flex; flex-direction: column; gap: 2px; }
+.brand { display: flex; align-items: center; gap: 9px; padding: 2px 8px 14px; }
+.brand .logo { width: 26px; height: 26px; border-radius: 50%; background: conic-gradient(var(--a-accent) 0 25%, var(--a-text) 0 50%, var(--a-accent) 0 75%, var(--a-text) 0); border: 3px solid var(--a-side); outline: 1px solid var(--a-line); }
+.brand b { font-size: 13px; display: block; line-height: 1.2; }
+.brand small { color: var(--a-muted); font-size: 11px; }
+.grp { color: var(--a-muted); font-size: 10px; letter-spacing: .09em; text-transform: uppercase; font-weight: 600; padding: 12px 10px 4px; }
+.nav { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 8px; color: var(--a-text); position: relative; }
+.nav.act { background: var(--a-surface2); }
+.nav.act::before { content: ""; position: absolute; left: -10px; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--a-accent); }
+.nav .ct { margin-left: auto; font-size: 10.5px; background: var(--a-surface2); border-radius: 999px; padding: 0 7px; color: var(--a-muted); }
+.nav.add { color: var(--a-muted); }
+.gm { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; font-size: 10px; font-weight: 800; color: #10151a; background: var(--g); flex: none; letter-spacing: -.02em; }
+.gm.lg { width: 30px; height: 30px; border-radius: 8px; font-size: 13px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--a-off); flex: none; }
+.dot.on { background: var(--a-good); box-shadow: 0 0 0 3px var(--a-good-soft); }
+.dot.wait { background: var(--a-warn); box-shadow: 0 0 0 3px var(--a-warn-soft); }
+.side .foot { margin-top: auto; color: var(--a-muted); font-size: 10.5px; padding: 12px 10px 0; }
+.main { padding: 18px 20px 20px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.top { display: flex; align-items: center; gap: 10px; }
+.top h4 { margin: 0; font-size: 17px; font-weight: 650; display: flex; align-items: center; gap: 9px; }
+.top .sp { margin-left: auto; }
+.pill { display: inline-flex; align-items: center; gap: 7px; background: var(--a-surface); border: 1px solid var(--a-line); border-radius: 999px; padding: 4px 11px; font-size: 11.5px; }
+.pill span { color: var(--a-muted); }
+.btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--a-line); background: var(--a-surface2); color: var(--a-text); border-radius: 8px; padding: 5px 10px; font-size: 11.5px; font-weight: 550; white-space: nowrap; }
+.btn.pri { background: var(--a-accent); color: var(--a-accent-ink); border-color: transparent; }
+.btn.info { background: var(--a-info-soft); color: var(--a-info-text); border-color: rgba(57, 135, 229, .35); }
+.btn.dis { opacity: .45; }
+.card { background: var(--a-surface); border: 1px solid var(--a-line); border-radius: 11px; padding: 12px 14px; display: grid; gap: 8px; min-width: 0; }
+.card h5 { margin: 0; font-size: 12.5px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
+.card h5 .tag { margin-left: auto; font-weight: 500; font-size: 10.5px; color: var(--a-muted); background: var(--a-surface2); border-radius: 999px; padding: 1px 8px; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.kv { color: var(--a-muted); }
+.kv b { color: var(--a-text); font-weight: 600; }
+.mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; letter-spacing: .02em; }
+.code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 21px; font-weight: 700; letter-spacing: .08em; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.grid2 { display: grid; grid-template-columns: 1.15fr 1fr; gap: 10px; }
+.gcard { border-top: 3px solid var(--g); }
+.gcard .stat { font-size: 15px; font-weight: 650; display: flex; align-items: center; gap: 7px; }
+.gcard .acts { display: flex; gap: 6px; margin-top: 2px; }
+.mem { display: grid; gap: 6px; }
+.bar { height: 10px; border-radius: 999px; background: var(--a-surface2); display: flex; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--g); }
+.bar i + i { border-left: 2px solid var(--a-surface); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--a-muted); font-size: 11px; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend span::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--g); }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--a-line); }
+.tabs span { padding: 6px 12px; color: var(--a-muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs span.act { color: var(--a-text); border-color: var(--a-accent); }
+.steps { margin: 0; padding-left: 17px; color: var(--a-text); display: grid; gap: 3px; }
+.player { display: flex; align-items: center; gap: 9px; padding: 5px 0; border-bottom: 1px solid var(--a-line); }
+.player:last-child { border-bottom: 0; }
+.av { width: 24px; height: 24px; border-radius: 50%; background: var(--a-surface2); display: grid; place-items: center; font-weight: 700; font-size: 11px; }
+.gametabs { grid-column: 1 / -1; display: flex; gap: 4px; padding: 10px 12px 0; background: var(--a-side); border-bottom: 1px solid var(--a-line); }
+.gt { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 9px 9px 0 0; color: var(--a-muted); border: 1px solid transparent; border-bottom: 0; }
+.gt.act { background: var(--a-bg); color: var(--a-text); border-color: var(--a-line); margin-bottom: -1px; }
+.crumb { color: var(--a-muted); font-size: 11.5px; display: flex; gap: 6px; align-items: center; }
+.crumb b { color: var(--a-text); font-weight: 600; }
+.big { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.big .card { padding: 14px 16px; }
+
+/* dialog mock */
+.dlg-back { background: rgba(5, 8, 10, .7); padding: 26px; min-width: 640px; }
+.dlg { background: var(--a-surface); color: var(--a-text); border: 1px solid var(--a-line); border-radius: 14px; max-width: 620px; margin: 0 auto; padding: 18px 18px 14px; display: grid; gap: 12px; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 12.5px; }
+.dlg h4 { margin: 0; font-size: 16px; }
+.gl { display: grid; gap: 8px; }
+.gi { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; background: var(--a-surface2); border: 1px solid var(--a-line); border-radius: 10px; padding: 10px 12px; }
+.gi.off { opacity: .55; }
+.gi b { font-size: 13px; }
+.facts { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--a-muted); font-size: 11px; }
+.ok { color: var(--a-good-text); }
+.warnt { color: var(--a-warn); }
+
+/* Discord mock */
+.dc { background: var(--d-bg); color: var(--d-text); min-width: 620px; padding: 16px 18px; font-family: "gg sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 13px; display: grid; gap: 14px; }
+.msg { display: grid; grid-template-columns: 36px 1fr; gap: 10px; }
+.msg .pic { width: 36px; height: 36px; border-radius: 50%; background: conic-gradient(var(--a-accent) 0 25%, #e9eef2 0 50%, var(--a-accent) 0 75%, #e9eef2 0); }
+.msg .pic.u { background: #7a5af5; }
+.who { font-weight: 600; display: flex; align-items: baseline; gap: 6px; }
+.who .bot { font-size: 9.5px; background: var(--d-blurple); color: #fff; padding: 0 4px; border-radius: 3px; font-weight: 600; }
+.who small { color: var(--d-muted); font-weight: 400; font-size: 11px; }
+.embed { margin-top: 5px; background: var(--d-surface); border-left: 4px solid var(--g); border-radius: 4px; padding: 9px 12px; display: grid; gap: 4px; max-width: 460px; }
+.embed b { color: #fff; }
+.embed .mono { color: var(--d-text); }
+.slash { background: var(--d-surface); border-radius: 8px; padding: 8px; display: grid; gap: 2px; max-width: 460px; }
+.slash .opt { display: flex; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 5px; }
+.slash .opt.hl { background: rgba(255, 255, 255, .06); }
+.slash .cmd { background: #1e1f22; border-radius: 8px; padding: 9px 12px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+.slash .cmd em { font-style: normal; background: rgba(88, 101, 242, .3); padding: 1px 5px; border-radius: 4px; }
+
+/* star mockup */
+:root { --g-terraria: #6f8dff; --g-zomboid: #d9604f; --g-necesse: #4fc1a6; }
+.twirl { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: 0; color: var(--a-muted); font: inherit; font-size: 10px; letter-spacing: .09em; text-transform: uppercase; font-weight: 600; padding: 12px 10px 4px; cursor: pointer; text-align: left; border-radius: 6px; }
+.twirl:hover { color: var(--a-text); }
+.twirl:focus-visible, .starbtn:focus-visible { outline: 2px solid var(--a-info); outline-offset: 1px; }
+.app .twirl svg { width: 11px; height: 11px; transition: transform .15s; }
+.twirl[aria-expanded="false"] svg { transform: rotate(-90deg); }
+.twirl .n { margin-left: 2px; font-weight: 500; letter-spacing: 0; }
+.starbtn { margin-left: 6px; background: none; border: 0; padding: 2px; color: var(--a-muted); cursor: pointer; display: grid; place-items: center; border-radius: 5px; }
+.starbtn:hover { color: var(--a-text); }
+.starbtn.on { color: var(--a-accent); }
+.app .starbtn.on svg { fill: currentColor; }
+.nav .ct.live { background: var(--a-good-soft); color: var(--a-good-text); }
+.nav .grow { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.idle-row { display: grid; grid-template-columns: auto 1fr auto auto; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--a-line); }
+.idle-row:last-child { border-bottom: 0; }
+.ov-twirl { padding: 4px 0; font-size: 11px; }
+.gcard h5 .starbtn { margin-left: 0; }
+@media (prefers-reduced-motion: reduce) { .app .twirl svg { transition: none; } }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24"><path d="m4 17 6-5-6-5M12 19h8"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 13.5A8.5 8.5 0 1 1 10.5 3.5a6.6 6.6 0 0 0 10 10z"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></symbol>
+  <symbol id="i-restart" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.6l2.55 5.2 5.75.84-4.15 4.05.98 5.71L12 16.7l-5.13 2.7.98-5.71L3.7 9.64l5.75-.84z"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+</svg>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Valheim Easy Server · design options</div>
+  <h1>Hosting several games at once</h1>
+  <p class="lead">The app will run servers for eleven games, several at the same time. On this Mac: Valheim, Minecraft, Vintage Story, Terraria, Project Zomboid and Necesse. Ready for your PC: Enshrouded, Core Keeper, Palworld, Satisfactory and Windrose. The table below shows what you chose; the sections after it show the options as they were offered.</p>
+  <p class="note">The panel pictures use example names and numbers.</p>
+</header>
+
+<section aria-labelledby="glance">
+  <h2 id="glance">At a glance</h2>
+  <div class="glance">
+    <table>
+      <thead><tr><th>Decision</th><th>Your choice</th></tr></thead>
+      <tbody>
+        <tr><td><a href="#layout">1. Layout</a></td><td>Option A: games in the left sidebar, with an Overview page showing every game at once</td></tr>
+        <tr><td><a href="#layout">Stars</a></td><td>Star the games you're playing now (several at once). The sidebar has two folding lists: Active (starred or running) and Inactive. The Overview shows starred games first, and only starred games get a Discord command</td></tr>
+        <tr><td><a href="#adding">2. Turning games on</a></td><td>“Add a game” installs it; each game has its own Start and Stop. A game with nobody on for an hour stops itself (you can change that per game)</td></tr>
+        <tr><td><a href="#same">3. Same game twice</a></td><td>One server per game, each with many worlds</td></tr>
+        <tr><td><a href="#several">4. Running several</a></td><td>Ports picked for you. Short on memory: the panel warns and lets you choose; a start from Discord doesn't go ahead and says why</td></tr>
+        <tr><td><a href="#discord">5. Discord and waking</a></td><td>A channel per game. One command per game (<span class="mono">/valheim</span>, <span class="mono">/minecraft</span>, …) that works only in that game's channel. Waking for one game starts only that game</td></tr>
+        <tr><td>Minecraft</td><td>Vanilla Java Edition for now (no Bedrock); mods in a later round, with Vintage Story's</td></tr>
+        <tr><td>Players and records</td><td>Per game; the Overview shows who's online everywhere</td></tr>
+        <tr><td><a href="#sleep">6. Sleep</a></td><td>The computer sleeps only when nobody is playing any game</td></tr>
+        <tr><td><a href="#outside">7. Friends outside your home</a></td><td>The app opens router ports itself, with a free tunnel (playit.gg) as the backup</td></tr>
+        <tr><td><a href="#name">8. The app’s name</a></td><td>Easy Game Server. Updates, settings and worlds carry on as they are</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 1 -->
+<section id="layout" aria-labelledby="h-layout">
+  <div class="sec-head">
+    <div class="num">1</div>
+    <h2 id="h-layout">Where the games live in the panel</h2>
+    <p class="prose muted">Today the sidebar holds Valheim's pages: Home, Worlds, Players, Stats, Settings and Log. With several games, each game needs those pages, and some things (Discord, sleep, updates) belong to the whole app. Three ways to arrange that:</p>
+  </div>
+
+  <div class="options">
+    <div class="option">
+      <div class="option-head"><h3>A. Games in the sidebar, plus an Overview</h3><span class="rec">Recommended</span></div>
+      <p class="prose">The sidebar lists your games, each with a live dot and how many people are playing. Overview shows every game at once with Start and Stop. Click a game to get its familiar pages as tabs along the top. App-wide settings sit at the bottom of the sidebar.</p>
+      <div class="option-head"><h3>Your version: Active and Inactive, with stars</h3><span class="rec">Chosen</span></div>
+      <p class="prose">Star the games your group is playing these days. Starred games, and any game that's running, sit under <b>Active</b>; the rest fold away under <b>Inactive</b>. Both lists open and close. The Overview puts starred games first, and only starred games get a Discord command. Try it: click a star, or the arrows.</p>
+      <div class="shot"><div class="app" id="starmock"></div></div>
+      <p class="cap" id="starcmds"></p>
+      <div class="shot">
+        <div class="app">
+          <aside class="side">
+            <div class="brand"><span class="logo"></span><div><b>Easy Game Server</b><small>Viking Night</small></div></div>
+            <div class="nav act"><svg><use href="#i-grid"/></svg>Overview</div>
+            <div class="grp">Games</div>
+            <div class="nav"><span class="gm" style="--g: var(--g-valheim)">V</span>Valheim<span class="ct">2</span></div>
+            <div class="nav"><span class="gm" style="--g: var(--g-minecraft)">M</span>Minecraft<span class="ct">1</span></div>
+            <div class="nav"><span class="gm" style="--g: var(--g-vintage)">VS</span>Vintage Story</div>
+            <div class="nav add"><svg><use href="#i-plus"/></svg>Add a game</div>
+            <div class="grp">App</div>
+            <div class="nav"><svg><use href="#i-chat"/></svg>Discord</div>
+            <div class="nav"><svg><use href="#i-moon"/></svg>Sleep and waking</div>
+            <div class="nav"><svg><use href="#i-gear"/></svg>App settings</div>
+            <div class="foot">Server computer: MAC-PRO</div>
+          </aside>
+          <div class="main">
+            <div class="top"><h4>Overview</h4><span class="sp"></span><span class="pill"><i class="dot on"></i>2 games online <span>· 3 playing</span></span><span class="btn"><svg><use href="#i-moon"/></svg>Sleep</span></div>
+            <div class="grid3">
+              <div class="card gcard" style="--g: var(--g-valheim)">
+                <h5><span class="gm" style="--g: var(--g-valheim)">V</span>Valheim<span class="tag">Midgard</span></h5>
+                <div class="stat"><i class="dot on"></i>Online</div>
+                <div class="kv">Join code <b class="mono">393 279</b></div>
+                <div class="kv"><b>2</b> of 10 playing · Bjorn, Solveig</div>
+                <div class="acts"><span class="btn"><svg><use href="#i-stop"/></svg>Stop</span><span class="btn"><svg><use href="#i-copy"/></svg>Copy code</span></div>
+              </div>
+              <div class="card gcard" style="--g: var(--g-minecraft)">
+                <h5><span class="gm" style="--g: var(--g-minecraft)">M</span>Minecraft<span class="tag">Survival</span></h5>
+                <div class="stat"><i class="dot on"></i>Online</div>
+                <div class="kv">Address <b class="mono">203.0.113.25:25565</b></div>
+                <div class="kv"><b>1</b> of 10 playing · Astrid</div>
+                <div class="acts"><span class="btn"><svg><use href="#i-stop"/></svg>Stop</span><span class="btn"><svg><use href="#i-copy"/></svg>Copy address</span></div>
+              </div>
+              <div class="card gcard" style="--g: var(--g-vintage)">
+                <h5><span class="gm" style="--g: var(--g-vintage)">VS</span>Vintage Story<span class="tag">Homestead</span></h5>
+                <div class="stat"><i class="dot"></i>Offline</div>
+                <div class="kv">Last played <b>2 days ago</b></div>
+                <div class="kv">Needs about <b>2 GB</b> of memory</div>
+                <div class="acts"><span class="btn pri"><svg><use href="#i-play"/></svg>Start</span></div>
+              </div>
+            </div>
+            <div class="card mem">
+              <h5>Memory on this computer<span class="tag">16 GB</span></h5>
+              <div class="bar"><i style="--g: var(--g-valheim); width: 19%"></i><i style="--g: var(--g-minecraft); width: 15%"></i><i style="--g: var(--a-off); width: 11%"></i></div>
+              <div class="legend"><span style="--g: var(--g-valheim)">Valheim 3.1 GB</span><span style="--g: var(--g-minecraft)">Minecraft 2.4 GB</span><span style="--g: var(--a-off)">Everything else 1.7 GB</span><span>8.8 GB free</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="cap">Overview: every game at a glance.</p>
+      <div class="shot">
+        <div class="app">
+          <aside class="side">
+            <div class="brand"><span class="logo"></span><div><b>Easy Game Server</b><small>Viking Night</small></div></div>
+            <div class="nav"><svg><use href="#i-grid"/></svg>Overview</div>
+            <div class="grp">Games</div>
+            <div class="nav"><span class="gm" style="--g: var(--g-valheim)">V</span>Valheim<span class="ct">2</span></div>
+            <div class="nav act"><span class="gm" style="--g: var(--g-minecraft)">M</span>Minecraft<span class="ct">1</span></div>
+            <div class="nav"><span class="gm" style="--g: var(--g-vintage)">VS</span>Vintage Story</div>
+            <div class="nav add"><svg><use href="#i-plus"/></svg>Add a game</div>
+            <div class="grp">App</div>
+            <div class="nav"><svg><use href="#i-chat"/></svg>Discord</div>
+            <div class="nav"><svg><use href="#i-moon"/></svg>Sleep and waking</div>
+            <div class="nav"><svg><use href="#i-gear"/></svg>App settings</div>
+            <div class="foot">Server computer: MAC-PRO</div>
+          </aside>
+          <div class="main">
+            <div class="top"><h4><span class="gm lg" style="--g: var(--g-minecraft)">M</span>Minecraft</h4><span class="sp"></span><span class="pill"><i class="dot on"></i>2 games online <span>· 3 playing</span></span><span class="btn"><svg><use href="#i-moon"/></svg>Sleep</span></div>
+            <div class="tabs"><span class="act">Home</span><span>Worlds</span><span>Players</span><span>Stats</span><span>Mods</span><span>Settings</span><span>Log</span></div>
+            <div class="card"><div class="row"><span class="stat" style="font-size: 18px; font-weight: 650; display: flex; align-items: center; gap: 8px"><i class="dot on"></i>Online</span><span class="sp" style="margin-left: auto"></span><span class="btn"><svg><use href="#i-restart"/></svg>Restart</span><span class="btn"><svg><use href="#i-stop"/></svg>Stop server</span></div><div class="row kv">World: <b>Survival</b> · Up <b>1 h 12 min</b> · Port <b>25565</b></div></div>
+            <div class="grid2">
+              <div class="card">
+                <h5>How friends join<span class="tag">Java Edition</span></h5>
+                <div class="kv">Address</div>
+                <div class="row"><span class="code" style="font-size: 17px">203.0.113.25:25565</span><span class="btn" style="margin-left: auto"><svg><use href="#i-copy"/></svg>Copy</span></div>
+                <ol class="steps"><li>Open Minecraft, then Multiplayer, then Add Server.</li><li>Paste the address and join.</li><li>Only friends on the Players list can get in.</li></ol>
+              </div>
+              <div class="card">
+                <h5>Playing now<span class="tag">1 of 10</span></h5>
+                <div class="player"><span class="av">A</span><div><b>Astrid</b><div class="kv">Playing for 40 min</div></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="cap">A game’s own page: the pages you know today, now as tabs, with a “How friends join” card that fits that game.</p>
+      <div class="proscons">
+        <div><b>Good</b>Everything is one click away, and the sidebar always tells you which games are up. The Valheim pages stay as they are, so nothing you've learned changes.</div>
+        <div><b>Trade-off</b>The sidebar gets longer as you add games, though it fits about 8 comfortably.</div>
+      </div>
+    </div>
+
+    <div class="option">
+      <div class="option-head"><h3>B. A dashboard of big game cards</h3></div>
+      <p class="prose">Home becomes a set of large cards, one per game, each with its join details and buttons. Clicking a card opens that game full-screen with a “back to all games” link. The sidebar keeps only app-wide pages.</p>
+      <div class="shot">
+        <div class="app notop">
+          <aside class="side">
+            <div class="brand"><span class="logo"></span><div><b>Easy Game Server</b></div></div>
+            <div class="nav act"><svg><use href="#i-home"/></svg>Games</div>
+            <div class="nav"><svg><use href="#i-users"/></svg>Players</div>
+            <div class="nav"><svg><use href="#i-chart"/></svg>Stats</div>
+            <div class="nav"><svg><use href="#i-chat"/></svg>Discord</div>
+            <div class="nav"><svg><use href="#i-sliders"/></svg>Settings</div>
+            <div class="nav"><svg><use href="#i-term"/></svg>Log</div>
+            <div class="foot">Server computer: MAC-PRO</div>
+          </aside>
+          <div class="main">
+            <div class="top"><h4>Games</h4><span class="sp"></span><span class="btn"><svg><use href="#i-plus"/></svg>Add a game</span><span class="btn"><svg><use href="#i-moon"/></svg>Sleep</span></div>
+            <div class="big">
+              <div class="card gcard" style="--g: var(--g-valheim)">
+                <h5><span class="gm lg" style="--g: var(--g-valheim)">V</span>Valheim<span class="tag">Online · 2 playing</span></h5>
+                <div class="kv">Join code</div><div class="code">393 279</div>
+                <div class="row"><span class="btn"><svg><use href="#i-copy"/></svg>Copy code</span><span class="btn"><svg><use href="#i-stop"/></svg>Stop</span><span class="btn info" style="margin-left: auto">Open</span></div>
+              </div>
+              <div class="card gcard" style="--g: var(--g-minecraft)">
+                <h5><span class="gm lg" style="--g: var(--g-minecraft)">M</span>Minecraft<span class="tag">Online · 1 playing</span></h5>
+                <div class="kv">Address</div><div class="code" style="font-size: 17px; padding-block: 3px">203.0.113.25:25565</div>
+                <div class="row"><span class="btn"><svg><use href="#i-copy"/></svg>Copy</span><span class="btn"><svg><use href="#i-stop"/></svg>Stop</span><span class="btn info" style="margin-left: auto">Open</span></div>
+              </div>
+              <div class="card gcard" style="--g: var(--g-vintage)">
+                <h5><span class="gm lg" style="--g: var(--g-vintage)">VS</span>Vintage Story<span class="tag">Offline</span></h5>
+                <div class="kv">World <b>Homestead</b> · last played 2 days ago</div>
+                <div class="row"><span class="btn pri"><svg><use href="#i-play"/></svg>Start</span><span class="btn info" style="margin-left: auto">Open</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="proscons">
+        <div><b>Good</b>Very visual, and the join details for every game are on the first page.</div>
+        <div><b>Trade-off</b>Getting to one game's worlds or log takes an extra click each time, and the page needs scrolling once you have four or more games.</div>
+      </div>
+    </div>
+
+    <div class="option">
+      <div class="option-head"><h3>C. Tabs across the top, one per game</h3></div>
+      <p class="prose">Like browser tabs: pick a game at the top, and below it the panel looks exactly like today, just for that game. Discord, sleep and updates move into an App tab.</p>
+      <div class="shot">
+        <div class="app notop">
+          <div class="gametabs">
+            <span class="gt act"><i class="dot on"></i>Valheim</span>
+            <span class="gt"><i class="dot on"></i>Minecraft</span>
+            <span class="gt"><i class="dot"></i>Vintage Story</span>
+            <span class="gt"><svg><use href="#i-plus"/></svg></span>
+            <span class="gt" style="margin-left: auto"><svg><use href="#i-gear"/></svg>App</span>
+          </div>
+          <aside class="side">
+            <div class="nav act"><svg><use href="#i-home"/></svg>Home</div>
+            <div class="nav"><svg><use href="#i-globe"/></svg>Worlds</div>
+            <div class="nav"><svg><use href="#i-users"/></svg>Players<span class="ct">2</span></div>
+            <div class="nav"><svg><use href="#i-chart"/></svg>Stats</div>
+            <div class="nav"><svg><use href="#i-sliders"/></svg>Settings</div>
+            <div class="nav"><svg><use href="#i-term"/></svg>Log</div>
+          </aside>
+          <div class="main">
+            <div class="top"><h4>Valheim</h4><span class="sp"></span><span class="pill"><i class="dot on"></i>Online <span>· 2 playing</span></span><span class="btn"><svg><use href="#i-moon"/></svg>Sleep</span></div>
+            <div class="card"><div class="row"><span style="font-size: 18px; font-weight: 650; display: flex; align-items: center; gap: 8px"><i class="dot on"></i>Online</span><span style="margin-left: auto"></span><span class="btn"><svg><use href="#i-restart"/></svg>Restart</span><span class="btn"><svg><use href="#i-stop"/></svg>Stop server</span></div><div class="kv">World: <b>Midgard</b> · Up <b>51 min</b></div></div>
+            <div class="card"><h5>How friends join<span class="tag">Crossplay on</span></h5><div class="row"><span class="code">393 279</span><span class="btn" style="margin-left: auto"><svg><use href="#i-copy"/></svg>Copy code</span></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="proscons">
+        <div><b>Good</b>The closest to today's panel. Each game feels like its own app.</div>
+        <div><b>Trade-off</b>There's no single place to see every game, and on a phone the tabs get squeezed.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 2 -->
+<section id="adding" aria-labelledby="h-adding">
+  <div class="sec-head">
+    <div class="num">2</div>
+    <h2 id="h-adding">Adding a game and turning it on</h2>
+  </div>
+  <div class="cols">
+    <div class="prose">
+      <p><b>Add a game</b> opens a list of the games the app knows. Each says plainly whether it runs on this computer, how big the download is, how much memory it needs and what your friends need. Games that can't run here are shown but greyed out, so you know they exist.</p>
+      <p>Picking one downloads its server, then asks for a server name, a password and a world (start a new one, or bring one from your own game). Anything the game needs behind the scenes, like Java for Minecraft or .NET for Vintage Story, the app fetches itself.</p>
+      <p>After that each game has its own <b>Start</b> and <b>Stop</b>, and runs alongside the others. You can also remove a game; its worlds are kept as a backup.</p>
+    </div>
+    <div class="shot">
+      <div class="dlg-back">
+        <div class="dlg">
+          <h4>Add a game</h4>
+          <div class="gl">
+            <div class="gi"><span class="gm lg" style="--g: var(--g-minecraft)">M</span><div><b>Minecraft: Java Edition</b><div class="facts"><span class="ok">Runs on this Mac</span><span>About 200 MB</span><span>2–4 GB memory</span><span>Friends need Java Edition</span></div></div><span class="btn dis">Added</span></div>
+            <div class="gi"><span class="gm lg" style="--g: var(--g-vintage)">VS</span><div><b>Vintage Story</b><div class="facts"><span class="ok">Runs on this Mac</span><span>About 700 MB</span><span>2–4 GB memory</span><span>Friends need their own copy</span></div></div><span class="btn pri">Add</span></div>
+            <div class="gi off"><span class="gm lg" style="--g: var(--g-enshrouded)">E</span><div><b>Enshrouded</b><div class="facts"><span class="warnt">Needs Windows</span><span>Add it after you move to a PC</span></div></div><span class="btn dis">Add</span></div>
+          </div>
+          <div class="kv" style="font-size: 11px">More games from the shortlist will appear here.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 -->
+<section id="same" aria-labelledby="h-same">
+  <div class="sec-head">
+    <div class="num">3</div>
+    <h2 id="h-same">The same game twice?</h2>
+    <p class="prose">You picked several games at once. Should that also allow two servers of the <i>same</i> game at once, say a plain Valheim world and a modded one side by side?</p>
+  </div>
+  <div class="cmp">
+    <table>
+      <thead><tr><th style="width: 34%">Option</th><th>What it means</th></tr></thead>
+      <tbody>
+        <tr><td><b>One server per game</b> <span class="rec">Recommended</span></td><td>Each game can have many worlds and you switch between them, but one world per game runs at a time. Simpler to use, and each game's mods stay with its worlds as they do now. I'll build it so adding “a second Valheim” later is a small change.</td></tr>
+        <tr><td><b>Any number per game</b></td><td>“Add a game” can add Valheim again as a separate server with its own name, port and worlds. More flexible, but the sidebar fills up with look-alike entries, and each copy is a separate download (Valheim's mods live in its server folder).</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 4 -->
+<section id="several" aria-labelledby="h-several">
+  <div class="sec-head">
+    <div class="num">4</div>
+    <h2 id="h-several">Running several at once</h2>
+  </div>
+  <div class="prose">
+    <p><b>Ports are picked for you.</b> Every game gets its own ports with no overlap, and they're shown on its page in case you ever set up your router by hand.</p>
+    <p><b>A memory check before starting.</b> Before a game starts, the app checks it fits beside what's already running. If it doesn't, you get a plain warning instead of a slow, stuttering computer:</p>
+  </div>
+  <div class="shot">
+    <div class="dlg-back" style="padding: 18px">
+      <div class="dlg">
+        <h4>Not enough free memory for Vintage Story</h4>
+        <p>Vintage Story needs about 2 GB, and this computer has 1.2 GB free with Valheim and Minecraft running. It may run slowly for everyone.</p>
+        <div class="row" style="justify-content: flex-end"><span class="btn">Stop Minecraft and start</span><span class="btn">Start anyway</span><span class="btn pri">Cancel</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="prose muted">Each game's Home page keeps its own CPU and memory charts. The top bar sums things up: “2 games online · 3 playing”.</p>
+</section>
+
+<!-- 5 -->
+<section id="discord" aria-labelledby="h-discord">
+  <div class="sec-head">
+    <div class="num">5</div>
+    <h2 id="h-discord">Discord and waking the computer</h2>
+  </div>
+  <div class="cols">
+    <div class="prose">
+      <p>One Discord channel for everything. Each post names the game, uses its colour, and gives that game's way to join: a join code for Valheim, an address for Minecraft and Vintage Story.</p>
+      <p>The JetKVM bot gets a <span class="mono">/start</span> command that asks which game. It wakes the computer if it's asleep, then starts that game. Your friends' habit of typing <span class="mono">/valheim</span> keeps working.</p>
+      <p>The daily “most deaths” post and the records stay per game.</p>
+    </div>
+    <div class="shot">
+      <div class="dc">
+        <div class="slash">
+          <div class="kv" style="padding: 2px 8px; color: var(--d-muted); font-size: 11px">OPTIONS FOR game</div>
+          <div class="opt"><span class="gm" style="--g: var(--g-valheim)">V</span>Valheim</div>
+          <div class="opt hl"><span class="gm" style="--g: var(--g-minecraft)">M</span>Minecraft</div>
+          <div class="opt"><span class="gm" style="--g: var(--g-vintage)">VS</span>Vintage Story</div>
+          <div class="cmd">/start <em>game: Minecraft</em></div>
+        </div>
+        <div class="msg">
+          <span class="pic"></span>
+          <div>
+            <div class="who">Easy Game Server <span class="bot">APP</span> <small>Today at 19:02</small></div>
+            <div class="embed" style="--g: var(--g-minecraft)">
+              <b>Minecraft is online</b>
+              <span>World <b>Survival</b> · 0 of 10 playing</span>
+              <span>Address <span class="mono">203.0.113.25:25565</span></span>
+              <span style="color: var(--d-muted)">Multiplayer → Add Server, then paste the address.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 -->
+<section id="sleep" aria-labelledby="h-sleep">
+  <div class="sec-head">
+    <div class="num">6</div>
+    <h2 id="h-sleep">Sleep</h2>
+  </div>
+  <div class="prose">
+    <p>The computer goes to sleep only when <b>nobody is playing any game</b> for your chosen time, and nothing is downloading or backing up. Servers left running are started again when it wakes, as Valheim is today.</p>
+    <p>One optional extra: <b>stop a game when it's been empty for a while</b> (say 2 hours), so a forgotten Minecraft server isn't keeping memory busy all week. Off unless you turn it on.</p>
+  </div>
+</section>
+
+<!-- 7 -->
+<section id="outside" aria-labelledby="h-outside">
+  <div class="sec-head">
+    <div class="num">7</div>
+    <h2 id="h-outside">How friends outside your home get in</h2>
+    <p class="prose">Valheim's join code works through its own relay, so you've never had to touch your router. Minecraft and Vintage Story have nothing like that: by default, friends outside your home can only connect if the router lets them through. Three ways to handle it, and the app can offer more than one:</p>
+  </div>
+  <div class="cmp">
+    <table>
+      <thead><tr><th style="width: 26%">Way</th><th>How it works</th><th style="width: 30%">Catch</th></tr></thead>
+      <tbody>
+        <tr><td><b>App opens the ports</b> <span class="rec">Recommended first</span></td><td>The app asks your router to open each game's ports (a standard called UPnP), then checks from outside that friends can actually reach it.</td><td>Some routers have it switched off, and some internet providers share one address between homes, which stops it working.</td></tr>
+        <tr><td><b>Free tunnel</b> <span class="rec">Backup</span></td><td>A service such as playit.gg gives each game a fixed address that always works, whatever the router. Nothing for friends to install.</td><td>A one-time free sign-up. Play goes through their servers, which adds a little lag.</td></tr>
+        <tr><td><b>By hand</b></td><td>The app shows exactly which ports to open, with steps for common routers.</td><td>Fiddly, and needs the router's admin password.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="prose muted">I'll check Enshrouded and the other shortlisted games for this as the research comes in.</p>
+</section>
+
+<!-- 8 -->
+<section id="name" aria-labelledby="h-name">
+  <div class="sec-head">
+    <div class="num">8</div>
+    <h2 id="h-name">The app’s name</h2>
+    <p class="prose">“Valheim Easy Server” won't fit once it hosts Minecraft. Renaming only changes what you see: the download, the updates, your settings and your worlds carry on as they are. Some ideas, or pick your own:</p>
+  </div>
+  <div class="chips">
+    <span class="chip">Keep “Valheim Easy Server”</span>
+    <span class="chip on">Easy Game Server</span>
+    <span class="chip">Friends Game Server</span>
+    <span class="chip">Game Night Server</span>
+    <span class="chip">Longhouse</span>
+  </div>
+  <p class="note">The pictures above use “Easy Game Server” as a stand-in.</p>
+</section>
+
+</div>
+
+<script>
+(() => {
+  const games = [
+    { id: 'valheim', name: 'Valheim', tile: 'V', g: '--g-valheim', star: true, running: true, players: 2, max: 10, world: 'Midgard', join: ['Join code', '393 279'], who: 'Bjorn, Solveig', cmd: '/valheim' },
+    { id: 'minecraft', name: 'Minecraft', tile: 'M', g: '--g-minecraft', star: true, running: true, players: 1, max: 10, world: 'Survival', join: ['Address', '203.0.113.25:25565'], who: 'Astrid', cmd: '/minecraft' },
+    { id: 'vintage', name: 'Vintage Story', tile: 'VS', g: '--g-vintage', star: true, running: false, world: 'Homestead', last: 'yesterday', cmd: '/vintagestory' },
+    { id: 'terraria', name: 'Terraria', tile: 'T', g: '--g-terraria', star: false, running: true, players: 0, max: 8, world: 'Hallow Hill', join: ['Address', '203.0.113.25:7777'], who: '', cmd: '/terraria' },
+    { id: 'zomboid', name: 'Project Zomboid', tile: 'PZ', g: '--g-zomboid', star: false, running: false, world: 'Muldraugh', last: '3 weeks ago', cmd: '/zomboid' },
+    { id: 'necesse', name: 'Necesse', tile: 'N', g: '--g-necesse', star: false, running: false, world: 'Lakeside', last: '2 months ago', cmd: '/necesse' },
+  ];
+  const open = { active: true, inactive: false, ovInactive: false };
+  const root = document.getElementById('starmock');
+  const cmds = document.getElementById('starcmds');
+  if (!root) return;
+  const svg = (id) => `<svg aria-hidden="true"><use href="#${id}"/></svg>`;
+  const tile = (x) => `<span class="gm" style="--g: var(${x.g})">${x.tile}</span>`;
+  const starBtn = (x) => `<button type="button" class="starbtn${x.star ? ' on' : ''}" data-star="${x.id}" aria-pressed="${x.star}" aria-label="${x.star ? 'Unstar' : 'Star'} ${x.name}" title="${x.star ? 'Playing this now (click to unstar)' : 'Star: we’re playing this now'}">${svg('i-star')}</button>`;
+  const isActive = (x) => x.star || x.running;
+  const twirl = (key, label, n, extra) => `<button type="button" class="twirl${extra ? ' ' + extra : ''}" data-twirl="${key}" aria-expanded="${open[key]}">${svg('i-chev')}${label}<span class="n">(${n})</span></button>`;
+  const navRow = (x) => `<div class="nav">${tile(x)}<span class="grow">${x.name}</span>${x.running ? `<span class="ct live">${x.players}</span>` : ''}${starBtn(x)}</div>`;
+  function card(x) {
+    const status = x.running ? '<div class="stat"><i class="dot on"></i>Online</div>' : '<div class="stat"><i class="dot"></i>Offline</div>';
+    const info = x.running
+      ? `<div class="kv">${x.join[0]} <b class="mono">${x.join[1]}</b></div><div class="kv"><b>${x.players}</b> of ${x.max} playing${x.who ? ' · ' + x.who : ''}</div>`
+      : `<div class="kv">World <b>${x.world}</b></div><div class="kv">Last played <b>${x.last}</b></div>`;
+    const acts = x.running ? `<span class="btn">${svg('i-stop')}Stop</span>` : `<span class="btn pri">${svg('i-play')}Start</span>`;
+    return `<div class="card gcard" style="--g: var(${x.g})"><h5>${tile(x)}${x.name}<span class="tag">${x.world}</span>${starBtn(x)}</h5>${status}${info}<div class="acts">${acts}</div></div>`;
+  }
+  const idleRow = (x) => `<div class="idle-row">${tile(x)}<div><b>${x.name}</b><div class="kv">World ${x.world} · last played ${x.last}</div></div><span class="btn pri">${svg('i-play')}Start</span>${starBtn(x)}</div>`;
+  function render() {
+    const active = games.filter(isActive).sort((a, b) => Number(b.star) - Number(a.star));
+    const inactive = games.filter((x) => !isActive(x));
+    const online = games.filter((x) => x.running);
+    const playing = online.reduce((s, x) => s + (x.players || 0), 0);
+    root.innerHTML = `
+      <aside class="side">
+        <div class="brand"><span class="logo"></span><div><b>Easy Game Server</b><small>Viking Night</small></div></div>
+        <div class="nav act">${svg('i-grid')}Overview</div>
+        ${twirl('active', 'Active', active.length)}
+        ${open.active ? active.map(navRow).join('') : ''}
+        ${twirl('inactive', 'Inactive', inactive.length)}
+        ${open.inactive ? inactive.map(navRow).join('') : ''}
+        <div class="nav add">${svg('i-plus')}Add a game</div>
+        <div class="grp">App</div>
+        <div class="nav">${svg('i-chat')}Discord</div>
+        <div class="nav">${svg('i-moon')}Sleep and waking</div>
+        <div class="nav">${svg('i-gear')}App settings</div>
+        <div class="foot">Server computer: MAC-PRO</div>
+      </aside>
+      <div class="main">
+        <div class="top"><h4>Overview</h4><span class="sp"></span><span class="pill"><i class="dot on"></i>${online.length} games online <span>· ${playing} playing</span></span><span class="btn">${svg('i-moon')}Sleep</span></div>
+        ${active.length ? `<div class="grid3">${active.map(card).join('')}</div>` : '<div class="card kv">Star the games you’re playing to pin them here.</div>'}
+        <div class="card">
+          ${twirl('ovInactive', 'Inactive games', inactive.length, 'ov-twirl')}
+          ${open.ovInactive ? (inactive.length ? inactive.map(idleRow).join('') : '<div class="kv">Every game is active.</div>') : ''}
+        </div>
+      </div>`;
+    const starred = games.filter((x) => x.star).map((x) => x.cmd);
+    cmds.textContent = starred.length
+      ? `Discord commands right now: ${starred.join('  ')}. Terraria is running but isn’t starred, so it shows under Active without a Discord command.`
+      : 'No game is starred, so Discord has no game commands right now.';
+    if (!games.find((x) => x.id === 'terraria').star) return;
+    cmds.textContent = `Discord commands right now: ${starred.join('  ')}.`;
+  }
+  root.addEventListener('click', (e) => {
+    const s = e.target.closest('[data-star]');
+    if (s) {
+      const id = s.dataset.star;
+      const g = games.find((x) => x.id === id);
+      g.star = !g.star;
+      render();
+      const again = root.querySelector(`[data-star="${id}"]`);
+      if (again) again.focus();
+      return;
+    }
+    const t = e.target.closest('[data-twirl]');
+    if (t) {
+      const key = t.dataset.twirl;
+      open[key] = !open[key];
+      render();
+      const again = root.querySelector(`[data-twirl="${key}"]`);
+      if (again) again.focus();
+    }
+  });
+  render();
+})();
+</script>
+
+</body></html>
