@@ -1,0 +1,3 @@
+[2026.05.10-14.09.12:892][203]R5LogDataKeeper:              [1918203] ...erForServer::OnPlayerStateReplicateAccountId   Account connected. AccountId 8D6B9FB898AF9D0565EB2090F8C6B9AC
+[2026.05.10-14.09.13:587][203]LogNet: Join succeeded: Bosun
+[2026.05.10-14.09.37:883][936]R5LogCoopProxy:               [1918927] UR5CoopProxyServer::OnAccountDisconnected         Account disconnected. Inform Cm. AccountId 8D6B9FB898AF9D0565EB2090F8C6B9AC. BLPlayerSessionId 09551b775877490096dc457b6a50c3d3. DisconnectReason 'BL disconnected'. FarewellReason 'Go to lobby'

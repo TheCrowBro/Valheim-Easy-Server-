@@ -1,0 +1,76 @@
+﻿Log file open, 11/26/26 20:00:00
+[2026.11.26-20.00.00:105][  0]LogInit: Build: ++R5+release-0.10.0.9.32-22d39a16
+[2026.11.26-20.00.03:926][  0]R5LogCoopProxy: Verbose:      [000000] ...verDescriptionManager::SaveServerDescription    Saved server description. FilePath 'C:/EGS/games/windrose/server/R5/ServerDescription.json'. Description
+{
+	"Version": 1,
+	"DeploymentId": "0.10.0.9.32-22d39a16",
+	"ServerDescription_Persistent":
+	{
+		"PersistentServerId": "1B80182E460F727CEA080C8EEBB1EA0A",
+		"InviteCode": "d6221bb7",
+		"IsPasswordProtected": true,
+		"Password": "parrot",
+		"ServerName": "Crow's Nest",
+		"WorldIslandId": "DB57768A8A7746899683D0EEE91F97BF",
+		"MaxPlayerCount": 4,
+		"UserSelectedRegion": "",
+		"P2pProxyAddress": "192.168.1.20",
+		"UseDirectConnection": false,
+		"DirectConnectionServerAddress": "",
+		"DirectConnectionServerPort": 7777,
+		"DirectConnectionProxyAddress": "0.0.0.0",
+		"AutoLoadLatestBackupIfHasBroken": true,
+		"CanLaunchMultipleServerInstances": false
+	}
+} [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\Data\R5CoopServerDescriptionManager.cpp:77]
+[2026.11.26-20.00.03:927][  0]R5LogCoopProxy:               [000000] UR5CoopProxyServer::Init                           Server initialized. CurrentIslandId DB57768A8A7746899683D0EEE91F97BF                                [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\R5CoopProxyServer.cpp:101]
+[2026.11.26-20.00.07:100][  0]R5LogBLDalAQ:                 [000000] R5BLDalAsyncQueue::LoadDb                          [M:  -1:    1:  loadDB] Successfully loaded DB 0.10.0/Worlds/DB57768A8A7746899683D0EEE91F97BF. IdentifierId [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5BLCommon\Cpp\R5DataAbstractionLayer\R5BLDalAsyncQueue.cpp:107]
+[2026.11.26-20.00.21:350][ 40]R5LogCoopProxy:               [000040] UR5CoopProxyServer::OnServerRegistered             Server registration finished successfully. BLSessionId 5c1a0e6f0b6b4d8e9a3e2d1c0b9a8f7e     [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\R5CoopProxyServer.cpp:420]
+[2026.11.26-20.00.21:351][ 40]R5LogCoopProxy:               [000040] ...CoopProxyServer::PrintServerConnectionInfo      >= Server Connection Info ================================================================================= [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\R5CoopProxyServer.cpp:450]
+[2026.11.26-20.00.21:351][ 40]R5LogCoopProxy:               [000040] ...CoopProxyServer::PrintServerConnectionInfo      > InviteCode         : d6221bb7                                                                     [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\R5CoopProxyServer.cpp:451]
+[2026.11.26-20.00.21:351][ 40]R5LogCoopProxy:               [000040] ...CoopProxyServer::PrintServerConnectionInfo      > Password           : parrot                                                                       [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\R5CoopProxyServer.cpp:452]
+[2026.11.26-20.00.21:351][ 40]R5LogCoopProxy:               [000040] ...CoopProxyServer::PrintServerConnectionInfo      >========================================================================================================== [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\R5CoopProxyServer.cpp:453]
+[2026.11.26-20.00.22:160][ 71]R5LogDataKeeper:              [000071] IR5DataKeeperStateLogger::LogSetState              Server. Change state LoadedIslandData => WaitingForFirstAccount in 359.000 ms                       [D:\Source\Build\work\gameRepoCheckoutDir\Source\R5DataKeepers\Private\R5DataKeeperStateLogger.cpp:40]
+[2026.11.26-20.00.22:161][ 71]R5LogCoopProxy:               [000071] ...ProxyServer::SetIsReadyForHostOwnerConnect      Host server is ready for owner to connect. Semaphore R5ServerSemaphore_7d3c                         [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\R5CoopProxyServer.cpp:170]
+[2026.11.26-20.05.10:418][900]LogNet: Login request: ?BLPlayerSessionId=09551b775877490096dc457b6a50c3d3?Name=4f2a6c1e9b8d7a6f5e4d3c2b1a0f9e8d userId: NULL:4f2a6c1e9b8d7a6f5e4d3c2b1a0f9e8d platform: NULL
+[2026.11.26-20.05.10:420][900]R5LogDataKeeper:              [000900] ...erForServer::OnPlayerStateReplicateAccountId   Account connected. AccountId 8D6B9FB898AF9D0565EB2090F8C6B9AC
+Connected Accounts
+     1. Name 'Bosun'. AccountId '8D6B9FB898AF9D0565EB2090F8C6B9AC'. State 'WaitingForClientIsReady'. NetAddress 'R5:09551b775877490096dc457b6a50c3d3'. UePortal ''. ReserveMoment 2026.11.26-20.04.40. Connected in +00:00:30.020. IsReady in +00:00:00.000. TimeInGame +00:00:00.000. TimeOnServer +00:00:30.420. FarewellReason
+Reserved Accounts
+Disconnected Accounts
+ [D:\Source\Build\work\gameRepoCheckoutDir\Source\R5DataKeepers\Private\R5DataKeeperForServer.cpp:785]
+[2026.11.26-20.05.11:002][903]LogNet: Join succeeded: Bosun
+[2026.11.26-20.05.11:003][903]R5LogDataKeeper:              [000903] IR5DataKeeperStateLogger::LogSetState              ServerAccount. AccountName 'Bosun'. AccountId 8D6B9FB898AF9D0565EB2090F8C6B9AC. PlayerState BP_R5PlayerState_C_2147417529
+[2026.11.26-20.05.18:725][960]R5LogDataKeeper:              [000960] ...KeeperForServer_Account::OnClientIsReady        Client id ReadyToPlay. AccountId 8D6B9FB898AF9D0565EB2090F8C6B9AC                                   [D:\Source\Build\work\gameRepoCheckoutDir\Source\R5DataKeepers\Private\R5DataKeeperForServer_Account.cpp:612]
+[2026.11.26-20.06.20:000][990]R5LogCoopProxy:               [000990] UR5CoopDocumentBackup::SaveBackup                  Worlds/DB57768A8A7746899683D0EEE91F97BF. Save backup requested ...                                  [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\Data\R5CoopDocumentBackup.cpp:300]
+[2026.11.26-20.06.20:410][991]R5LogCoopProxy:               [000991] UR5CoopDocumentBackup::SaveBackup                  Worlds/DB57768A8A7746899683D0EEE91F97BF. Save backup has finished successfully                      [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\Data\R5CoopDocumentBackup.cpp:320]
+[2026.11.26-20.10.02:118][311]LogNet: Join succeeded: Marlinspike
+[2026.11.26-20.10.02:120][311]R5LogDataKeeper:              [001311] ...erForServer::OnPlayerStateReplicateAccountId   Account connected. AccountId A2FB1103C1A1BDA50311CB8FE66192F9
+Connected Accounts
+     1. Name 'Bosun'. AccountId '8D6B9FB898AF9D0565EB2090F8C6B9AC'. State 'ReadyToPlay'. NetAddress 'R5:09551b775877490096dc457b6a50c3d3'. UePortal ''. ReserveMoment 2026.11.26-20.04.40. Connected in +00:00:30.020. IsReady in +00:00:08.305. TimeInGame +00:04:43.395. TimeOnServer +00:05:22.120. FarewellReason
+     2. Name 'Marlinspike'. AccountId 'A2FB1103C1A1BDA50311CB8FE66192F9'. State 'WaitingForClientIsReady'. NetAddress 'R5:2797c04f3cfcbbedbd1bea88277971a4'. UePortal ''. ReserveMoment 2026.11.26-20.09.31. Connected in +00:00:31.100. IsReady in +00:00:00.000. TimeInGame +00:00:00.000. TimeOnServer +00:00:31.120. FarewellReason
+Reserved Accounts
+Disconnected Accounts
+ [D:\Source\Build\work\gameRepoCheckoutDir\Source\R5DataKeepers\Private\R5DataKeeperForServer.cpp:785]
+[2026.11.26-20.40.53:314][347]R5LogCoopProxy:               [026308] UR5CoopProxyServer::OnAccountDisconnected          Account disconnected. Inform Cm. AccountId A2FB1103C1A1BDA50311CB8FE66192F9. BLPlayerSessionId 2797c04f3cfcbbedbd1bea88277971a4. DisconnectReason 'BL P2PGate disconnected. RemoteAddress 203.0.113.11:3478. Value 10054. Message Connection reset by peer.
+'. FarewellReason '' [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\R5CoopProxyServer.cpp:613]
+[2026.11.26-20.40.53:478][352]R5LogCheck: Warning: [-1:026308]
+!!! R5Ensure happens !!!
+	Condition: 'false'
+	Message:   Unexpected BL disconnect. AccountId A2FB1103C1A1BDA50311CB8FE66192F9. BLPlayerSessionId '2797c04f3cfcbbedbd1bea88277971a4'
+	Where:     UR5DataKeeperForServer::OnAccountBLDisconnected::<lambda_10>::operator () [D:\Source\Build\work\gameRepoCheckoutDir\Source\R5DataKeepers\Private\R5DataKeeperForServer.cpp:267]
+[2026.11.26-20.40.53:883][364]R5LogDataKeeper:              [026308] ...ForServer::OnAccountBLDisconnected::<lambda>    Account was disconnected. AccountId A2FB1103C1A1BDA50311CB8FE66192F9. bDisconnected false           [D:\Source\Build\work\gameRepoCheckoutDir\Source\R5DataKeepers\Private\R5DataKeeperForServer.cpp:279]
+[2026.11.26-20.55.37:883][936]R5LogCoopProxy:               [1918927] UR5CoopProxyServer::OnAccountDisconnected         Account disconnected. Inform Cm. AccountId 8D6B9FB898AF9D0565EB2090F8C6B9AC. BLPlayerSessionId 09551b775877490096dc457b6a50c3d3. DisconnectReason 'BL disconnected'. FarewellReason 'Go to lobby' [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\R5CoopProxyServer.cpp:613]
+[2026.11.26-20.55.37:890][936]R5LogDataKeeper:              [1918927] ...rver::MoveAccountToListOfDisconnected          Account disconnected. AccountId 8D6B9FB898AF9D0565EB2090F8C6B9AC
+Connected Accounts
+Reserved Accounts
+Disconnected Accounts
+     1. Name 'Marlinspike'. AccountId 'A2FB1103C1A1BDA50311CB8FE66192F9'. State 'ReadyToPlay'. NetAddress 'R5:2797c04f3cfcbbedbd1bea88277971a4'. UePortal ''. ReserveMoment 2026.11.26-20.09.31. Connected in +00:00:31.100. IsReady in +00:00:06.000. TimeInGame +00:31:10.200. TimeOnServer +00:31:22.194. FarewellReason
+     2. Name 'Bosun'. AccountId '8D6B9FB898AF9D0565EB2090F8C6B9AC'. State 'ReadyToPlay'. NetAddress 'R5:09551b775877490096dc457b6a50c3d3'. UePortal ''. ReserveMoment 2026.11.26-20.04.40. Connected in +00:00:30.020. IsReady in +00:00:08.305. TimeInGame +00:50:19.162. TimeOnServer +00:50:57.890. FarewellReason Go to lobby
+ [D:\Source\Build\work\gameRepoCheckoutDir\Source\R5DataKeepers\Private\R5DataKeeperForServer.cpp:830]
+[2026.11.26-21.00.00:001][100]LogCore: Warning: *** INTERRUPTED *** : CTRL-C TO FORCE QUIT
+[2026.11.26-21.00.00:002][100]LogCore: Engine exit requested (reason: ConsoleCtrl RequestExit)
+[2026.11.26-21.00.00:150][101]R5LogCoopProxy:               [000101] UR5CoopProxyServer::PreDeinitialize                Start on exit sync backups                                                                          [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\R5CoopProxyServer.cpp:700]
+[2026.11.26-21.00.00:410][102]R5LogCoopProxy:               [000102] UR5CoopDocumentBackup::SaveBackup                  Worlds/DB57768A8A7746899683D0EEE91F97BF. Save backup has finished successfully                      [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\Data\R5CoopDocumentBackup.cpp:320]
+[2026.11.26-21.00.00:700][103]LogExit: Exiting.
+[2026.11.26-21.00.00:701][103]Log file closed, 11/26/26 21:00:00

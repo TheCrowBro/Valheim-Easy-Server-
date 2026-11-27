@@ -1,0 +1,51 @@
+[2026.05.06-20.05.39:833][ 66]R5LogDataKeeper: Verbose:     [002066] ...Server_Account::ShutdownBLReactors::<lambda>    Main reactor was stopped                                                                            [D:\Source\Build\work\gameRepoCheckoutDir\Source\R5DataKeepers\Private\R5DataKeeperForServer_Account.cpp:480]
+[2026.05.06-20.05.39:833][ 66]R5LogDataKeeper: Verbose:     [002066] ...perForServer_Account::ShutdownBLProxyReactor    Proxy reactor doesn't exist                                                                         [D:\Source\Build\work\gameRepoCheckoutDir\Source\R5DataKeepers\Private\R5DataKeeperForServer_Account.cpp:496]
+[2026.05.06-20.05.39:833][ 66]R5LogBLDalAQ:                 [002066] R5BLDalAsyncQueue::Synchronize                     [M:  -1:  990:    sync] Successfully synchronized                                                   [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5BLCommon\Cpp\R5DataAbstractionLayer\R5BLDalAsyncQueue.cpp:91]
+[2026.05.06-20.05.39:834][ 66]R5LogBLDalAQ:                 [002066] R5BLDalAsyncQueue::Synchronize                     [M:  -1:  991:    sync] Successfully synchronized                                                   [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5BLCommon\Cpp\R5DataAbstractionLayer\R5BLDalAsyncQueue.cpp:91]
+[2026.05.06-20.05.39:834][ 66]R5LogCoopProxy:               [002066] UR5CoopProxyServer::OnAccountDisconnected          Account disconnected. Inform Cm. AccountId 1541602D833B8A1B74A9242AB4402812. BLPlayerSessionId b284c5a9bb72c175208718699127c45a. DisconnectReason 'BL P2PGate disconnected. RemoteAddress 203.0.113.10:3478. Value 10054. Message Connection reset by peer.
+'. FarewellReason '' [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\R5CoopProxyServer.cpp:573]
+[2026.05.06-20.05.39:834][ 66]R5LogNet:                     [002066] R5NetServer::SendDisconnectToCm                    [0x152fc0926b50-    68] Send disconnect to Cm. BLPlayerSessionId b284c5a9bb72c175208718699127c45a. DisconnectReason BL P2PGate disconnected. RemoteAddress 203.0.113.10:3478. Value 10054. Message Connection reset by peer.
+. FarewellReason [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5Net\Cpp\R5NetServer.cpp:235]
+[2026.05.06-20.05.39:834][ 66]R5LogNetCm:                   [002066] ...lient_GsStream_P2pClient::PlayerDisconnected    [0x152ff6fd3740-    68] [b284c5a9bb72c175208718699127c45a] PlayerDisconnected. State Broken. DisconnectReason BL P2PGate disconnected. RemoteAddress 203.0.113.10:3478. Value 10054. Message Connection reset by peer.
+. FarewellReason . [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5Net\Cpp\Cm\GsStream\R5NetCmClient_GsStream_P2pClient.cpp:83]
+[2026.05.06-20.05.39:834][ 66]R5LogNetCm: Verbose:          [002066] ...t_GsStream_ClientReactor::PlayerDisconnected    [Gs[0]-812023E13B3A5E90094CECD73B538678] Player disconnected. BLPlayerSessionId b284c5a9bb72c175208718699127c45a [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5Net\Cpp\Cm\GsStream\R5NetCmClient_GsStream_ClientReactor.cpp:131]
+[2026.05.06-20.05.39:834][ 66]R5LogNetCm: Verbose:          [002066] R5NetCmClient_GsStream_P2pClient::RemovePlayer     [0x152ff6fd3740-    68] [b284c5a9bb72c175208718699127c45a] Account already disconnected. State Broken [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5Net\Cpp\Cm\GsStream\R5NetCmClient_GsStream_P2pClient.cpp:101]
+[2026.05.06-20.05.39:834][ 66]R5LogP2pGate: Verbose:        [002066] ...p::R5AsioContextKeeper::FinishIoContextUsage    [tcp] Asio io context usage counter after finish: 0                                                 [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5P2pGate\Cpp\AsioWrappers\R5AsioContextKeeper.cpp:53]
+[2026.05.06-20.05.39:834][ 66]R5LogP2pGate:                 [002066] R5P2p::R5P2pGate::~R5P2pGate                       [b284c5a9bb72c175208718699127c45a] P2p proxy destroyed                                              [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5P2pGate\Cpp\R5P2pGate.cpp:41]
+[2026.05.06-20.05.39:834][ 66]R5LogP2pGate:                 [002066] ...:R5P2pGrpcProxyServer::~R5P2pGrpcProxyServer    [b284c5a9bb72c175208718699127c45a] R5P2pGrpcProxyServer destroyed. BLServerAddress 127.0.0.1:44597  [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5P2pGate\Cpp\Proxies\R5P2pGrpcProxyServer.cpp:76]
+[2026.05.06-20.05.39:834][ 66]R5LogP2pGate:                 [002066] ...p::R5P2pProxyPassthrough::PrintInactiveStats    [b284c5a9bb72c175208718699127c45a] Last activity stats. Outgoing Read 685 msec. Incoming Read 1024 msec. Outgoing Write 1023 msec. Incoming Write 684 msec. [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5P2pGate\Cpp\Proxies\R5P2pProxyPassthrough.cpp:103]
+[2026.05.06-20.05.39:834][ 66]R5LogNetBL:                   [002066] R5NetBlServerReactorV2::ProcessOnDisconnect        [Gc-48227B217F7F40FF85E203E69550745B] Finish subscription. this: '0x152fee2886f0'. handle '1'       [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5Net\Cpp\BL\R5NetBlServerReactorV2.cpp:551]
+[2026.05.06-20.05.39:837][ 66]R5LogCheck: Warning: [-1:002066]
+!!! R5Ensure happens !!!
+        Condition: 'false'
+        Message:   Unexpected BL disconnect. AccountId 1541602D833B8A1B74A9242AB4402812. BLPlayerSessionId 'b284c5a9bb72c175208718699127c45a'
+        Where:     UR5DataKeeperForServer::OnAccountBLDisconnected::<lambda_10>::operator () [D:\Source\Build\work\gameRepoCheckoutDir\Source\R5DataKeepers\Private\R5DataKeeperForServer.cpp:267]
+[2026.05.06-20.05.39:838][ 66]LogOutputDevice: Warning: === FR5CheckDetails::PrintCallstackToLog ===
+[2026.05.06-20.05.39:838][ 66]LogOutputDevice: Warning: 
+[2026.05.06-20.05.39:838][ 66]LogOutputDevice: Warning: [Callstack] 0x0000000146d9b5c1 WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:838][ 66]LogOutputDevice: Warning: [Callstack] 0x0000000144e9dd2c WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:838][ 66]LogOutputDevice: Warning: [Callstack] 0x0000000144f1b326 WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:838][ 66]LogOutputDevice: Warning: [Callstack] 0x000000014446c018 WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:839][ 66]LogOutputDevice: Warning: [Callstack] 0x0000000144163a65 WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:839][ 66]LogOutputDevice: Warning: [Callstack] 0x000000014128218b WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:839][ 66]LogOutputDevice: Warning: [Callstack] 0x000000014128d991 WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:840][ 66]LogOutputDevice: Warning: [Callstack] 0x0000000141287e3f WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:840][ 66]LogOutputDevice: Warning: [Callstack] 0x00000001416ead85 WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:840][ 66]LogOutputDevice: Warning: [Callstack] 0x00000001416f1525 WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:840][ 66]LogOutputDevice: Warning: [Callstack] 0x00000001416ec5de WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:840][ 66]LogOutputDevice: Warning: [Callstack] 0x00000001416c374f WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:841][ 66]LogOutputDevice: Warning: [Callstack] 0x0000000143857850 WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:841][ 66]LogOutputDevice: Warning: [Callstack] 0x0000000144104201 WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:841][ 66]LogOutputDevice: Warning: [Callstack] 0x000000014410777c WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:841][ 66]LogOutputDevice: Warning: [Callstack] 0x00000001441077fa WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:841][ 66]LogOutputDevice: Warning: [Callstack] 0x000000014410826d WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:841][ 66]LogOutputDevice: Warning: [Callstack] 0x000000014410d6e4 WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:841][ 66]LogOutputDevice: Warning: [Callstack] 0x000000014bffa58e WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.05.06-20.05.39:842][ 66]LogOutputDevice: Warning: [Callstack] 0x00006fffffa21469 kernel32.dll!UnknownFunction []
+[2026.05.06-20.05.39:842][ 66]LogOutputDevice: Warning: [Callstack] 0x00006fffffc00d2b ntdll.dll!UnknownFunction []
+[2026.05.06-20.05.39:842][ 66]LogOutputDevice: Warning: 
+[2026.05.06-20.05.39:862][ 66]LogSentrySdk: ---- SentryUrl ----
+[2026.05.06-20.05.39:862][ 66]LogSentrySdk:                     https://sentry.windrose.support/organizations/sentry/issues/?query=id%3A9218452c432b4a6639e105f9f340badb
+[2026.05.06-20.05.39:862][ 66]R5LogDataKeeper:              [002066] ...ForServer::OnAccountBLDisconnected::<lambda>    Account was disconnected. AccountId 1541602D833B8A1B74A9242AB4402812. bDisconnected false           [D:\Source\Build\work\gameRepoCheckoutDir\Source\R5DataKeepers\Private\R5DataKeeperForServer.cpp:279]
+[2026.05.06-20.05.39:862][ 66]R5LogNet:                     [002066] R5NetBlServerReactorV2::ProcessOnDisconnect        Drop '10' client documents                                                                          [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5Net\Cpp\BL\R5NetBlServerReactorV2.cpp:578]
+[2026.05.06-20.05.39:862][ 66]LogStreaming: Warning: Took 900.61ms to ProcessLoadedPackages

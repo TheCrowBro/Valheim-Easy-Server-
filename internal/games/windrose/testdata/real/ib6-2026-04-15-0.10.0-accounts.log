@@ -1,0 +1,6 @@
+Connected Accounts
+Reserved Accounts
+Disconnected Accounts
+     1. Name 'Saltbeard'. AccountId '957802781F5017AB8F2942726F07F94E'. State 'WaitingForClientIsReady'. NetAddress 'R5:a1fc31d8d8130f290f64fed72f22f337'. UePortal ''. ReserveMoment 2026.04.15-01.50.40. Connected in +00:00:47.188. IsReady in +00:00:00.000. TimeInGame +739720.01:51:38.835. TimeOnServer +00:00:11.320. FarewellReason
+     2. Name 'Saltbeard'. AccountId '957802781F5017AB8F2942726F07F94E'. State 'WaitingForClientIsReady'. NetAddress 'R5:77bfdd45290fddbea935c07fb0afcb0a'. UePortal ''. ReserveMoment 2026.04.15-01.52.47. Connected in +00:00:42.173. IsReady in +00:00:00.000. TimeInGame +739720.01:53:35.530. TimeOnServer +00:00:06.355. FarewellReason
+     3. Name 'Saltbeard'. AccountId '957802781F5017AB8F2942726F07F94E'. State 'ReadyToPlay'. NetAddress 'R5:a1f7138cf5ce66edc5fdd45658042781'. UePortal ''. ReserveMoment 2026.04.15-02.06.57. Connected in +00:00:43.020. IsReady in +00:00:07.725. TimeInGame +00:00:05.487. TimeOnServer +00:00:13.212. FarewellReason
