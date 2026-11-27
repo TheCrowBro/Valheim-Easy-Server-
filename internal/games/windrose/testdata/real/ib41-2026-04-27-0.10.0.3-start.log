@@ -1,0 +1,52 @@
+[2026.04.27-15.26.52:926][  0]R5LogCoopProxy: Verbose:      [000000] UR5CoopIslandCollection::SetCurrentIslandId        Set CurrentIslandId first                                                                           [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\Data\R5CoopIslandCollection.cpp:127]
+[2026.04.27-15.26.52:926][  0]R5LogCoopProxy: Verbose:      [000000] ...verDescriptionManager::SaveServerDescription    Saved server description. FilePath 'Z:/home/gameserver/server-files/R5/ServerDescription.json'. Description
+{
+        "Version": 1,
+        "DeploymentId": "0.10.0.3.104-256f9653",
+        "ServerDescription_Persistent":
+        {
+                "PersistentServerId": "...",
+                "InviteCode": "<snip>",
+                "IsPasswordProtected": true,
+                "Password": "<snip>",
+                "ServerName": "<snip>",
+                "WorldIslandId": "first",
+                "MaxPlayerCount": 10,
+                "UserSelectedRegion": "EU",
+                "P2pProxyAddress": "127.0.0.1",
+                "UseDirectConnection": false,
+                "DirectConnectionServerAddress": "",
+                "DirectConnectionServerPort": 7777,
+                "DirectConnectionProxyAddress": "0.0.0.0"
+        }
+} [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\Data\R5CoopServerDescriptionManager.cpp:77]
+[2026.04.27-15.26.52:927][  0]R5LogCoopProxy:               [000000] UR5CoopRootDocument::LoadRecordToDataCache         Loading record 'R5BLIsland[first]' to data cache. Up to date                                        [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\Data\R5CoopRootDocument.cpp:140]
+[2026.04.27-15.26.52:927][  0]R5LogBLDalAQ:                 [000000] R5BLDalAsyncQueue::Init                            [?:  -1:    0: unknown] Started worker thread 416                                                   [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5BLCommon\Cpp\R5DataAbstractionLayer\R5BLDalAsyncQueue.cpp:47]
+[2026.04.27-15.26.52:927][  0]R5LogBLDalAQ:                 [000000] R5BLDalAsyncQueue::Init                            [M:  -1:   -1: con2srv] Connecting to DB server. Uri 'Z:/home/gameserver/server-files/R5/Saved/SaveProfiles/Default/RocksDB/' [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5BLCommon\Cpp\R5DataAbstractionLayer\R5BLDalAsyncQueue.cpp:59]
+[2026.04.27-15.26.52:927][  0]R5LogBLDalAQ:                 [000000] R5BLDalAsyncQueue::Worker                          [s:  -1:    1: unknown] Worker started                                                              [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5BLCommon\Cpp\R5DataAbstractionLayer\R5BLDalAsyncQueue.cpp:999]
+[2026.04.27-15.26.56:100][  0]R5LogBLDalAQ:                 [000000] R5BLDalAsyncQueue::LoadDb                          [M:  -1:    1:  loadDB] Successfully loaded DB 0.10.0/Worlds/first. IdentifierId                    [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5BLCommon\Cpp\R5DataAbstractionLayer\R5BLDalAsyncQueue.cpp:107]
+[2026.04.27-15.26.56:100][  0]R5LogBLDalAQ:                 [000000] R5BLRocksAsyncQueue::DoJob                         [s:  -1:    1:  loadDB] Successfully created DB 0.10.0/Worlds/first. IdentifierId                   [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5RocksDAL\Cpp\R5BLRocksAsyncQueue.cpp:877]
+[2026.04.27-15.26.56:100][  0]R5LogBLDalAQ: Warning:        [000000] R5BLDalAsyncQueue::DetectProblems                  [s:  -1:    1:  loadDB] EXTREMELY slow task. Task was finished in 3172 ms. DebugInfo
+Loading DB 0.10.0/Worlds/first. IdentifierId  [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5BLCommon\Cpp\R5DataAbstractionLayer\R5BLDalAsyncQueue.cpp:1208]
+[2026.04.27-15.26.56:101][  0]R5LogBLDocMan:                [000000] R5BLDocumentManager::LoadDocumentAsync             Document was not loaded. Type R5BLIsland. RegionId . Id first                                       [D:\Source\Build\work\gameRepoCheckoutDir\Plugins\R5BusinessLogicCore\Source\R5BLCommon\Cpp\Documents\Manager\R5BLDocumentManager.cpp:547]
+[2026.04.27-15.26.56:101][  0]R5LogCoopProxy:               [000000] UR5CoopRootDocument::LoadRecordToDataCache         Record 'R5BLIsland[first]' loaded to data cache                                                     [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\Data\R5CoopRootDocument.cpp:162]
+[2026.04.27-15.26.56:101][  0]R5LogCoopProxy: Error:        [000000] UR5CoopProxyServer::Init                           Cannot load island 'first'                                                                          [D:\Source\Build\work\gameRepoCheckoutDir\Source\BackendProxy\R5CoopProxy\Private\R5CoopProxyServer.cpp:85]
+[2026.04.27-15.26.56:102][  0]LogWindows: Error: appError called: Fatal error: [File:D:\Source\Build\work\gameRepoCheckoutDir\Source\R5DataKeepers\Private\R5DataKeeperForServerCoop.cpp] [Line: 146]
+      [000000] UR5DataKeeperForServerCoop::InitializeBLServer     Cannot init Coop NetServer                                                                          [D:\Source\Build\work\gameRepoCheckoutDir\Source\R5DataKeepers\Private\R5DataKeeperForServerCoop.cpp:146]
+
+
+
+[2026.04.27-15.26.56:102][  0]LogWindows: Windows GetLastError: Success. (0)
+[2026.04.27-15.27.00:367][  0]LogOutputDevice: Error: === Crash Stack Trace: ===
+[2026.04.27-15.27.00:367][  0]LogOutputDevice: Error:
+[2026.04.27-15.27.00:368][  0]LogOutputDevice: Error: [Callstack] 0x0000000141475346 WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.04.27-15.27.00:368][  0]LogOutputDevice: Error: [Callstack] 0x000000014413addd WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.04.27-15.27.00:368][  0]LogOutputDevice: Error: [Callstack] 0x00000001414021c3 WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.04.27-15.27.00:368][  0]LogOutputDevice: Error: [Callstack] 0x0000000141370a6a WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.04.27-15.27.00:368][  0]LogOutputDevice: Error: [Callstack] 0x0000000146d081af WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.04.27-15.27.00:369][  0]LogOutputDevice: Error: [Callstack] 0x0000000146d09d58 WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.04.27-15.27.00:369][  0]LogOutputDevice: Error: [Callstack] 0x0000000146d06fff WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.04.27-15.27.00:369][  0]LogOutputDevice: Error: [Callstack] 0x0000000143e5dd2c WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.04.27-15.27.00:369][  0]LogOutputDevice: Error: [Callstack] 0x0000000143e6cdeb WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.04.27-15.27.00:370][  0]LogOutputDevice: Error: [Callstack] 0x00000001438484eb WindroseServer-Win64-Shipping.exe!UnknownFunction []
+[2026.04.27-15.27.00:370][  0]LogOutputDevice: Error: [Callstack] 0x0000000149232067 WindroseServer-Win64-Shipping.exe!UnknownFunction []

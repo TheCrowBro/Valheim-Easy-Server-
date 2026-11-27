@@ -1,0 +1,10 @@
+# The Windrose server's command line as the Plan builds it (spec 5.11).
+# Paths are relative to the instance's folder, games/windrose.
+
+exe: <instance>/server/R5/Binaries/Win64/WindroseServer-Win64-Shipping
+dir: <instance>/server
+  -log
+output: GameLog <instance>/server/R5/Saved/Logs/R5.log
+readyWait: 5m0s
+record: server Crow's Nest ✓ <&>, password set yes
+record extra: inviteCode d6221bb7, worldId DB57768A8A7746899683D0EEE91F97BF
