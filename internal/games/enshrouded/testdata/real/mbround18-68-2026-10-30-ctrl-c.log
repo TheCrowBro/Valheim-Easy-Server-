@@ -1,0 +1,12 @@
+[I 00:11:31,316] -------------- Session ----------------
+[I 00:11:31,317] Machines:
+[I 00:11:31,318] m#0(128): up 0 (0), down 0 (0), remote 0 (0), limit 256, lost 0, ping 0 ms, EstablishingBaseline
+[I 00:11:31,319] ---------------------------------------
+[I 00:12:01,331] -------------- Session ----------------
+[I 00:12:01,331] Machines:
+[I 00:12:01,332] m#0(128): up 0 (0), down 0 (0), remote 0 (0), limit 256, lost 0, ping 0 ms, EstablishingBaseline
+[I 00:12:01,333] ---------------------------------------
+[I 00:12:22,566] [app] Trigger gameflow shutdown, exit: Ctrl_C
+[I 00:12:22,568] [app] start destruction step StartGame
+[I 00:12:22,568] [app] start destruction step CreateServer
+[I 00:12:22,580] [game_server] Switching state from Run to Shutdown after 730.20 s

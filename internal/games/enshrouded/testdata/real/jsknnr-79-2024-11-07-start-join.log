@@ -1,0 +1,182 @@
+[I 00:00:00,203] [enshrouded] Create logfile
+[I 00:00:00,203] enshrouded_server(detached HEAD) - version a19b06956a82d073048ab0121d6ced02ecc5d3b1 (master)
+[I 00:00:00,203] CPUs:
+[I 00:00:00,203]  Idx   Id  Group  LogIdx  CoreIdx  LLCIdx  NumaIdx  EffClass
+[I 00:00:00,203]   0   256    0       0        0       3       0        0
+[I 00:00:00,204]   1   257    0       1        1       3       0        0
+[I 00:00:00,204]   2   258    0       2        2       3       0        0
+[I 00:00:00,204]   3   259    0       3        3       3       0        0
+[I 00:00:00,204]   4   260    0       4        4       3       0        0
+[I 00:00:00,204]   5   261    0       5        5       3       0        0
+[I 00:00:00,204]   6   262    0       6        6       3       0        0
+[I 00:00:00,204]   7   263    0       7        7       3       0        0
+[I 00:00:00,205]   8   264    0       8        8      28       0        0
+[I 00:00:00,205]   9   265    0       9        9      28       0        0
+[I 00:00:00,205]  10   266    0      10       10      28       0        0
+[I 00:00:00,205]  11   267    0      11       11      28       0        0
+[I 00:00:00,205]  12   268    0      12       12      28       0        0
+[I 00:00:00,205]  13   269    0      13       13      28       0        0
+[I 00:00:00,205]  14   270    0      14       14      28       0        0
+[I 00:00:00,205]  15   271    0      15       15      28       0        0
+[I 00:00:00,206] CPU Types:
+[I 00:00:00,206]   Performance:  16   0000000000000000000000000000000000000000000000001111111111111111
+[I 00:00:00,206]   Efficient:     0   0000000000000000000000000000000000000000000000000000000000000000
+[I 00:00:00,206] [task] TaskSystemSetup:
+[I 00:00:00,206] [task]   mainWorkerCount:     2
+[I 00:00:00,206] [task]   nextMainWorkerIndex: 1
+[I 00:00:00,206] [task]   Group 'default'  worker:10  main:2
+[I 00:00:00,206] [task]      0:  Task-default00  0000000000000000000000000000000000000000000000000000000000000000
+[I 00:00:00,207] [task]      1:  Task-default01  0000000000000000000000000000000000000000000000000000000000000000
+[I 00:00:00,207] [task]      2:  Task-default02  0000000000000000000000000000000000000000000000001111111111111111
+[I 00:00:00,207] [task]      3:  Task-default03  0000000000000000000000000000000000000000000000001111111111111111
+[I 00:00:00,207] [task]      4:  Task-default04  0000000000000000000000000000000000000000000000001111111111111111
+[I 00:00:00,207] [task]      5:  Task-default05  0000000000000000000000000000000000000000000000001111111111111111
+[I 00:00:00,207] [task]      6:  Task-default06  0000000000000000000000000000000000000000000000001111111111111111
+[I 00:00:00,207] [task]      7:  Task-default07  0000000000000000000000000000000000000000000000001111111111111111
+[I 00:00:00,207] [task]      8:  Task-default08  0000000000000000000000000000000000000000000000001111111111111111
+[I 00:00:00,208] [task]      9:  Task-default09  0000000000000000000000000000000000000000000000001111111111111111
+[I 00:00:00,208] [task]   Group 'background'  worker:8  main:0
+[I 00:00:00,208] [task]      0:  Task-background00  0000000000000000000000000000000000000000000000001111111111111111
+[I 00:00:00,208] [task]      1:  Task-background01  0000000000000000000000000000000000000000000000001111111111111111
+[I 00:00:00,208] [task]      2:  Task-background02  0000000000000000000000000000000000000000000000001111111111111111
+[I 00:00:00,208] [task]      3:  Task-background03  0000000000000000000000000000000000000000000000001111111111111111
+[I 00:00:00,208] [task]      4:  Task-background04  0000000000000000000000000000000000000000000000001111111111111111
+[I 00:00:00,209] [task]      5:  Task-background05  0000000000000000000000000000000000000000000000001111111111111111
+[I 00:00:00,209] [task]      6:  Task-background06  0000000000000000000000000000000000000000000000001111111111111111
+[I 00:00:00,209] [task]      7:  Task-background07  0000000000000000000000000000000000000000000000001111111111111111
+[I 00:00:00,209] [app] start creation step Init
+[I 00:00:00,209] [app] start creation step Init_Steamworks
+[I 00:00:00,287] [app] start creation step Init_ResourceSystem
+[I 00:00:00,289] [resource] Loaded kfc file 'Z:/home/steam/enshrouded/enshrouded_server.kfc' with 30,813 resources.
+[I 00:00:00,311] [os] Started thread 0x00000000035a0a00 (ResourceContent) with stack range (0x000000001cf80000-0x000000001d080000 size:1,048,576)
+[I 00:00:00,312] [os] Started thread 0x00000000035a2a88 (AsyncIo(ResourceContent)) with stack range (0x000000001d180000-0x000000001d280000 size:1,048,576)
+[I 00:00:00,434] [resource] Loaded 189,266,568 bytes of resource data in 123.13 ms
+[I 00:00:00,437] [app] start creation step Init_ResourcePreload_Start
+[I 00:00:00,438] [app] start creation step Init_ResourcePreload_Wait
+[I 00:00:00,438] [resource] Preload of 0 bytes finished after 140.00 us (0.00 MiB/s)
+[I 00:00:00,438] [app] start creation step Init_Version
+[I 00:00:00,438] Game Version (SVN): 602428
+[I 00:00:00,438] [app] start creation step Init_UserSystem
+[W 00:00:00,438] [user] Couldn't retrieve steam friends interface.
+[W 00:00:00,438] [user] Couldn't retrieve steam user interface.
+[I 00:00:00,438] [app] start creation step Init_OnlineSystem
+[I 00:00:00,442] [OnlineProviderSteam] started transition from 'Uninitialized' to 'Initialized' (current='<invalid>')!
+[I 00:00:00,442] [app] start creation step Init_Session
+[I 00:00:00,443] [os] Started thread 0x00000000117708f8 (P2pReceiveThread) with stack range (0x000000001d380000-0x000000001d480000 size:1,048,576)
+[I 00:00:00,443] [os] Started thread 0x0000000011770928 (P2pSendThread) with stack range (0x000000001d580000-0x000000001d680000 size:1,048,576)
+[I 00:00:00,446] [app] start creation step Init_Tracking
+[I 00:00:00,446] [os] Started thread 0x0000000011770e58 (Session) with stack range (0x0000000025780000-0x0000000025880000 size:1,048,576)
+[I 00:00:00,446] [app] start creation step Init_SaveDataSystem
+[E 00:00:00,446] [savedata] Couldn't retrieve steam remote storage interface.
+[W 00:00:00,446] [savedata] Steam Cloud is disabled.
+[I 00:00:00,447] [os] Started thread 0x000000002e58ff88 (HttpClient) with stack range (0x0000000036590000-0x0000000036690000 size:1,048,576)
+[I 00:00:00,448] [app] start creation step Load_ResourceObject
+[I 00:00:00,448] [os] Started thread 0x000000002577ff90 (SaveData) with stack range (0x0000000036790000-0x0000000036890000 size:1,048,576)
+[I 00:00:00,448] [app] start creation step Init_TwitchDrops
+[I 00:00:00,449] [app] start creation step Init_ServerThread
+[I 00:00:00,450] [app] start creation step StartGame
+[I 00:00:00,450] [app] start creation step Init
+[I 00:00:00,450] [app] start creation step StartGame
+[I 00:00:00,450] [Session] started transition from 'Lobby' to 'Host_Online' (current='<invalid>')!
+[I 00:00:00,450] [os] Started thread 0x0000000009c6cca8 (HttpClient) with stack range (0x0000000036990000-0x0000000036a90000 size:1,048,576)
+[I 00:00:00,450] [Session] 'PrepareGame' (up)!
+[I 00:00:00,451] [os] Started thread 0x0000000009c754a8 (GameServer) with stack range (0x0000000036b90000-0x0000000036c90000 size:1,048,576)
+[I 00:00:00,456] -------------- Session ----------------
+[I 00:00:00,456] Machines:
+[I 00:00:00,456]   m#0(128): up 0 (0), down 0 (0), remote 0 (0), limit 2,048, lost 0, ping 9,223,372,036,854 ms, EstablishingBaseline
+[I 00:00:00,456] ---------------------------------------
+[I 00:00:00,597] [savedata] Start 'Open Container' on container 3ad85aea
+[I 00:00:00,597] [savedata] Updating 'Open Container' on container 3ad85aea
+[I 00:00:00,597] [savedata] Finished 'Open Container' on container 3ad85aea
+[I 00:00:00,601] [ecss] TaskQueue:  workerCount:8   taskWorkerCount:7   0000000000000000000000000000000000000000000000000000000011111110
+[I 00:00:00,781] [TerraformingEfficiencyRegistry] Finished loading.
+[I 00:00:00,803] [ecs] Nobuild zones changed
+[I 00:00:00,803] [ecs] Build zones changed
+[I 00:00:00,803] [ecs] Build zones changed
+[I 00:00:00,803] [ecs] PlayableArea zones changed
+[I 00:00:00,814] [savexxx] LOAD 1 bases 106 entities
+[I 00:00:00,814] [ecs] readEntitySerializationContext: Templates: 18  Components: 168  Size: 65,384
+[I 00:00:00,815] [guid_registry] VoxelBlueprintRegistry: Finished loading entry e284b901-c3dd-4282-8a4e-0a618e5763f5.
+[I 00:00:00,815] [guid_registry] VoxelBlueprintRegistry: Finished loading entry 27a9e067-4b9f-45cf-b966-208a5ecbd53b.
+[I 00:00:00,815] [guid_registry] VoxelBlueprintRegistry: Finished loading entry 85e3baea-7c93-4d6f-b1be-42f79b036761.
+[I 00:00:00,815] [guid_registry] VoxelBlueprintRegistry: Finished loading entry 28c4b2ca-4a01-4ba9-9e05-49c871df6904.
+[I 00:00:00,815] [guid_registry] VoxelBlueprintRegistry: Finished loading entry ec28c5d5-9d23-413e-b238-781157fb2f65.
+[I 00:00:00,816] [guid_registry] VoxelBlueprintRegistry: Finished loading entry 5d9bd376-5b7f-4db4-8f2e-6a3e564194b1.
+[I 00:00:00,816] [guid_registry] VoxelBlueprintRegistry: Finished loading entry 34aa0c3c-9a88-4f8b-a070-64827a5fdabf.
+[I 00:00:00,845] [ecs] Build zones changed
+[I 00:00:00,845] [ecs] Build zones changed
+[I 00:00:01,035] [online] Server connected to Steam successfully
+[I 00:00:01,281] [online] Server is not VAC Secure!
+[I 00:00:01,281] [online] Server SteamId: xxxxxxxxxxxxxxxxxx
+[I 00:00:01,282] [online] Public ipv4: xxxxxxxxxxxxxx
+[I 00:00:01,282] [OnlineProviderSteam] 'Initialize' (up)!
+[I 00:00:01,282] [OnlineProviderSteam] 'JoinOrCreateGame' (up)!
+[I 00:00:01,282] [OnlineProviderSteam] 'SetLobbyData' (up)!
+[I 00:00:01,282] [OnlineProviderSteam] 'JoinLocalPlayers' (up)!
+[I 00:00:01,283] [OnlineProviderSteam] 'ConnectToPeers' (up)!
+[I 00:00:01,283] [OnlineProviderSteam] finished transition from 'Uninitialized' to 'InGame' (current='InGame')!
+[I 00:00:01,284] [Session] 'HostOnline' (up)!
+[I 00:00:01,284] [Session] finished transition from 'Lobby' to 'Host_Online' (current='Host_Online')!
+[I 00:00:03,830] [server] Load deserialization took 3.02 s
+[I 00:00:03,864] [ecs] Build zones changed
+[I 00:00:03,865] [ecs] Build zones changed
+[I 00:00:30,461] -------------- Session ----------------
+[I 00:00:30,461] Machines:
+[I 00:00:30,461]   m#0(128): up 0 (0), down 0 (0), remote 0 (0), limit 2,048, lost 0, ping 9,223,372,036,854 ms, EstablishingBaseline
+[I 00:00:30,461] ---------------------------------------
+[I 00:01:00,462] -------------- Session ----------------
+[I 00:01:00,463] Machines:
+[I 00:01:00,463]   m#0(128): up 0 (0), down 0 (0), remote 0 (0), limit 2,048, lost 0, ping 9,223,372,036,854 ms, EstablishingBaseline
+[I 00:01:00,463] ---------------------------------------
+[I 00:01:30,466] -------------- Session ----------------
+[I 00:01:30,466] Machines:
+[I 00:01:30,466]   m#0(128): up 0 (0), down 0 (0), remote 0 (0), limit 2,048, lost 0, ping 9,223,372,036,854 ms, EstablishingBaseline
+[I 00:01:30,467] ---------------------------------------
+[I 00:02:00,469] -------------- Session ----------------
+[I 00:02:00,469] Machines:
+[I 00:02:00,469]   m#0(128): up 0 (0), down 0 (0), remote 0 (0), limit 2,048, lost 0, ping 9,223,372,036,854 ms, EstablishingBaseline
+[I 00:02:00,469] ---------------------------------------
+[I 00:02:30,472] -------------- Session ----------------
+[I 00:02:30,472] Machines:
+[I 00:02:30,472]   m#0(128): up 0 (0), down 0 (0), remote 0 (0), limit 2,048, lost 0, ping 9,223,372,036,854 ms, EstablishingBaseline
+[I 00:02:30,472] ---------------------------------------
+[I 00:03:00,477] -------------- Session ----------------
+[I 00:03:00,477] Machines:
+[I 00:03:00,477]   m#0(128): up 0 (0), down 0 (0), remote 0 (0), limit 2,048, lost 0, ping 9,223,372,036,854 ms, EstablishingBaseline
+[I 00:03:00,477] ---------------------------------------
+[I 00:03:30,477] -------------- Session ----------------
+[I 00:03:30,477] Machines:
+[I 00:03:30,477]   m#0(128): up 0 (0), down 0 (0), remote 0 (0), limit 2,048, lost 0, ping 9,223,372,036,854 ms, EstablishingBaseline
+[I 00:03:30,477] ---------------------------------------
+[I 00:03:58,983] [online] Session accepted with peer ( id 76561198196714077 ).
+[I 00:03:58,983] [online] Added Peer #0.
+[I 00:04:00,479] -------------- Session ----------------
+[I 00:04:00,479] Machines:
+[I 00:04:00,479]   m#0(128): up 0 (0), down 0 (0), remote 0 (0), limit 2,048, lost 0, ping 9,223,372,036,854 ms, EstablishingBaseline
+[I 00:04:00,479] ---------------------------------------
+[I 00:04:04,837] [online] Client 'xxxxxxxxxxxxxxxx' authenticated by steam
+[W 00:04:04,894] [session] Unable to find machine for peer 0.
+[I 00:04:04,895] [SessionPlayer] started transition from 'Free' to 'Remote_InSession' (current='<invalid>')!
+[I 00:04:04,895] [session] Remote player added. Player handle: 0(0)
+[I 00:04:04,895] [SessionPlayer] 'Reserve' (up)!
+[I 00:04:04,895] [SessionPlayer] 'WaitForJoin' (up)!
+[I 00:04:04,895] [SessionPlayer] finished transition from 'Free' to 'Remote_InSession' (current='Remote_InSession')!
+[I 00:04:06,150] Received new Character save game
+[I 00:04:13,878] [server] Machine '1': Player '0(0)' logged in
+[I 00:04:13,881] [ecs] readEntitySerializationContext: Templates: 4  Components: 201  Size: 55,936
+[I 00:04:13,882] [server] Player 'HyRozz' logged in with Permissions:
+[I 00:04:13,882]         - CanAccessInventories
+[I 00:04:13,882]         - CanEditBase
+[I 00:04:13,882]         - CanExtendBase
+[I 00:04:13,917] [ecss] Could not add component e3b96393 for entity 3191 ''
+[I 00:04:13,932] [ecss] Send BuildingZones
+[I 00:04:14,182] Added a 'StaticTransformDynamic' Component that was already there.
+[I 00:04:30,482] -------------- Session ----------------
+[I 00:04:30,482] Machines:
+[I 00:04:30,482]   m#0(128): up 0 (0), down 0 (0), remote 0 (0), limit 2,048, lost 0, ping 9,223,372,036,854 ms, EstablishingBaseline
+[I 00:04:30,482]   m#1(129): up 105 (130), down 9 (9), remote 107 (132), limit 3,679, lost 0, ping 48 ms, OperatingNormally
+[I 00:04:30,483] ---------------------------------------
+[I 00:04:36,083] Added a 'InventorySetup' Component that was already there.
+[I 00:04:36,083] Added a 'InteractionOffer' Component that was already there.
+[I 00:04:36,083] Added a 'ClientInteractionOffer' Component that was already there.
+[I 00:04:36,084] Added a 'CheckPlayerInRange' Component that was already there.

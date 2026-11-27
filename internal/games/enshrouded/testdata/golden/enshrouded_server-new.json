@@ -1,0 +1,23 @@
+{
+	"name": "Tom & Ana's \"Embervale\"",
+	"saveDirectory": "<saves>/Crow's Rest",
+	"logDirectory": "<logs>/game",
+	"ip": "0.0.0.0",
+	"queryPort": 15637,
+	"slotCount": 8,
+	"enableVoiceChat": false,
+	"enableTextChat": true,
+	"gameSettingsPreset": "Hard",
+	"userGroups": [
+		{
+			"name": "Friends",
+			"password": "ember-wood",
+			"canKickBan": false,
+			"canAccessInventories": true,
+			"canEditWorld": true,
+			"canEditBase": true,
+			"canExtendBase": true,
+			"reservedSlots": 0
+		}
+	]
+}
