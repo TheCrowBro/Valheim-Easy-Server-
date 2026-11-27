@@ -96,6 +96,9 @@ func (m *Manager) archiveRunLocked(run *serverRun) bool {
 	if run.rec.LogPath == "" || len(run.events) == 0 {
 		return false
 	}
+	if run.inst.recs.Runs == nil { // records that were never loaded still keep this run
+		run.inst.recs.Runs = map[string][]records.Event{}
+	}
 	run.inst.recs.Runs[name] = run.events
 	return true
 }
@@ -105,6 +108,9 @@ func (m *Manager) archiveRunLocked(run *serverRun) bool {
 func (m *Manager) backfillRecords() { m.eachInstance(m.backfillRecordsFor) }
 
 func (m *Manager) backfillRecordsFor(inst *instance) {
+	if inst.srv == nil {
+		return // a game this version doesn't run: its records are left as they are
+	}
 	m.mu.Lock()
 	dir := inst.dirs.Logs
 	// The account each name last played from, to tell apart friends who
@@ -199,15 +205,19 @@ func (m *Manager) Records(period string) (records.Summary, error) {
 }
 
 // RecordsGame works out a game's records for "today", "week" or "all"
-// (GET /api/games/{id}/records). Phase 0' made it with the legacy game's
-// records; stream D makes it work for every game (6.3).
-func (m *Manager) RecordsGame(id, period string) (sum records.Summary, err error) {
-	err = m.legacyOnly(id, func() error {
-		var e error
-		sum, e = m.Records(period)
-		return e
-	})
-	return sum, err
+// (GET /api/games/{id}/records), from that game's own records (records.json
+// for the legacy game, games/<id>/records.json for another).
+func (m *Manager) RecordsGame(id, period string) (records.Summary, error) {
+	inst, err := m.instanceByID(id)
+	if err != nil {
+		return records.Summary{}, err
+	}
+	now := time.Now()
+	from, to, ok := records.Period(period, now)
+	if !ok {
+		return records.Summary{}, fmt.Errorf("unknown period %q", period)
+	}
+	return m.recordsBetween(inst, from, to, now), nil
 }
 
 func (m *Manager) recordsBetween(inst *instance, from, to, now time.Time) records.Summary {
@@ -227,7 +237,8 @@ func (m *Manager) recordsBetween(inst *instance, from, to, now time.Time) record
 	return records.Compute(events, from, to, now)
 }
 
-// dailyLoop posts in Discord who died the most each day.
+// dailyLoop posts each game's day in Discord: who died the most, or for a
+// game without deaths, who played.
 func (m *Manager) dailyLoop() {
 	tick := time.NewTicker(30 * time.Second)
 	defer tick.Stop()
@@ -241,44 +252,127 @@ func (m *Manager) dailyLoop() {
 	}
 }
 
-// checkDaily posts who died the most today, at 23:59, if anyone played.
-// If the computer was off or asleep then, yesterday's goes out once it's
-// back (an older day is left out).
+// checkDaily posts each game's day at 23:59, if anyone played, in that
+// game's channel. If the computer was off or asleep then, yesterday's goes
+// out once it's back (an older day is left out). Each game keeps the last
+// day it posted in its own records file, so one game's post never stands
+// for another's.
 func (m *Manager) checkDaily(now time.Time) {
 	day, when := records.Midnight(now).AddDate(0, 0, -1), "yesterday"
 	if now.Hour() == 23 && now.Minute() == 59 {
 		day, when = records.Midnight(now), "today"
 	}
+	m.eachInstance(func(inst *instance) { m.checkDailyFor(inst, day, when, now) })
+}
+
+func (m *Manager) checkDailyFor(inst *instance, day time.Time, when string, now time.Time) {
+	if inst.srv == nil {
+		return // a game this version doesn't run
+	}
 	key := day.Format("2006-01-02")
-	inst := m.legacy()
 	m.mu.Lock()
 	if inst.recs.Posted >= key {
 		m.mu.Unlock()
 		return
 	}
 	inst.recs.Posted = key
-	s := m.settings
+	r := m.discordRulesLocked(inst)
 	m.mu.Unlock()
 	m.saveRecordsFor(inst)
-	if !s.Discord || !s.DiscordDaily {
+	if !r.posts() || !r.daily {
 		return
 	}
 	sum := m.recordsBetween(inst, day, day.AddDate(0, 0, 1), now)
 	if len(sum.Players) == 0 {
 		return // nobody played
 	}
+	// The legacy game's post and its activity entries are exactly as they
+	// always were.
 	text := dailyTextFor(inst.srv.Texts(), sum, when)
+	what := "who died the most " + when
+	if !inst.legacy {
+		what = "who died the most in " + inst.short() + " " + when
+		if !inst.info.Deaths {
+			text = playedTextFor(inst.short(), inst.srv.Texts(), sum, when)
+			what = "who played " + inst.short() + " " + when
+		}
+	}
+	text = r.words(inst, text)
 	m.queueDiscord(discordPost{
-		link: s.DiscordWebhook,
+		link: r.link,
 		text: func() string { return text },
 		done: func(err error) {
 			if err != nil {
-				m.addActivity("warning", "", "Couldn't post in Discord who died the most "+when+". "+err.Error())
+				m.discordNote(inst, "warning", "Couldn't post in Discord "+what+". "+err.Error())
 				return
 			}
-			m.addActivity("discord", "", "Posted in Discord who died the most "+when+".")
+			m.discordNote(inst, "discord", "Posted in Discord "+what+".")
 		},
 	})
+}
+
+// playedTextFor is the daily post of a game without deaths (spec 6.3): how
+// many played, and who played the longest in all ("Most time"), then, as
+// the note, the longest single session when that tells something more.
+// "🎮 **3 players** played Terraria today. Most time: **Alex** (2 h 10 min)"
+func playedTextFor(short string, tx game.Texts, sum records.Summary, when string) string {
+	n := len(sum.Players)
+	noun := tx.Players
+	if n == 1 {
+		noun = tx.Player
+	}
+	if noun == "" {
+		noun = "players"
+		if n == 1 {
+			noun = "player"
+		}
+	}
+	var most, longest records.Record
+	for _, r := range sum.Records {
+		switch r.ID {
+		case "playTime":
+			most = r
+		case "longestSession":
+			longest = r
+		}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "🎮 **%d %s** played %s %s.", n, noun, discord.Escape(short), when)
+	if most.ID != "" {
+		fmt.Fprintf(&b, " Most time: %s (%s)", boldNames(most.Names), humanSeconds(most.Value))
+	}
+	// One session each, or the same one: the note would say it again.
+	if longest.ID != "" && !(most.ID != "" && slices.Equal(longest.Names, most.Names) && longest.Value == most.Value) {
+		fmt.Fprintf(&b, "\n-# Longest session: %s, %s", plainNames(longest.Names), humanSeconds(longest.Value))
+	}
+	return b.String()
+}
+
+// boldNames lists names in bold: "**A**", "**A** and **B**", "**A**, **B**
+// and **C**".
+func boldNames(names []string) string {
+	var out []string
+	for _, n := range names {
+		out = append(out, "**"+discord.Escape(n)+"**")
+	}
+	if len(out) <= 1 {
+		return strings.Join(out, "")
+	}
+	return strings.Join(out[:len(out)-1], ", ") + " and " + out[len(out)-1]
+}
+
+// plainNames lists names as the daily post's note does: "A and B".
+func plainNames(names []string) string {
+	out := make([]string, len(names))
+	for i, n := range names {
+		out[i] = discord.Escape(n)
+	}
+	return strings.Join(out, " and ")
+}
+
+// humanSeconds says a number of seconds as people read it: "2 h 10 min".
+func humanSeconds(s float64) string {
+	return logparse.HumanDuration(time.Duration(s) * time.Second)
 }
 
 // dailyTextFor says who died the most on a day ("today" or "yesterday"),
