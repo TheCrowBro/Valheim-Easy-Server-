@@ -2,10 +2,10 @@
 [I 00:00:01,156] [Session] 'HostOnline' (up)!
 [I 00:00:01,156] [Session] finished transition from 'Lobby' to 'Host_Online' (current='Host_Online')!
 [I 00:00:11,088] [server] Savegame deserialization took 945.83 ms
-[I 00:01:33,125] [online] Added peer 0(1) (steamid:76561198039777309)
+[I 00:01:33,125] [online] Added peer 0(1) (steamid:76561198000000202)
 [I 00:01:38,730] [server] Machine '1': Player '0(0)' logged in
-[I 00:01:38,732] [server] Player 'Legiterately' logged in with Permissions:
+[I 00:01:38,732] [server] Player 'Eydis' logged in with Permissions:
 [I 00:01:38,732] 	 - CanAccessInventories
-[I 00:02:13,731] [server] Remove Entity for Player 'Legiterately'
-[I 00:02:13,732] [server] Remove Player 'Legiterately'
+[I 00:02:13,731] [server] Remove Entity for Player 'Eydis'
+[I 00:02:13,732] [server] Remove Player 'Eydis'
 [I 00:02:13,803] [online] Removed peer 0(1)

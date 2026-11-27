@@ -14,10 +14,10 @@ Adding marker for ScarabBossArea at int2(-167, -568)
 Adding marker for LavaSlimeBossDungeon at int2(486, -486)
 Adding marker for CrystalMeteorScene at int2(14, -697)
 timescale = 0
-Accepted connection from 76561198056526695 with result OK awaiting authentication
-SteamNet Warning: [#2320726969 P2P steamid:76561198056526695 vport 0] Relay candidates enabled by P2P_Transport_ICE_Enable, but P2P_TURN_ServerList is empty
-Connected to userid:76561198056526695
-Successful authentication from userid:76561198056526695
+Accepted connection from 76561198000000203 with result OK awaiting authentication
+SteamNet Warning: [#2320726969 P2P steamid:76561198000000203 vport 0] Relay candidates enabled by P2P_Transport_ICE_Enable, but P2P_TURN_ServerList is empty
+Connected to userid:76561198000000203
+Successful authentication from userid:76561198000000203
 timescale = 1
 Read cartography table map with 0 parts
 Running 0 electricity updates initially
@@ -25,18 +25,18 @@ server has ghost collection hash 11858044417851913081 for 1828 ghosts
 Accepted connect RPC
 spawning player with character data size 16682
 Creating new player entity
-[userid:76561198056526695] player Gonaeng connected islocalplayer=False
-[userid:76561198056526695] is using new name Gonaeng
+[userid:76561198000000203] player Ragna connected islocalplayer=False
+[userid:76561198000000203] is using new name Ragna
 Started game for new connection
 Spawning StartRoom
 Spawning SlimeBoss
 Spawning LarvaBossSpawn
 Spawning CavelingMerchantRoom
 Spawning FishingMerchantArea
-[userid:76561198056526695] add or refresh condition None 0 duration 0 for Player: amount=1, variation=0
+[userid:76561198000000203] add or refresh condition None 0 duration 0 for Player: amount=1, variation=0
 Spawning BirdBoss
 Removing fake marker for BirdBoss
-Disconnected from userid:76561198056526695 with reason App_Min
+Disconnected from userid:76561198000000203 with reason App_Min
 check connection state
 player disconnect
 timescale = 0

@@ -62,7 +62,7 @@ func replayLines(t *testing.T, lines []string, rec game.Record) *replayed {
 	t.Helper()
 	s := Game{}.New(testEnv(t)).(*server)
 	r := &replayed{turnOn: make(chan []string, 8)}
-	known := map[string]string{"Steve": "8667ba71-b85a-4004-af54-457a9734eed7"}
+	known := map[string]string{"Steve": "00000000-0000-4000-8000-0000000000a3"}
 	r.m = s.Watch(rec, func(n string) string { return known[n] }).(*monitor)
 	r.m.turnOn = func(_ game.Record, playing []string) { r.turnOn <- playing }
 	now := time.Date(2026, 11, 26, 23, 0, 0, 0, time.Local)
@@ -141,7 +141,7 @@ func TestMonitorSession(t *testing.T) {
 	if d := r.find("death"); len(d) != 1 || d[0].Text != "Alex was slain by Zombie" {
 		t.Errorf("deaths = %+v, want only Alex slain by a zombie (the chat line isn't one)", d)
 	}
-	if a := r.find("turned_away"); len(a) == 2 && a[1].Account != "8667ba71-b85a-4004-af54-457a9734eed7" {
+	if a := r.find("turned_away"); len(a) == 2 && a[1].Account != "00000000-0000-4000-8000-0000000000a3" {
 		t.Errorf("Steve was turned away with account %q; the known one should be used", a[1].Account)
 	}
 	// Nothing in this session came from the internet.
@@ -264,9 +264,9 @@ func TestMonitorStopWithPlayerOn(t *testing.T) {
 // "auto" and off, that turns it on.
 func TestMonitorOnlineMode(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(readFile(t, filepath.Join("testdata", "online-paper-26.1.2.log"))), "\n")
-	lines = append(lines, "[02:11:52] [Server thread/INFO]: System chat: PerilousBear719 joined the game") // 26.3's join line
+	lines = append(lines, "[02:11:52] [Server thread/INFO]: System chat: Halldor joined the game") // 26.3's join line
 	r := replayLines(t, lines, planned(allowOff, allowAuto))
-	if j := r.find("join"); len(j) != 1 || j[0].Account != "a3e3d240-fa59-46a7-82bb-f1d2b9f20efd" {
+	if j := r.find("join"); len(j) != 1 || j[0].Account != "00000000-0000-4000-8000-0000000000a1" {
 		t.Errorf("join = %+v, want the account from the UUID line", j)
 	}
 	if r.m.State().Version != "26.1.2" {
@@ -286,7 +286,7 @@ func TestMonitorOnlineMode(t *testing.T) {
 	if st := r.m.State(); st.Extra[extraAllowList] != allowOn {
 		t.Errorf("after turning on, State().Extra = %v", st.Extra)
 	}
-	if j := r.find("join"); len(j) == 1 && j[0].Account != "45c5d60b-8d2f-4aa5-b2c3-97103ad8328b" {
+	if j := r.find("join"); len(j) == 1 && j[0].Account != "00000000-0000-4000-8000-0000000000a2" {
 		t.Errorf("join account %q", j[0].Account)
 	}
 

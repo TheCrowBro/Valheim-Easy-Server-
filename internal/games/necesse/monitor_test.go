@@ -275,12 +275,12 @@ func TestMonitorForumJoinLeave(t *testing.T) {
 				leave = e
 			}
 		}
-		if join.Name != "76561198129445960" || join.Account != "76561198129445960" {
+		if join.Name != "76561198000000204" || join.Account != "76561198000000204" {
 			t.Errorf("join = %+v", join)
 		}
-		// The leave line names the character ("Robert"); it must still
+		// The leave line names the character ("Ketil"); it must still
 		// close the join above, or the player would stay "on" for good.
-		if leave.Name != "76561198129445960" || leave.Account != "76561198129445960" {
+		if leave.Name != "76561198000000204" || leave.Account != "76561198000000204" {
 			t.Errorf("leave = %+v", leave)
 		}
 		if st := m.State(); len(st.Players) != 0 || st.Count != 0 {
@@ -303,27 +303,27 @@ func TestMonitorForumJoinLeave(t *testing.T) {
 		if st.Stopping || m.stopCode != "SERVER_ERROR" {
 			t.Errorf("Stopping %v, stop code %q: a crash counts as a stop someone asked for", st.Stopping, m.stopCode)
 		}
-		if len(st.Players) != 1 || st.Players[0].Name != "icytux" || st.Players[0].Account != "76561198014526397" {
+		if len(st.Players) != 1 || st.Players[0].Name != "Sigurd" || st.Players[0].Account != "76561198000000201" {
 			t.Errorf("players = %+v: the account comes from the \"Loaded player\" line", st.Players)
 		}
 		if hint := (&server{}).ExitHint(shown); !strings.Contains(hint, "crashed") {
 			t.Errorf("ExitHint = %q", hint)
 		}
 		end := m.End(time.Now())
-		if len(end) != 1 || end[0].Kind != "leave" || end[0].Name != "icytux" {
+		if len(end) != 1 || end[0].Kind != "leave" || end[0].Name != "Sigurd" {
 			t.Errorf("End = %+v", end)
 		}
 	})
 
 	t.Run("the account the app knows a name by", func(t *testing.T) {
 		known := func(name string) string {
-			if name == "icytux" {
-				return "76561198014526397"
+			if name == "Sigurd" {
+				return "76561198000000201"
 			}
 			return ""
 		}
 		_, evs, _ := replay(t, forum("steam-2022-06-28-join-then-crash.log"), known)
-		if evs[0].Kind != "join" || evs[0].Account != "76561198014526397" {
+		if evs[0].Kind != "join" || evs[0].Account != "76561198000000201" {
 			t.Errorf("join = %+v", evs[0])
 		}
 	})

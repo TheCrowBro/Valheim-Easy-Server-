@@ -109,10 +109,10 @@ All of them are in the 1.0 program's strings [X], unless the entry says otherwis
 | ready | `[Session] 'HostOnline' (up)!` and `[Session] finished transition from 'Lobby' to 'Host_Online' (current='Host_Online')!` (`[%s] '%s' (%s)!`, `[%s] %s transition from '%s' to '%s' (current='%s')!`) | Keen's FAQ [K2]; [L1] (1.0), [L2] (2024); [H1][H3][H6] |
 | session closed | `[Session] 'HostOnline' (down)!` | CompaBot's code [L1] |
 | build | `Game Version (SVN): 602428` (1.0.0.1 is 1267041 [G2]) | [L2][X] |
-| join | `[server] Player 'Legiterately' logged in with Permissions:`, then one line per right (`\t - CanAccessInventories`) | [L1] (1.0), [L2] (2024); [H1][H3] ("Lines observed live 2026-09-14") |
+| join | `[server] Player 'Eydis' logged in with Permissions:`, then one line per right (`\t - CanAccessInventories`) | [L1] (1.0), [L2] (2024); [H1][H3] ("Lines observed live 2026-09-14") |
 | not a join | `[server] Machine '1': Player '0(0)' logged in` names a handle, not a player | [L1][L2]; CompaBot's code says so |
-| leave | `[server] Remove Entity for Player 'Legiterately'`, then `[server] Remove Player 'Legiterately'` | [L1]; [H1][H3] |
-| the player's Steam account | 1.0: `[online] Added peer 0(1) (steamid:76561198039777309)` before the login; 2024: `[online] Session accepted with peer ( id 76561198196714077 ).` then `[online] Added Peer #0.` | [L1], [L2]; [X] (`[online] Added peer %k (%s)`, `[online] Session accepted with peer (%llu)`) |
+| leave | `[server] Remove Entity for Player 'Eydis'`, then `[server] Remove Player 'Eydis'` | [L1]; [H1][H3] |
+| the player's Steam account | 1.0: `[online] Added peer 0(1) (steamid:76561198000000202)` before the login; 2024: `[online] Session accepted with peer ( id 76561198000000205 ).` then `[online] Added Peer #0.` | [L1], [L2]; [X] (`[online] Added peer %k (%s)`, `[online] Session accepted with peer (%llu)`) |
 | connection gone | `[online] Removed peer 0(1)` (2024: `Removed Peer #0.`) | [L1], [L2] |
 | server full | `[online] Session rejected with peer because it is full (%llu)` | [X] |
 | stop asked | `[app] Trigger gameflow shutdown, exit: Ctrl_C`; the other console events give `Ctrl_Break`, `Close` or `Logoff` | [L3] (1.0); [H1][H2]; [X] |

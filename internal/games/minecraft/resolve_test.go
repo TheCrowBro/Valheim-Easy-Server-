@@ -197,7 +197,7 @@ func TestListsWhileStopped(t *testing.T) {
 	os.MkdirAll(s.env.Dirs.Saves, 0o755)
 	os.MkdirAll(s.env.Dirs.Server, 0o755)
 	os.WriteFile(filepath.Join(s.env.Dirs.Saves, "usercache.json"), []byte(`[{"name":"Alex","uuid":"36532b5e-c442-3dbb-a24c-c7e55d0f979a","expiresOn":"2026-12-26 19:40:16 +0000"}]`), 0o644)
-	os.WriteFile(s.listPath("ops.json"), []byte(`[{"uuid":"8667ba71-b85a-4004-af54-457a9734eed7","name":"Steve","level":2,"bypassesPlayerLimit":true}]`), 0o644)
+	os.WriteFile(s.listPath("ops.json"), []byte(`[{"uuid":"00000000-0000-4000-8000-0000000000a3","name":"Steve","level":2,"bypassesPlayerLimit":true}]`), 0o644)
 
 	if err := s.WriteList(context.Background(), nil, "allowed", []string{"alex", "Notch", "ALEX"}); err != nil {
 		t.Fatal(err)

@@ -241,10 +241,10 @@ Lines as the real servers printed them (testdata/monitor has each excerpt):
   v1.0.5.102999`, `REST API started on port 8212`, `Running Palworld dedicated server
   on :8211` (ready). A v1.0.3 start prints the same version and ready lines [11].
 - Join and leave, added in 0.2.0.6 (2024-04-04) [8]:
-  `[2024-04-19 19:26:37] [LOG] HunterAP joined the server. (User id: steam_<redacted>)`,
-  `… [LOG] HunterAP left the server. (User id: steam_<redacted>)` [8];
-  `[2024-04-21 15:53:31] [LOG] Tanaka Lyanne joined the server. (User id:
-  steam_76561198379551257)` [9]. In 1.0 a player first "connected" and then
+  `[2024-04-19 19:26:37] [LOG] Thora joined the server. (User id: steam_<redacted>)`,
+  `… [LOG] Thora left the server. (User id: steam_<redacted>)` [8];
+  `[2024-04-21 15:53:31] [LOG] Signy Dahl joined the server. (User id:
+  steam_76561198000000206)` [9]. In 1.0 a player first "connected" and then
   "joined" with the player id too [11]: `[LOG] <name> <ip> connected the server.
   (User id: steam_…)`, `[LOG] <name> joined the server. (User id: steam_…, Player id:
   <32 hex>)`. The time before `[LOG]` is the server's local time, with the day not

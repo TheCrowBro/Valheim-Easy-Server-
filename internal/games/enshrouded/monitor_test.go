@@ -45,17 +45,17 @@ func kinds(evs []game.Event) []string {
 }
 
 // A real 1.0 log (CompaBot's test data, trimmed from a server's log of
-// 2026-11-07): online at "HostOnline (up)", Legiterately joins with the
+// 2026-11-07): online at "HostOnline (up)", Eydis joins with the
 // Steam account of the one connection waiting, and leaves.
 func TestMonitorReal1_0JoinLeave(t *testing.T) {
 	m, lines, evs := feed(t, "compabot-2026-11-07-join-leave.log", game.Record{}, nil)
-	if got, want := kinds(evs), []string{"online:", "join:Legiterately", "leave:Legiterately"}; !slices.Equal(got, want) {
+	if got, want := kinds(evs), []string{"online:", "join:Eydis", "leave:Eydis"}; !slices.Equal(got, want) {
 		t.Fatalf("events %q, want %q", got, want)
 	}
-	if evs[1].Account != "76561198039777309" {
+	if evs[1].Account != "76561198000000202" {
 		t.Errorf("the join's account is %q, not the Steam id from its connection line", evs[1].Account)
 	}
-	if evs[1].Text != "Legiterately joined the game." || evs[2].Text != "Legiterately left the game." {
+	if evs[1].Text != "Eydis joined the game." || evs[2].Text != "Eydis left the game." {
 		t.Errorf("feed texts %q, %q", evs[1].Text, evs[2].Text)
 	}
 	st := m.State()
@@ -80,17 +80,17 @@ func TestMonitorReal1_0JoinLeave(t *testing.T) {
 // and the start-up tables and session dumps hidden.
 func TestMonitorReal2024StartJoin(t *testing.T) {
 	known := func(name string) string {
-		if name == "HyRozz" {
+		if name == "Hakon" {
 			return "should-not-be-needed"
 		}
 		return ""
 	}
 	m, lines, evs := feed(t, "jsknnr-79-2024-11-07-start-join.log", game.Record{}, known)
-	if got, want := kinds(evs), []string{"online:", "join:HyRozz"}; !slices.Equal(got, want) {
+	if got, want := kinds(evs), []string{"online:", "join:Hakon"}; !slices.Equal(got, want) {
 		t.Fatalf("events %q, want %q", got, want)
 	}
-	if evs[1].Account != "76561198196714077" {
-		t.Errorf("HyRozz's account is %q, not the one from \"Session accepted with peer\"", evs[1].Account)
+	if evs[1].Account != "76561198000000205" {
+		t.Errorf("Hakon's account is %q, not the one from \"Session accepted with peer\"", evs[1].Account)
 	}
 	st := m.State()
 	if st.Version != "602428" || !st.Ready || len(st.Players) != 1 || st.Count != 1 {
@@ -142,13 +142,13 @@ func TestMonitorStopsByItself(t *testing.T) {
 	m := Game{}.New(testEnv(t)).Watch(game.Record{}, nil).(*monitor)
 	now := time.Now()
 	m.Line("[I 00:00:01,284] [Session] 'HostOnline' (up)!", now)
-	m.Line("[I 00:30:00,000] [server] Player 'Legiterately' logged in with Permissions:", now)
+	m.Line("[I 00:30:00,000] [server] Player 'Eydis' logged in with Permissions:", now)
 	m.Line("[I 00:31:00,000] [server] Player 'Ash' logged in with Permissions:", now)
 	if l := m.Line("[E 03:00:00,000] [server] Failed to Save. Retry 3", now); len(l.Events) != 1 || l.Events[0].Kind != "save_failed" {
 		t.Errorf("a failed save: events %q", kinds(l.Events))
 	}
 	var quit []game.Event
-	for _, p := range []string{"Legiterately", "Ash"} {
+	for _, p := range []string{"Eydis", "Ash"} {
 		quit = append(quit, m.Line("[I 03:00:05,000] [server] Send Save Data Error Shutdown Message to Player '"+p+"'", now).Events...)
 	}
 	if len(quit) != 1 || quit[0].Kind != "save_failed" || !strings.Contains(quit[0].Text, "couldn't save") {

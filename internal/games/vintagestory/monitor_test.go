@@ -162,11 +162,11 @@ func TestMonitorPlayers(t *testing.T) {
 	// A 1.20.12 server's own log (server-main.log, "[Event]" without
 	// "Server "): four players join, one leaves.
 	r := play(t, "issues/7431-v1.20.12-server-main.log")
-	want := []string{"join:Brynja", "join:Sigrun", "leave:Sigrun", "join:vfctffu", "join:Leif"}
+	want := []string{"join:Brynja", "join:Sigrun", "leave:Sigrun", "join:Ottar", "join:Leif"}
 	if got := r.kinds(); !slices.Equal(got, want) {
 		t.Fatalf("events = %q, want %q", got, want)
 	}
-	accounts := map[string]string{"Brynja": "MadeUpUid1AAAAAAAAAAAAAA", "Sigrun": "MadeUpUid3AAAAAAAAAAAAAA", "vfctffu": "MadeUpUid4AAAAAAAAAAAAAA", "Leif": "MadeUpUid2AAAAAAAAAAAAA+"}
+	accounts := map[string]string{"Brynja": "MadeUpUid1AAAAAAAAAAAAAA", "Sigrun": "MadeUpUid3AAAAAAAAAAAAAA", "Ottar": "MadeUpUid4AAAAAAAAAAAAAA", "Leif": "MadeUpUid2AAAAAAAAAAAAA+"}
 	for _, e := range r.events {
 		if e.Account != accounts[e.Name] {
 			t.Errorf("%s %s has account %q, want %q", e.Kind, e.Name, e.Account, accounts[e.Name])
@@ -176,7 +176,7 @@ func TestMonitorPlayers(t *testing.T) {
 	for _, p := range r.state.Players {
 		on = append(on, p.Name)
 	}
-	if !slices.Equal(on, []string{"Brynja", "vfctffu", "Leif"}) || r.state.Count != 3 {
+	if !slices.Equal(on, []string{"Brynja", "Ottar", "Leif"}) || r.state.Count != 3 {
 		t.Errorf("players on = %q (count %d)", on, r.state.Count)
 	}
 	if e := r.events[2]; e.Text != "Sigrun left the game." {

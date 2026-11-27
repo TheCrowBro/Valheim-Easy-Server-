@@ -349,19 +349,19 @@ lines come from real logs players posted, and from the 1.3.3 server itself:
 - Steam forum, "Hosted Server save state issue?", 2021-05-10, version 0.20.40
   (https://steamcommunity.com/app/1169040/discussions/0/3144053275979758824/,
   `testdata/forum/steam-2021-05-09-v0.20.40-join-leave.log`):
-  `Client "76561198129445960" with address host.docker.internal:60944 is
-  connecting with version 0.20.40.`, `Client "76561198129445960" connected on
-  slot 1/10.`, `Creating new player: 76561198129445960`, …,
-  `Player 76561198129445960 ("Robert") disconnected with message: Quit`.
+  `Client "76561198000000204" with address host.docker.internal:60944 is
+  connecting with version 0.20.40.`, `Client "76561198000000204" connected on
+  slot 1/10.`, `Creating new player: 76561198000000204`, …,
+  `Player 76561198000000204 ("Ketil") disconnected with message: Quit`.
   A player new to the world is named by their Steam account number when they
   get their slot (they have no character yet); the leave line gives the
   account and the character's name. The Monitor matches the leave to the join
   by name, account, or the account number the player joined under.
 - Steam forum, "Server Crash after update when player connects", 2022-06-28
   (https://steamcommunity.com/app/1169040/discussions/0/3409803502275060174/,
-  `testdata/forum/steam-2022-06-28-join-then-crash.log`): `Client "icytux"
-  connected on slot 1/10.`, `Loading map for player: AUTH:76561198014526397`,
-  `Loaded player: 76561198014526397`, then a crash: `(ERR) Stuck in crash loop,
+  `testdata/forum/steam-2022-06-28-join-then-crash.log`): `Client "Sigurd"
+  connected on slot 1/10.`, `Loading map for player: AUTH:76561198000000201`,
+  `Loaded player: 76561198000000201`, then a crash: `(ERR) Stuck in crash loop,
   stopping server.`, `Stopped server on … with code: SERVER_ERROR`. A known
   player is named by their character; the account follows on "Loaded player".
 - The 1.3.3 `Server.jar` still holds these texts: `Client "` … `" with address
@@ -387,7 +387,7 @@ lines come from real logs players posted, and from the 1.3.3 server itself:
 
 ### Deaths (spec 5.4 "deaths no (verify)"): still no
 
-- The 2021 forum log printed deaths: `Robert got humiliated by Zombie`. The
+- The 2021 forum log printed deaths: `Ketil got humiliated by Zombie`. The
   1.3.3 language file (`locale/en.lang`, section `[deaths]`) has about 170
   death texts, some with the attacker first (`<attacker> humiliated <victim>`),
   and settlers die too. Without a 1.3.3 log of a player's death the adapter
