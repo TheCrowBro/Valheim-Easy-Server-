@@ -1,0 +1,10 @@
+HealthCheck(clientCustomData="") as no token
+PasswordlessLogin(minimumPrivilegeLevel="InitialAdmin") as no token
+ClaimServer(adminPassword=<admin password>, serverName="Factory Friends") as InitialAdmin
+SetClientPassword(password=<friends' password>) as Administrator
+QueryServerState() as Administrator
+CreateNewGame(newGameData={"advancedGameSettings":{},"bSkipOnboarding":true,"customOptionsOnlyForModding":{},"gameModeSettings":{},"mapName":"","sessionName":"Factory","startingLocation":"Rocky Desert"}) as Administrator
+QueryServerState() as Administrator
+SaveGame(saveName="Factory") as Administrator
+QueryServerState() as Administrator
+SetAutoLoadSessionName(sessionName="Factory") as Administrator

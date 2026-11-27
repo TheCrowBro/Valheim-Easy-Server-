@@ -1,0 +1,9 @@
+[2026.11.26-20.15.03:412][812]LogNet: Login request: ?EncryptionToken=7A3C0F12E4B5D6A7?Name=Alex userId: Steam:76561198000000001 platform: Steam
+[2026.11.26-20.15.03:415][812]LogNet: Client netspeed is 100000
+[2026.11.26-20.15.04:101][830]LogNet: Join request: /Game/FactoryGame/Map/GameLevel01/Persistent_Level?Name=Alex?SplitscreenCount=1
+[2026.11.26-20.15.04:388][838]LogNet: Join succeeded: Alex
+[2026.11.26-20.18.22:007][402]LogNet: Login request: ?EncryptionToken=1B2C3D4E5F607182?Name=Sam Smith userId: Steam:76561198000000002 platform: Steam
+[2026.11.26-20.18.22:950][431]LogNet: Join request: /Game/FactoryGame/Map/GameLevel01/Persistent_Level?Name=Sam Smith?SplitscreenCount=1
+[2026.11.26-20.18.23:204][439]LogNet: Join succeeded: Sam Smith
+[2026.11.26-20.31.47:902][112]LogNet: UNetConnection::Close: [UNetConnection] RemoteAddr: 203.0.113.9:53624, Name: IpConnection_2147481917, Driver: GameNetDriver IpNetDriver_2147482574, IsServer: YES, PC: BP_PlayerController_C_2147481789, Owner: BP_PlayerController_C_2147481789, UniqueId: Steam:76561198000000001, Channels: 82, Time: 2026.11.26-20.31.47
+[2026.11.26-20.31.47:903][112]LogNet: UChannel::Close: Sending CloseBunch. ChIndex == 0. Name: [UChannel] ChIndex: 0, Closing: 0 [UNetConnection] RemoteAddr: 203.0.113.9:53624, Name: IpConnection_2147481917, Driver: GameNetDriver IpNetDriver_2147482574, IsServer: YES, PC: BP_PlayerController_C_2147481789, Owner: BP_PlayerController_C_2147481789, UniqueId: Steam:76561198000000001

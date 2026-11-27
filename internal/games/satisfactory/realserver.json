@@ -1,0 +1,7 @@
+{
+  "os": ["windows-latest"],
+  "onDemand": true,
+  "timeoutMinutes": 120,
+  "package": "./internal/games/satisfactory/",
+  "run": "TestRealServer"
+}

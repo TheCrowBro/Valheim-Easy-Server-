@@ -1,0 +1,7 @@
+HealthCheck(clientCustomData="") as no token
+PasswordLogin(minimumPrivilegeLevel="Administrator", password=<admin password>) as no token
+QueryServerState() as Administrator
+LoadGame(enableAdvancedGameSettings=false, saveName="Factory_autosave_0") as Administrator
+QueryServerState() as Administrator
+QueryServerState() as Administrator
+SetAutoLoadSessionName(sessionName="Factory") as Administrator

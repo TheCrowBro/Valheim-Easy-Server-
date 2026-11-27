@@ -1,0 +1,5 @@
+QueryServerState (with a token it doesn't know)
+PasswordLogin(minimumPrivilegeLevel="Administrator", password=<admin password>) as no token
+QueryServerState() as Administrator
+SaveGame(saveName="Factory") as Administrator
+Shutdown() as Administrator
