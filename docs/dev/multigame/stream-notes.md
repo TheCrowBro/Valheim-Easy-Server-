@@ -499,3 +499,50 @@ Review findings (fixed in the follow-up unless it says otherwise):
 - must-fix: A world the server made under its own id loses its name when the next new world is planned; picking it again starts a fresh world
 - should-fix: A world listed under its id can never be started, because Validate rejects id-like names
 - should-fix: Join says the server is public, though Windrose has no public server list
+
+## M3 (mg/manager-r3)
+
+Needs other streams or files I don't own:
+1. A (power.go):
+   - Hibernate still stops only Valheim. Use m.stopInstances(ctx, j, insts) (server.go) to stop all games in parallel, then record the resume set.
+   - sample() only samples Valheim, so GameStatus memMB/cpu stay 0 for other games.
+   - memoryCheckLocked must let a start through when there is no sample yet, because other games' start-with-app runs startGameWith with the memory check right after Start.
+   - Until A fills in pickPortsLocked, instances rebuilt from games/ folders get no ports (it is logged).
+2. A (resume.go) and WK (wakesignal.go): the resume and the wake packet still call StartServer. The hidden and disabled refusals already apply there, because they are in startChecks.
+3. D (records.go):
+   - Runs are keyed by filepath.Base(rec.LogPath). For GameLog games (Enshrouded, Satisfactory) that is the game's own fixed file name, the same every run. Use run.logFile() in archiveRunLocked, backfillRecordsFor and recordsBetween.
+   - backfillRecords() would panic on a foreign instance (srv is nil). Start now calls backfillRecordsFor only for games this build runs; D's loops should skip srv == nil too.
+4. D: setGameDiscord and gameDiscordLocked are still stubs, so UpdateGameSettings answers errNotYet when the change includes a Discord part.
+5. WK: wakerCommandsLocked should use isStarredLocked (false for a hidden Valheim) and skip turned-off games.
+6. F (gametest/demo): the demo's Validate treats world "" as a world named "", and returns an empty map for "no errors". The manager now passes the selected world's name for non-legacy games and treats an empty FieldErrors as no errors. contract.go could say both rules.
+7. API/UI: the warning before a manual update should read GameStatus.consoleInUse. I couldn't add a key under Status.app because TestStatusTopLevelKeys watches $.app.
+8. T (main.go): serverStopper and stopAndWait should use StopAll and wait for every game and the app job (6.6). StopAll returns the app job's BusyError while Sleep runs.
+
+Choices to confirm:
+- A turned-off game is not foreign: it keeps its adapter so its Settings tab can turn it back on, and every start is refused.
+- Other games' activity texts and job titles name the game ("Starting Minecraft"); Valheim's are unchanged.
+- GameLog: rec.LogPath stays the game's own file, as Plan gives it. After a takeover, a GameLog run is recognised because its log is not an app-named file in Dirs.Logs.
+- New-world values are kept in Saved.Worlds[name] until the world exists. Only non-legacy plans get New and NewWorld.
+- Any failing stop step except the last moves on to the next one. RCON and call steps get 15 s.
+- TestStatusIsQuick stands the demo in for windrose, which isn't registered on this base.
+
+Still open:
+- The world-busy check compares rec.World with the world name, so an imported save started under its file name isn't matched to the world inside it (Satisfactory's note).
+- WK's freeUDPPort race in waker_test.go and wakesignal_test.go (F-fix note).
+- spec.md 4.1 still shows the old onExit signature.
+
+After review:
+
+No files outside M3 needed changing.
+
+Things to pass on to other streams:
+- UI stream: a hidden Valheim can now appear in Status.games, but only while its server runs. It is unstarred, has the warning above, and the star button is refused with "Valheim is removed from the panel. Add it again first." The sidebar's "running unstarred under Active" rule already places it.
+- D (ask.go): presenceProvenLocked can now flip to false for one failed probe and back again. askTickLocked then resets and restarts the "still playing?" clock. That is harmless (the rule only acts after 4 hours unproven in a row), but D may want to know.
+- Also for D, and for A's autostop.go: they get the corrected presenceProvenLocked with no code change on their side.
+
+Spec decision for you or the owner: I cleared the probe proof on the first failed probe, as 2.6 literally says. If you would rather debounce until probeFailWarn (3 failures), it is a one-line change in probeLoop.
+
+Review findings (fixed in the follow-up unless it says otherwise):
+- must-fix: A restart starts a stopped game that is hidden, turned off or can't run here, skipping every R3 start refusal
+- should-fix: A hidden Valheim that is running is left out of Status.games and Status.online, so the new panel can't see or stop it
+- should-fix: presenceProvenLocked keeps trusting the probe after it stops answering
