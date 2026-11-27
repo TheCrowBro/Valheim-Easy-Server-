@@ -193,6 +193,11 @@ func (m *Manager) sampleLoop() {
 			}
 			m.updateAwake()
 			m.sample(now, gap)
+			// hooks.go: auto-stop and the other clocks, before idle sleep
+			// is decided (spec 4.5). Keep this call where it is.
+			m.mu.Lock()
+			m.observeLocked(func(o observer) { o.onTick(now) })
+			m.mu.Unlock()
 			m.checkIdle(now)
 			if now.Sub(saved) > 5*time.Minute {
 				saved = now
@@ -374,6 +379,7 @@ func (m *Manager) wokenOnPurpose() {
 	m.mu.Lock()
 	resume := m.resumeOnWake && m.settings.StartAfterWake && m.legacy().run == nil
 	m.resumeOnWake = false
+	m.observeLocked(func(o observer) { o.onWake(wakePurpose) }) // hooks.go
 	m.mu.Unlock()
 	m.addActivity("wake", "", fmt.Sprintf("The computer woke up. It stays awake for at least %d minutes, so friends have time to join.", int(wakeGrace.Minutes())))
 	if resume {
@@ -507,4 +513,44 @@ func (m *Manager) ResetStats() {
 	m.byPlayers.Reset()
 	m.saveData()
 	m.addActivity("info", "", "The usage statistics were reset.")
+}
+
+// --- R3 (stream A) ------------------------------------------------------------
+//
+// Phase 0' made what follows with its signatures; stream A fills it in.
+// A owns this file in R3 and keeps the observer calls in sampleLoop and
+// wokenOnPurpose where phase 0' put them (hooks.go).
+
+// lifeState is stream A's own app-wide state (Manager.life), guarded by
+// m.mu: whatever auto-stop, the resume, idle sleep, the memory check, the
+// ports and the firewall need beyond Manager.resumeSet. A adds its fields
+// here, so it never needs to edit manager.go.
+type lifeState struct{}
+
+// HistoryGame returns a game's usage samples taken after since (its Stats
+// tab, GET /api/games/{id}/stats). The legacy game's are the machine's
+// history, as today.
+func (m *Manager) HistoryGame(id string, since time.Time) (samples []stats.Sample, err error) {
+	err = m.legacyOnly(id, func() error {
+		samples = m.History(since)
+		return nil
+	})
+	return samples, err
+}
+
+// ByPlayersGame summarises a game's usage by the number of players on.
+func (m *Manager) ByPlayersGame(id string) (sum stats.Summary, err error) {
+	err = m.legacyOnly(id, func() error {
+		sum = m.ByPlayers()
+		return nil
+	})
+	return sum, err
+}
+
+// ResetStatsGame clears a game's usage-by-players summary.
+func (m *Manager) ResetStatsGame(id string) error {
+	return m.legacyOnly(id, func() error {
+		m.ResetStats()
+		return nil
+	})
 }

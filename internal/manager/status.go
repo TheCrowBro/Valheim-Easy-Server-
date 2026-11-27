@@ -51,36 +51,17 @@ type Status struct {
 	Now          time.Time             `json:"now"`
 
 	// New in R2 (spec 4.9); the old panel ignores them.
-	Games []GameStatus `json:"games"` // every game this build runs (Valheim only in R2)
+	Games []GameStatus `json:"games"` // every game this build runs (Valheim only in R2); status_games.go
 	Jobs  []Job        `json:"jobs"`  // every unfinished job and each slot's last finished one
-}
 
-// GameStatus is one game's instance, for the new panel (spec 4.9). R2 has
-// only the legacy game; R3 adds the rest of 4.9's fields.
-type GameStatus struct {
-	ID           string        `json:"id"`
-	Game         string        `json:"game"`
-	Name         string        `json:"name"`
-	Short        string        `json:"short"`
-	Letter       string        `json:"letter"`
-	Color        string        `json:"color"`
-	Stage        game.Stage    `json:"stage"`
-	ServerName   string        `json:"serverName"`
-	Foreign      string        `json:"foreign"`
-	State        State         `json:"state"`
-	Installed    bool          `json:"installed"`
-	Build        *game.Build   `json:"build,omitempty"`
-	World        string        `json:"world"`
-	RunningWorld string        `json:"runningWorld"`
-	Players      []game.Player `json:"players"`
-	Count        int           `json:"count"`
-	MaxPlayers   int           `json:"maxPlayers"`
-	Presence     game.Presence `json:"presence"`
-	Join         game.Join     `json:"join"`
-	Job          *Job          `json:"job"`
-	LastExit     *ExitInfo     `json:"lastExit"`
-	NeedsRestart bool          `json:"needsRestart"`
-	NeedMB       int           `json:"needMB"`
+	// New in R3 (spec 4.9), filled in by gamesStatusLocked (status_games.go);
+	// the old panel ignores them.
+	Stars    []string      `json:"stars"`    // the starred instances
+	Sidebar  SidebarStatus `json:"sidebar"`  // which sidebar lists are open
+	Online   int           `json:"online"`   // games online
+	Playing  int           `json:"playing"`  // people playing, in every game
+	Router   *RouterStatus `json:"router"`   // null until router.go has looked
+	SafeMode string        `json:"safeMode"` // why only the legacy game runs; "" normally
 }
 
 // PlayerView is a player in the dashboard list.
@@ -275,22 +256,10 @@ func (m *Manager) Status() Status {
 		st.Warnings = append(st.Warnings, "Some settings need fixing before the server can start: "+errs.Error())
 	}
 	st.Warnings = append(st.Warnings, m.foreignWarningsLocked()...)
-	gs := GameStatus{ID: inst.id, Game: inst.info.ID, Name: inst.info.Name, Short: inst.info.Short,
-		Letter: inst.info.Letter, Color: inst.info.Color, Stage: inst.info.Stage, ServerName: st.ServerName,
-		State: st.State, Installed: st.Installed, World: st.World, RunningWorld: st.RunningWorld,
-		Players: []game.Player{}, MaxPlayers: inst.info.MaxPlayers, Presence: inst.info.Presence, Join: j,
-		Job: inst.job, LastExit: inst.lastExit, NeedsRestart: st.NeedsRestart, NeedMB: inst.info.MemoryMB}
-	if hasBuild {
-		gs.Build = &build
-	}
-	if runState != nil {
-		gs.Players, gs.Count = runState.Players, runState.Count
-	}
-	if gs.Job != nil {
-		c := *gs.Job
-		gs.Job = &c
-	}
-	st.Games = []GameStatus{gs}
+	// The new panel's part, with what was worked out above for the legacy
+	// game, so its adapter isn't asked twice.
+	m.gamesStatusLocked(&st, lan, gameView{saved: saved, state: st.State, installed: st.Installed,
+		build: build, hasBuild: hasBuild, runState: runState, rec: rec, join: j, needsRestart: st.NeedsRestart})
 	return st
 }
 
@@ -421,16 +390,6 @@ func (m *Manager) recheckSoon() {
 	for _, d := range []time.Duration{0, 5 * time.Second, 15 * time.Second, 30 * time.Second} {
 		time.AfterFunc(d, m.RefreshChecks)
 	}
-}
-
-// FixFirewall adds the firewall rules (asks for admin permission).
-func (m *Manager) FixFirewall() error {
-	m.mu.Lock()
-	exe, wake := m.legacy().srv.Program(), m.settings.DiscordWake
-	m.mu.Unlock()
-	err := platform.FixFirewall(exe, m.opt.AppExe, wake)
-	m.recheckSoon()
-	return err
 }
 
 // SetLaunchOnLogin adds or removes the app from Windows startup.

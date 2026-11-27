@@ -138,6 +138,14 @@ type Env struct {
 	Store    Store // servers.json-backed; nil for the legacy instance, whose adapter makes its own from Legacy
 	Legacy   any   // legacy instance only: the manager's access to settings.json and its injected parts (games/valheim.LegacyStore, 5.1)
 	Fake     *Fake // EGS_DEV_FAKE_SERVERS / tests: install the stand-in instead (7.1)
+	// Note adds an entry to the activity feed for this instance (kind "info",
+	// "warning", "update"…): "Couldn't check for server updates (Satisfactory
+	// is downloading). Starting the version that's installed." Plan, the
+	// Installer, After and stop steps may call it; it never takes the
+	// manager's lock, so it is safe from anywhere, but a Monitor reports
+	// through Event.Text instead. nil in tests: call Env.AddNote, which
+	// checks. (Added in phase 0'.)
+	Note func(kind, text string)
 }
 
 // Locking: the manager has one lock (m.mu). It calls Monitor methods, Join, Fingerprint,
@@ -163,7 +171,7 @@ type Server interface {
 	Installer() Installer
 	Build() (Build, bool) // what's installed; read by the checks loop and the install job, never by Status (the legacy instance: as today, 4.8)
 	Schema() Schema
-	Validate(s Saved, world string) FieldErrors
+	Validate(s Saved, world string) FieldErrors // world "" means s.World, the selected one
 	Plan(ctx context.Context, req PlanRequest) (Plan, error)
 	Watch(rec Record, known func(name string) string) Monitor // known: the account a name last played from
 	Stop(rec Record) []StopStep
@@ -171,7 +179,7 @@ type Server interface {
 	Worlds() Worlds
 	Texts() Texts
 	ExitHint(tail []string) string
-	Fingerprint(s Saved, world string) string // differs from Plan.Fingerprint → "restart to apply"
+	Fingerprint(s Saved, world string) string // differs from Plan.Fingerprint → "restart to apply"; world "" means s.World
 }
 
 // ---- optional capabilities (type assertions on Server) ----
@@ -351,6 +359,12 @@ type ProbeResult struct {
 
 // StopStep is one way of asking the server to save and stop. The manager
 // runs a game's steps in order until the server has exited.
+//
+// An "rcon" step carries only the command: the manager (and gametest)
+// connects to 127.0.0.1 on Record.Ports["rcon"] with the password in
+// Record.Secrets["rcon"], so both must be in the Plan's Record. A refused
+// connection moves to the next step at once; a server that hangs up after
+// the command (it is stopping) gets the step's Wait.
 type StopStep struct {
 	Kind   string                          // "console", "rcon", "call", "interrupt"
 	Line   string                          // the console or RCON command; a "console" step after a takeover returns ErrNoConsole

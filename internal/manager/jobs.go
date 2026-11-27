@@ -30,13 +30,11 @@ type Job struct {
 }
 
 // ActionError is an error with a suggested follow-up the panel can offer
-// as a button (for example "force_stop").
-type ActionError struct {
-	Msg    string
-	Action string
-}
-
-func (e *ActionError) Error() string { return e.Msg }
+// as a button (for example "force_stop"), and the data that step needs
+// (a MemoryShort for "memory"). It is the game contract's type, so an
+// adapter's error with a next step reaches the panel the same way as the
+// manager's own.
+type ActionError = game.ActionError
 
 // BusyError means another job is running.
 type BusyError struct{ Title string }
@@ -102,6 +100,16 @@ func (m *Manager) startInstJob(inst *instance, kind, title string, cancellable b
 	return m.launchJob(inst, kind, title, cancellable, fn)
 }
 
+// runQuietJob starts fn in an instance's slot as a job nobody asked for
+// (auto-stop, the "still playing?" rule): it doesn't count as someone
+// doing something, so it leaves machineIdleSince alone and the computer can
+// sleep right after it (spec 4.5). It still holds the computer awake while
+// it runs, as every job does.
+func (m *Manager) runQuietJob(inst *instance, kind, title string, fn func(ctx context.Context, j *jobCtl) error) error {
+	_, err := m.launchJobAs(inst, kind, title, false, true, fn)
+	return err
+}
+
 // runAppJob starts fn in the app's own slot, which only going to sleep
 // uses. It waits for no instance, but is refused while any instance's
 // job runs, as before.
@@ -142,6 +150,12 @@ func (m *Manager) anyJobLocked() bool {
 // launchJob starts fn as the current job of inst's slot (the app's slot
 // for nil).
 func (m *Manager) launchJob(inst *instance, kind, title string, cancellable bool, fn func(ctx context.Context, j *jobCtl) error) (int, error) {
+	return m.launchJobAs(inst, kind, title, cancellable, false, fn)
+}
+
+// launchJobAs is launchJob; a quiet job doesn't reset machineIdleSince
+// (see runQuietJob).
+func (m *Manager) launchJobAs(inst *instance, kind, title string, cancellable, quiet bool, fn func(ctx context.Context, j *jobCtl) error) (int, error) {
 	m.mu.Lock()
 	if busy := m.busyJobLocked(inst); busy != nil {
 		t := busy.Title
@@ -167,7 +181,10 @@ func (m *Manager) launchJob(inst *instance, kind, title string, cancellable bool
 	} else {
 		m.appJob, m.appJobCancel = job, cancel
 	}
-	m.machineIdleSince = time.Now() // someone is doing something: not idle
+	if !quiet {
+		m.machineIdleSince = time.Now() // someone is doing something: not idle
+	}
+	m.observeLocked(func(o observer) { o.onJob(inst, job) }) // hooks.go: a job started
 	m.mu.Unlock()
 	m.notify()
 
@@ -202,6 +219,7 @@ func (m *Manager) launchJob(inst *instance, kind, title string, cancellable bool
 			job.Percent = 100
 		}
 		job.Cancellable = false
+		m.observeLocked(func(o observer) { o.onJob(inst, job) }) // hooks.go: a job finished
 		m.mu.Unlock()
 		m.notify()
 	}()

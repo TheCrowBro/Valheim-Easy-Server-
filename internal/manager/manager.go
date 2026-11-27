@@ -28,6 +28,7 @@ import (
 	"valheim-easy-server/internal/jetkvm"
 	"valheim-easy-server/internal/platform"
 	"valheim-easy-server/internal/selfupdate"
+	"valheim-easy-server/internal/servers"
 	"valheim-easy-server/internal/stats"
 	"valheim-easy-server/internal/steamcmd"
 )
@@ -83,6 +84,8 @@ type Manager struct {
 
 	// The instances, by id, and their order. Made in New and never
 	// changed afterwards in this release, so they are read without m.mu.
+	// (In R3, adding and removing a game change them: M3 decides how they
+	// are guarded then.)
 	instances map[string]*instance
 	order     []string
 	legacyID  string
@@ -132,6 +135,21 @@ type Manager struct {
 	lastPlayed       *played   // what the legacy game's players last played with; nil until someone has
 	app              appUpdate // what the last check for an app update found
 	subs             []func()
+
+	// R3 (spec 4.1), guarded by m.mu. Each stream keeps the rest of its own
+	// state in the struct type named here, which lives in its own file, so it
+	// never needs to edit this one. The comment names the stream.
+	observers []observer        // hooks.go: called at fixed points (M3 owns the list)
+	servers   servers.File      // servers.json as last read or written; zero in R2 (M3)
+	safeMode  string            // why only the legacy game runs (8.3), "" normally (M3)
+	lan       []string          // this computer's LAN IPv4 addresses, cached by the checks loop (4.8) (M3)
+	lanAt     time.Time         // when lan was read
+	resumeSet []string          // the instances to start again after waking (4.7) (A)
+	life      lifeState         // power.go: the rest of auto-stop, the resume and idle sleep (A)
+	disc      discordState      // discord.go: the per-channel queues and daily posts (6.3) (D)
+	wakeAsked time.Time         // when a wake packet last asked for a game (4.7) (WK)
+	wakeTags  map[string]string // the last request each game's wake packets came with (6.4) (WK)
+	router    routerState       // router.go: discovery, mappings, reachability (6.5) (N)
 }
 
 // ExitInfo describes the last time the server stopped.
@@ -231,6 +249,7 @@ func New(opt Options) (*Manager, error) {
 	m.instances = map[string]*instance{inst.id: inst}
 	m.order = []string{inst.id}
 	m.legacyID = inst.id
+	m.observers = newObservers(m)
 	if b, err := stats.Load(filepath.Join(opt.DataDir, "stats.json")); err == nil {
 		m.byPlayers = b
 	} else {
@@ -355,8 +374,23 @@ func (m *Manager) addActivity(kind, name, text string) {
 }
 
 func (m *Manager) addActivityAt(at time.Time, kind, name, text string) {
+	m.addGameActivityAt(nil, at, kind, name, text)
+}
+
+// addGameActivity adds a feed entry about one instance (its "game" in
+// activity.json), so the new panel can show each game's own entries. Like
+// addActivity it never takes m.mu, so it may be called with it held.
+func (m *Manager) addGameActivity(inst *instance, kind, name, text string) {
+	m.addGameActivityAt(inst, time.Now(), kind, name, text)
+}
+
+func (m *Manager) addGameActivityAt(inst *instance, at time.Time, kind, name, text string) {
+	g := ""
+	if inst != nil {
+		g = inst.id
+	}
 	m.activity.add(func(seq int64) Activity {
-		return Activity{Seq: seq, Time: at, Kind: kind, Name: name, Text: text}
+		return Activity{Seq: seq, Time: at, Kind: kind, Name: name, Text: text, Game: g}
 	})
 	m.log.Printf("activity: %s", text)
 }

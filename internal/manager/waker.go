@@ -26,6 +26,7 @@ import (
 
 	"valheim-easy-server/internal/config"
 	"valheim-easy-server/internal/discord"
+	"valheim-easy-server/internal/game"
 	"valheim-easy-server/internal/jetkvm"
 	"valheim-easy-server/internal/waker"
 )
@@ -559,3 +560,45 @@ func (m *Manager) PostWakerLink(what string) error {
 	defer cancel()
 	return discord.Post(ctx, nil, m.webhookURL(s.DiscordWebhook), text)
 }
+
+// --- R3 (stream WK) -----------------------------------------------------------
+//
+// Phase 0' made what follows with its signatures and empty bodies; stream
+// WK fills it in (spec 6.4): one slash command per starred game, each
+// working only in its game's channel, and the app's replies to a Discord
+// request posted in that channel. WK keeps the rest of its state in
+// wakerState (Manager.wk), as today.
+
+// wakerCommandsLocked are the commands the waker should register: the
+// starred, non-foreign, turned-on, non-hidden instances that have a channel
+// (their own webhook's, else the main one's). The channel ids come from
+// discord.Webhook, which needs the network, so wakerPlan finds them; this
+// only picks the games and their links.
+func (m *Manager) wakerCommandsLocked() []waker.GameCommand {
+	return nil
+}
+
+// starsChanged runs the waker's upkeep 30 s after the stars last changed
+// (debounced), so the bot's commands follow them; if the waker is busy
+// (wk.busy) it tries again 30 s later. M3's SetStar calls it.
+func (m *Manager) starsChanged() {}
+
+// wakeReply posts, in the game's channel, why a game a Discord request
+// asked for didn't start (err from startFromWake: memory short, busy,
+// turned off, not installed, failed), whatever the game's own Discord
+// on/off says, because someone asked there: "🧠 There isn't enough memory
+// to start **Palworld** right now. Running: …" or "⚠️ **Palworld** didn't
+// start: <reason>." (6.4).
+func (m *Manager) wakeReply(inst *instance, err error) {}
+
+// wakerObserver is stream WK's observer (hooks.go). Every method runs with
+// m.mu held and must not block.
+type wakerObserver struct{ m *Manager }
+
+func (o wakerObserver) onReady(inst *instance)                           {}
+func (o wakerObserver) onEvent(inst *instance, ev game.Event)            {}
+func (o wakerObserver) onExit(inst *instance, exit *ExitInfo, auto bool) {}
+func (o wakerObserver) onTick(now time.Time)                             {}
+func (o wakerObserver) onJob(inst *instance, job *Job)                   {}
+func (o wakerObserver) onTakeover(inst *instance)                        {}
+func (o wakerObserver) onWake(cause string)                              {}

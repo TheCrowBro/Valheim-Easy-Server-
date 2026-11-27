@@ -33,6 +33,13 @@ type Config struct {
 	Name  string `json:"name,omitempty"`  // the server's name, for replies
 	Guild string `json:"guild,omitempty"` // the only Discord server it answers in; any when empty
 
+	// Games are the slash commands to register (games.go), when an R3 app
+	// wrote them: nil (the key absent) in a file from R2 or before, which
+	// means /valheim from Query and Name as always; a non-nil pointer means
+	// exactly these, so an empty list (written as []) means no commands at
+	// all. omitempty drops only the nil pointer, never an empty list.
+	Games *[]GameCommand `json:"games,omitempty"`
+
 	// For tests: Discord's addresses, and where wake packets go instead of
 	// the local network's broadcast addresses.
 	API     string   `json:"api,omitempty"`

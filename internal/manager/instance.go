@@ -13,6 +13,8 @@ import (
 	"valheim-easy-server/internal/game"
 	"valheim-easy-server/internal/platform"
 	"valheim-easy-server/internal/records"
+	"valheim-easy-server/internal/routerports"
+	"valheim-easy-server/internal/stats"
 	"valheim-easy-server/internal/worlds"
 )
 
@@ -29,9 +31,12 @@ type instance struct {
 	id     string
 	g      game.Game
 	info   game.Info
-	srv    game.Server
-	dirs   game.Dirs // guarded by m.mu: a settings save replaces the legacy instance's (dirsOf copies them)
+	srv    game.Server // nil for a foreign instance (R3)
+	dirs   game.Dirs   // guarded by m.mu: a settings save replaces the legacy instance's (dirsOf copies them)
 	legacy bool
+	// foreign says why this build doesn't run the instance (its game is
+	// unknown, hidden or turned off; R3), "" when it does.
+	foreign string
 
 	run        *serverRun
 	job        *Job               // the instance's job slot: its current or last job
@@ -45,6 +50,27 @@ type instance struct {
 	logs       *ring[LogLine]          // the server's output, for the Log page
 	uploads    map[string]*worlds.Upload
 	localCands []worlds.Candidate
+
+	// R3 (spec 4.1). Each is guarded by m.mu; the comment names the stream
+	// that fills it in.
+	history    *stats.History   // its CPU, memory and players (games/<id>/history.json); nil for the legacy instance, which uses Manager.history (A)
+	byPlayers  *stats.ByPlayers // its usage by players (games/<id>/stats.json); nil for the legacy instance (A)
+	emptySince time.Time        // the auto-stop clock (4.5): when it was last seen in use (A)
+	ask        askState         // the "still playing?" rule (4.6, ask.go) (D)
+	cache      instCache        // what Status shows without touching the disk (4.8) (M3)
+}
+
+// instCache is what the checks loop and the install job found about a
+// non-legacy instance, so Status never touches its disk (spec 4.8). The
+// legacy instance keeps today's quick look at the disk instead.
+type instCache struct {
+	at         time.Time  // when it was last refreshed; zero: never
+	installed  bool       // Program() exists
+	build      game.Build // what's installed
+	hasBuild   bool
+	firewall   bool   // its firewall rules are in place (A's firewall.go says)
+	freeDisk   uint64 // free space on its drive
+	freeDiskOK bool
 }
 
 // serverRun is one running server process.
@@ -69,6 +95,20 @@ type serverRun struct {
 	// afterPending: the game's work after launch (Valheim's mods code) is
 	// still running, so the online post waits for it.
 	afterPending bool
+
+	// R3 (spec 4.1), guarded by m.mu like the rest; the comment names the
+	// stream that fills it in.
+	stdin *os.File // console games: the app's end of the game's stdin pipe; nil after a takeover (2.11) (M3)
+	// autoStopped: this run is being stopped by auto-stop or the "still
+	// playing?" rule, for the reason autoReason (stopIdle or stopAsked). Its
+	// exit then doesn't reset machineIdleSince, and the stopped post says
+	// why (A sets it for auto-stop, D for the ask rule).
+	autoStopped bool
+	autoReason  stopReason
+	memNow      uint64                // memory in use at the last sample, bytes (A)
+	cpuNow      float64               // CPU at the last sample, percent of the whole computer (A)
+	probeFails  int                   // probes that failed in a row; 3 shows a warning (2.6) (M3)
+	mappings    []routerports.Mapping // router ports mapped for this run (6.5) (N)
 }
 
 // state is what the run's Monitor knows. A run without one (only made by
@@ -93,7 +133,8 @@ func (m *Manager) newLegacyInstance(g game.Game) *instance {
 	info := g.Info()
 	inst := &instance{id: info.ID, g: g, info: info, legacy: true, dirs: legacyDirs(m.paths),
 		known: map[string]*KnownPlayer{}, uploads: map[string]*worlds.Upload{}, logs: m.logs}
-	inst.srv = g.New(game.Env{Instance: info.ID, Data: m.opt.DataDir, Dirs: inst.dirs, Log: m.log, Legacy: legacyStore{m}})
+	inst.srv = g.New(game.Env{Instance: info.ID, Data: m.opt.DataDir, Dirs: inst.dirs, Log: m.log, Legacy: legacyStore{m},
+		Note: func(kind, text string) { m.addGameActivity(inst, kind, "", text) }})
 	return inst
 }
 
@@ -217,7 +258,8 @@ var readFile = os.ReadFile
 
 // actionOf turns an adapter's error that suggests a next step for the
 // panel (games/valheim's ActionError, say) into the manager's own, so jobs
-// and the panel show it the same way.
+// and the panel show it the same way. A game.ActionError already is the
+// manager's own and passes through unchanged.
 func actionOf(err error) error {
 	var ae *ActionError
 	if err == nil || errors.As(err, &ae) {

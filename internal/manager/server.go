@@ -93,8 +93,9 @@ func (m *Manager) endStartWait(inst *instance) {
 }
 
 // RestartServer stops and starts the legacy game's server again.
-func (m *Manager) RestartServer() error {
-	inst := m.legacy()
+func (m *Manager) RestartServer() error { return m.restartGame(m.legacy()) }
+
+func (m *Manager) restartGame(inst *instance) error {
 	return m.runInstJob(inst, "restart", "Restarting the server", false, func(ctx context.Context, j *jobCtl) error {
 		if err := m.doStop(ctx, j, inst); err != nil {
 			return err
@@ -105,8 +106,9 @@ func (m *Manager) RestartServer() error {
 
 // ForceStop ends the legacy game's server process immediately, without
 // saving.
-func (m *Manager) ForceStop() error {
-	inst := m.legacy()
+func (m *Manager) ForceStop() error { return m.forceStopGame(m.legacy()) }
+
+func (m *Manager) forceStopGame(inst *instance) error {
 	m.mu.Lock()
 	run := inst.run
 	var stopping, forced bool
@@ -138,8 +140,9 @@ func (m *Manager) ForceStop() error {
 
 // InstallServer installs or updates the legacy game's server. repair
 // re-checks all files.
-func (m *Manager) InstallServer(repair bool) error {
-	inst := m.legacy()
+func (m *Manager) InstallServer(repair bool) error { return m.installGame(m.legacy(), repair) }
+
+func (m *Manager) installGame(inst *instance, repair bool) error {
 	m.mu.Lock()
 	running := inst.run != nil
 	installed := m.installedLocked(inst)
@@ -465,12 +468,13 @@ func (m *Manager) attach(inst *instance, proc *platform.Proc, rec game.Record, a
 // replayer is a Monitor that reads a log back differently while the app
 // catches up with a server it took over (games/valheim's Monitor: a line
 // then counts at its own time when that is earlier). The manager tells it
-// before each line whether it is catching up.
-type replayer interface{ Replaying(on bool) }
+// before each line whether it is catching up. It is the contract's
+// game.Replayer, so every game can offer it.
+type replayer = game.Replayer
 
 // fromLogReader is a Monitor that can read a finished run's log for the
-// records, by the log's own clock.
-type fromLogReader interface{ FromLog() }
+// records, by the log's own clock (game.LogReader).
+type fromLogReader = game.LogReader
 
 // runAfter runs the game's work after launch, then lets the online post go
 // out, with what it made (the mods code) if anything.
@@ -583,7 +587,11 @@ func (m *Manager) onExit(run *serverRun, code int) {
 	noteEventsLocked(run, run.mon.End(now))
 	archived := m.archiveRunLocked(run)
 	inst.run = nil
-	m.machineIdleSince = now
+	// An exit caused by auto-stop or the "still playing?" rule isn't someone
+	// doing something, so the computer may sleep right after it (spec 4.5).
+	if !run.autoStopped {
+		m.machineIdleSince = now
+	}
 	exit := &ExitInfo{At: now, Code: code, Expected: expected, World: run.rec.World,
 		Uptime: now.Sub(run.rec.Launched).Seconds()}
 	autoRestart := false
@@ -611,6 +619,8 @@ func (m *Manager) onExit(run *serverRun, code int) {
 		why = stopCrashRestart
 	case !expected:
 		why = stopCrash
+	case run.autoStopped:
+		why = run.autoReason // stopIdle or stopAsked
 	case job != nil && job.Finished == nil && job.Kind == "restart":
 		why = stopRestart
 	case app != nil && app.Finished == nil && app.Kind == "hibernate":
@@ -621,6 +631,8 @@ func (m *Manager) onExit(run *serverRun, code int) {
 	if post, ok := m.stoppedPostLocked(run, why); ok {
 		m.queueDiscord(post)
 	}
+	auto := run.autoStopped
+	m.observeLocked(func(o observer) { o.onExit(inst, exit, auto) }) // hooks.go
 	m.mu.Unlock()
 
 	run.proc.Close()
@@ -725,6 +737,9 @@ func (m *Manager) caughtUp(run *serverRun) {
 			m.notePlayerLocked(inst, game.Event{Kind: "join", Time: p.Since, Name: p.Name, Account: p.Account}, time.Time{})
 		}
 	}
+	if inst.run == run {
+		m.observeLocked(func(o observer) { o.onTakeover(inst) }) // hooks.go
+	}
 	// Post the online message if the app that started the server didn't.
 	post, announce := m.announceLocked(run)
 	m.mu.Unlock()
@@ -796,9 +811,11 @@ func (m *Manager) handleEvents(run *serverRun, evs []game.Event, sinceByName map
 		return
 	}
 	noteEventsLocked(run, evs)
+	becameReady := false
 	if !run.ready && (hasKind(evs, "online") || run.state().Ready) {
 		run.ready, run.readyAt = true, time.Now()
 		close(run.readyCh)
+		becameReady = true
 	}
 	post, announce := m.announceLocked(run)
 	replaying := run.replaying
@@ -824,6 +841,14 @@ func (m *Manager) handleEvents(run *serverRun, evs []game.Event, sinceByName map
 					m.keepAwakeUntil = hold
 				}
 			}
+		}
+		// hooks.go: what happened, once the manager has noted it. A run
+		// read back after a takeover gets onTakeover from caughtUp instead.
+		if becameReady {
+			m.observeLocked(func(o observer) { o.onReady(inst) })
+		}
+		for _, ev := range evs {
+			m.observeLocked(func(o observer) { o.onEvent(inst, ev) })
 		}
 	}
 	m.mu.Unlock()
