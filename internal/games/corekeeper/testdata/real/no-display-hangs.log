@@ -1,0 +1,13 @@
+error: XDG_RUNTIME_DIR is invalid or not set in the environment.
+The selected window backend is (null) 
+Mono path[0] = '/home/owner/EGS/games/corekeeper/server/CoreKeeperServer_Data/Managed'
+Mono config path = '/home/owner/EGS/games/corekeeper/server/CoreKeeperServer_Data/MonoBleedingEdge/etc'
+JobSystem: Invalid job-worker-count value 4 must be between 0->3
+JobSystem: Clamping job-worker-count value 4 to 3
+Input System module state changed to: Initialized.
+Error getting num native displays: Video subsystem has not been initialized
+[Physics::Module] Initialized fallback backend.
+[Physics::Module] Id: 0xdecafbad
+Error getting num native displays: Video subsystem has not been initialized
+Desktop is 0 x 0 @ 0 Hz
+error: XDG_RUNTIME_DIR is invalid or not set in the environment.

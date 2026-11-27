@@ -1,0 +1,7 @@
+{
+  "os": ["windows-latest"],
+  "onDemand": false,
+  "timeoutMinutes": 60,
+  "package": "./internal/games/corekeeper/",
+  "run": "TestRealServer"
+}

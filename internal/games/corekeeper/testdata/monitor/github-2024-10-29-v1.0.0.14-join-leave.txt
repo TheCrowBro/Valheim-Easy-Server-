@@ -1,0 +1,36 @@
+# Events the Monitor finds in testdata/forum/github-2024-10-29-v1.0.0.14-join-leave.log, its state at the end, then the lines the Log page shows.
+code
+online text="The server is online and ready for players."
+join name="Gonaeng" account=76561198056526695 text="Gonaeng joined the game."
+leave name="Gonaeng" account=76561198056526695 text="Gonaeng left the game."
+stopping
+state: ready=true version="" code="bvpvPP6a3VjMucnq5Cu8HifZQ73C" count=0 players=[] stopping=true quitHandlers=false
+end: 0 leave events, saved=false
+shown: 27 lines
+  Logged in with userid:2535600146
+  Listening on SteamID userid:90207303732703250
+  Started session with Game ID bvpvPP6a3VjMucnq5Cu8HifZQ73C
+  no existing save file, starting with empty world
+  starting a new world : 2d3b4526a4e6079b127b6a1aa6d79c6c
+  Starting new world with generation type FullRelease
+  Accepted connection from 76561198056526695 with result OK awaiting authentication
+  Connected to userid:76561198056526695
+  Successful authentication from userid:76561198056526695
+  server has ghost collection hash 11858044417851913081 for 1828 ghosts
+  Accepted connect RPC
+  spawning player with character data size 16682
+  Creating new player entity
+  [userid:76561198056526695] player Gonaeng connected islocalplayer=False
+  [userid:76561198056526695] is using new name Gonaeng
+  Started game for new connection
+  [userid:76561198056526695] add or refresh condition None 0 duration 0 for Player: amount=1, variation=0
+  Disconnected from userid:76561198056526695 with reason App_Min
+  check connection state
+  player disconnect
+  Got quit request
+  Exit blocked by ECSManager
+  Quit blocked
+  Got quit request
+  Save is still pending
+  Exit blocked by ECSManager
+  Quit blocked

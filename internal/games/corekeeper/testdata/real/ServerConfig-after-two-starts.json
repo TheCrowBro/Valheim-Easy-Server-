@@ -1,0 +1,13 @@
+{
+    "gameId": "Ek8c5udkq9vH3cf",
+    "password": "",
+    "world": 0,
+    "worldName": "Renamed Check",
+    "worldSeed": "other",
+    "hashedWorldSeed": 1391267135,
+    "maxNumberPlayers": 4,
+    "maxNumberPacketsSentPerFrame": 1,
+    "networkSendRate": 20,
+    "worldMode": 1,
+    "seasonOverride": -1
+}

@@ -1,0 +1,68 @@
+# The Core Keeper server's command line as the Plan builds it (spec 5.8).
+# Paths are relative to the instance's folder, games/corekeeper.
+
+## A new world, mode hard, seed "Nice World"
+exe: <instance>/server/CoreKeeperServer
+dir: <instance>/server
+  -batchmode
+  -logfile
+  <instance>/logs/corekeeper-2026-11-26_21-35-10.log
+  -datapath
+  <instance>/saves/Crow's Cave
+  -world
+  0
+  -worldname
+  Core Keeper server
+  -maxplayers
+  8
+  -gameid
+  Ab3dEfGh9JkLmNpQrStUvWz12345
+  -worldmode
+  Hard
+  -worldseed
+  Nice World
+output: LogArg
+readyWait: 10m0s
+record server: Core Keeper server
+
+## The same world later, renamed server, 4 players
+exe: <instance>/server/CoreKeeperServer
+dir: <instance>/server
+  -batchmode
+  -logfile
+  <instance>/logs/corekeeper-2026-11-26_21-35-10.log
+  -datapath
+  <instance>/saves/Crow's Cave
+  -world
+  0
+  -worldname
+  Friends' Cave
+  -maxplayers
+  4
+  -gameid
+  Ab3dEfGh9JkLmNpQrStUvWz12345
+output: LogArg
+readyWait: 5m0s
+record server: Friends' Cave
+
+## A new world with the defaults (no seed: the server picks one)
+exe: <instance>/server/CoreKeeperServer
+dir: <instance>/server
+  -batchmode
+  -logfile
+  <instance>/logs/corekeeper-2026-11-26_21-35-10.log
+  -datapath
+  <instance>/saves/Second
+  -world
+  0
+  -worldname
+  Core Keeper server
+  -maxplayers
+  8
+  -gameid
+  Ab3dEfGh9JkLmNpQrStUvWz12345
+  -worldmode
+  Normal
+output: LogArg
+readyWait: 10m0s
+record server: Core Keeper server

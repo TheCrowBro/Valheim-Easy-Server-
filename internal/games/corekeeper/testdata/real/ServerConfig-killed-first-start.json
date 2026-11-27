@@ -1,0 +1,13 @@
+{
+    "gameId": "",
+    "password": "",
+    "world": 0,
+    "worldName": "First fail",
+    "worldSeed": "Nice World",
+    "hashedWorldSeed": 0,
+    "maxNumberPlayers": 100,
+    "maxNumberPacketsSentPerFrame": 1,
+    "networkSendRate": 20,
+    "worldMode": 2,
+    "seasonOverride": -1
+}
