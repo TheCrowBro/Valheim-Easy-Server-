@@ -107,7 +107,7 @@ func TestRealServer(t *testing.T) {
 			t.Fatal(err)
 		}
 		s.WaitEvent("saved", "", time.Minute)
-		t.Logf("FACTS: after %s the world has a -wal: %v", saveLine, exists(world+"-wal"))
+		t.Logf("FACTS: after %q the world has a -wal: %v", saveLine, exists(world+"-wal"))
 
 		// "/stop" saves and ends it, folding the -wal into the world.
 		s.Stop()
@@ -146,6 +146,122 @@ func TestRealServer(t *testing.T) {
 			t.Logf("FACTS: %s", l)
 		}
 	})
+
+	// How the server reads its console and spells its output, on each
+	// system (FACTS.md, "The console"). Its console reader runs what one
+	// read gives only when that ends with the system's line ending, .NET's
+	// Environment.NewLine ("\r\n" on Windows, "\n" elsewhere), and stops
+	// reading for good after a read that doesn't. So the order matters:
+	// first lines typed as the app types them (ending "\r\n"), then one
+	// ending in "\n" alone, which on Windows should be lost and leave the
+	// console deaf, and last Ctrl+C, the one stop that needs no console.
+	t.Run("console", func(t *testing.T) {
+		s := gametest.Start(t, Game{}, gametest.Options{Real: true, World: "Console", Change: withPassword})
+		s.WaitEvent("online", "", s.Plan().ReadyWait+5*time.Minute)
+		logPath := s.Plan().LogPath
+		const handling = "Handling Console Command "
+
+		// 1. A command the server doesn't have, with a letter outside
+		// ASCII: it only answers that it's handling it (run with the Linux
+		// server), and that answer shows how its output spells "ü".
+		probe := "/egsprobe-Jürgen"
+		if err := s.Console(probe + endLine); err != nil {
+			t.Fatal(err)
+		}
+		if !waitCount(t, logPath, handling+"/egsprobe-", 1, time.Minute) {
+			t.Fatalf("%q typed as the app types it (ending \"\\r\\n\") didn't run within a minute: the console doesn't read as FACTS.md says", probe)
+		}
+		raw := logLine(t, logPath, handling+"/egsprobe-")
+		spelled, how := spelling(raw)
+		t.Logf("FACTS: on %s %q typed ending \"\\r\\n\" ran; the server's answer spells \"ü\" as % x (%s); this computer's OEM code page is %d", runtime.GOOS, probe, spelled, how, oemCodePage())
+		text := (&server{}).Watch(game.Record{}, nil).Line(raw, time.Now()).Text
+		switch {
+		case strings.Contains(text, "Jürgen"):
+			t.Logf("FACTS: the Monitor reads that line as %q", text)
+		case how == "lost":
+			t.Logf("FACTS: the console's code page has no \"ü\", so no reading can bring it back (the Monitor reads %q)", text)
+		default:
+			t.Errorf("the Monitor reads the server's line as %q, want \"Jürgen\" in it (consoleText)", text)
+		}
+
+		// 2. The save line, as the app types it before it exits.
+		if err := s.Console(saveLine); err != nil {
+			t.Fatal(err)
+		}
+		if !waitCount(t, logPath, handling+"/autosavenow", 1, time.Minute) {
+			t.Fatalf("the save line %q didn't run within a minute", saveLine)
+		}
+		saved := s.WaitEvent("saved", "", 2*time.Minute)
+		t.Logf("FACTS: on %s the save line %q ran and the server said %q at %v", runtime.GOOS, saveLine, logLine(t, logPath, "World saved!"), saved.Time)
+
+		// 3. The same command ending in "\n" alone, as the app typed it
+		// before, and then the save line again.
+		if err := s.Console("/autosavenow"); err != nil {
+			t.Fatal(err)
+		}
+		bare := waitCount(t, logPath, handling+"/autosavenow", 2, 20*time.Second)
+		if runtime.GOOS != "windows" {
+			t.Logf("FACTS: on %s \"/autosavenow\" ending \"\\n\" alone ran: %v", runtime.GOOS, bare)
+			if !bare {
+				t.Errorf("\"/autosavenow\" ending \"\\n\" didn't run, but \"\\n\" is the line ending on %s", runtime.GOOS)
+			}
+		} else {
+			if err := s.Console(saveLine); err != nil {
+				t.Fatal(err)
+			}
+			after := waitCount(t, logPath, handling, 3, 20*time.Second)
+			t.Logf("FACTS: on Windows \"/autosavenow\" ending \"\\n\" alone ran: %v; the save line typed after it ran: %v", bare, after)
+			if bare || after {
+				t.Errorf("the Windows server ran a line ending in \"\\n\" alone (%v), or read its console after one (%v): FACTS.md says it doesn't, so fix it and endLine's comment", bare, after)
+			}
+		}
+
+		// 4. Ctrl+C, as after a takeover: it needs no console.
+		s.Takeover()
+		start := time.Now()
+		s.Stop()
+		t.Logf("FACTS: on %s the Ctrl+C stop took %v; %q", runtime.GOOS, time.Since(start).Round(100*time.Millisecond), logLine(t, logPath, "Server termination event"))
+	})
+}
+
+// spelling finds how the server's line spells the "ü" of "Jürgen": its
+// bytes, and what they are in the usual console code pages.
+func spelling(line string) ([]byte, string) {
+	_, rest, ok := strings.Cut(line, "/egsprobe-J")
+	end := strings.Index(rest, "rgen")
+	if !ok || end < 0 {
+		return nil, "not found in the line"
+	}
+	b := []byte(rest[:end])
+	switch string(b) {
+	case "ü":
+		return b, "UTF-8"
+	case "\x81":
+		return b, "code page 437 or 850, the OEM code pages of English and western European Windows"
+	case "\xfc":
+		return b, "code page 1252, Windows' ANSI code page"
+	case "?":
+		return b, "lost"
+	}
+	return b, "another code page"
+}
+
+// waitCount waits until the run's log holds sub at least n times, and says
+// whether it did within the wait.
+func waitCount(t *testing.T, path, sub string, n int, within time.Duration) bool {
+	t.Helper()
+	for end := time.Now().Add(within); ; time.Sleep(200 * time.Millisecond) {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Count(string(b), sub) >= n {
+			return true
+		}
+		if time.Now().After(end) {
+			return false
+		}
+	}
 }
 
 // listing is a folder's files with their sizes and times, to tell whether

@@ -133,7 +133,7 @@ func commandLine(p game.Plan, root string) string {
 	for _, a := range p.Args {
 		fmt.Fprintf(&b, "arg: %s\n", a)
 	}
-	fmt.Fprintf(&b, "dir: %s\noutput: %d\nconsole: %v\nsaveLine: %s\nreadyWait: %v\nrecord: server=%q port=%d password=%q\n",
+	fmt.Fprintf(&b, "dir: %s\noutput: %d\nconsole: %v\nsaveLine: %q\nreadyWait: %v\nrecord: server=%q port=%d password=%q\n",
 		p.Dir, p.Output, p.Console, p.SaveLine, p.ReadyWait, p.Record.Server, p.Record.Port, p.Record.Password)
 	return portable(b.String(), root)
 }

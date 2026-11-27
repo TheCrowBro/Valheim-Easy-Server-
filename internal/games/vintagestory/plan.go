@@ -24,10 +24,30 @@ const (
 	readyWaitStart = 5 * time.Minute
 )
 
+// endLine ends every line the app types on the server's console, just
+// before the "\n" the app adds itself, in the same write (Plan.SaveLine and
+// a "console" StopStep's Line are typed as their bytes plus "\n").
+//
+// The server takes what one read of its console gives only when it ends
+// with the system's line ending, .NET's Environment.NewLine: "\r\n" on
+// Windows, "\n" on Linux and the Mac. After a read that ends any other way
+// it stops reading its console for good (ServerConsole.readAsync in
+// VintagestoryLib.dll; FACTS.md, "The console"). So on Windows every line
+// typed with "\n" alone was lost, and everything typed after it: the first
+// real-server check there saw no save and no stop. With "\r" before the
+// app's "\n", each line ends with "\r\n", which ends with the line ending on
+// every system, and the server trims the "\r" off before it runs the
+// command (run with the real Linux server; the Windows cell checks it
+// there).
+const endLine = "\r"
+
 // saveLine saves the world without stopping; the app types it before it
 // exits with the server running (spec 2.11). "/autosavenow" is the
 // server's own command for it (FACTS.md).
-const saveLine = "/autosavenow"
+const saveLine = "/autosavenow" + endLine
+
+// stopLine saves the world and stops the server.
+const stopLine = "/stop" + endLine
 
 // savesDir is where the server keeps its worlds, given --dataPath.
 func savesDir(saves string) string { return filepath.Join(saves, "Saves") }

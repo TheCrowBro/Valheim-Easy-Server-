@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -36,7 +37,9 @@ import (
 //   - writes time-stamped "[Server Event]" lines on standard output, the
 //     ready, join, leave, saved and stop lines among them;
 //   - saves on "/autosavenow", every 5 minutes (on its clock), and on its
-//     way out; stops on "/stop" and on Ctrl+C, saving in both cases.
+//     way out; stops on "/stop" and on Ctrl+C, saving in both cases;
+//   - reads its console as the real one does, so on Windows a line typed
+//     with "\n" alone is lost and the console goes deaf (readConsole).
 
 func init() {
 	register(&Personality{
@@ -171,7 +174,7 @@ func runVintageStory(s *Server) {
 		}
 	}
 	v.startWAL()
-	s.OnCommand(v.command)
+	v.readConsole()
 	s.OnStop(func() {
 		v.note("Server termination event SIGINT received. Shutting down server")
 		v.note("Server: Exit() called")
@@ -309,6 +312,49 @@ func (v *vintageStory) stopSequence(reason string, save bool) {
 	v.event("All threads gracefully shut down")
 	v.event("Stopped the server!")
 	v.s.Exit(0)
+}
+
+// vsNewline is the system's line ending as .NET's Environment.NewLine
+// gives it, which the real server's console reader looks for.
+func vsNewline() string {
+	if runtime.GOOS == "windows" {
+		return "\r\n"
+	}
+	return "\n"
+}
+
+// readConsole reads the console the way the real server does (its
+// ServerConsole.readAsync, in VintagestoryLib.dll; the adapter's FACTS.md,
+// "The console"), not with the framework's line reader, so that the app's
+// console lines are tested against the real rule on every system: it reads
+// up to 1024 bytes at a time as UTF-8, and runs what it has once that ends
+// with the system's line ending ("\r\n" on Windows, "\n" elsewhere),
+// trimmed, as one command. After a read that ends any other way (a line
+// typed with "\n" alone on Windows, or half a line) the real server stops
+// reading its console for good, without a word, and so does this one; so
+// does the end of the console.
+func (v *vintageStory) readConsole() {
+	newline := vsNewline()
+	go func() {
+		buf := make([]byte, 1024)
+		input := ""
+		for {
+			n, err := os.Stdin.Read(buf)
+			if n == 0 {
+				return // the end of the console, or an error
+			}
+			input += string(buf[:n])
+			if !strings.HasSuffix(input, newline) {
+				return
+			}
+			line := strings.TrimSpace(input)
+			input = ""
+			v.s.post(func() { v.command(line) })
+			if err != nil {
+				return
+			}
+		}
+	}()
 }
 
 func (v *vintageStory) command(line string) {

@@ -14,6 +14,8 @@
 // least, when it gets Ctrl+C. So the app keeps a pipe to its console
 // (Plan.Console), stops it with "/stop", types "/autosavenow" before the app
 // itself exits, and falls back to Ctrl+C after an app restart (spec 2.11).
+// Each line it types ends with "\r\n", because on Windows the server's
+// console reader takes nothing else (endLine, in plan.go).
 //
 // The server runs on Windows only as far as the app is concerned: Anego
 // ships a Mac server only inside the 600 MB game, so on a Mac the game is
@@ -195,7 +197,7 @@ func isFile(p string) bool {
 // ("Server termination event SIGINT received", FACTS.md).
 func (s *server) Stop(rec game.Record) []game.StopStep {
 	return []game.StopStep{
-		{Kind: "console", Line: "/stop", Wait: 3 * time.Minute},
+		{Kind: "console", Line: stopLine, Wait: 3 * time.Minute},
 		{Kind: "interrupt", Wait: 2 * time.Minute, Resend: time.Minute,
 			Say: "Asking Vintage Story to save and shut down…"},
 	}

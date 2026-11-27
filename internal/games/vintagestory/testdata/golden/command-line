@@ -5,6 +5,6 @@ arg: <root>/saves
 dir: <root>/server/1.22.7
 output: 0
 console: true
-saveLine: /autosavenow
+saveLine: "/autosavenow\r"
 readyWait: 10m0s
 record: server="Friends' Vintage Story" port=42433 password="s3cret&<word>"

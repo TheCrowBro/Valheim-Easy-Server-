@@ -79,9 +79,10 @@ func noise(text string) bool {
 // splitLine takes the time and the kind off a console line: the message as
 // the Log page shows it, its kind ("Event", "Notification", "Debug"…), and
 // the line's own time (zero when it has none). The server prints its
-// local time.
+// local time. On Windows its lines end with "\r\n" and a letter outside
+// ASCII comes in the console's code page (consoleText).
 func splitLine(raw string) (text, kind string, at time.Time) {
-	text = strings.TrimRight(raw, "\r\n")
+	text = consoleText(strings.TrimRight(raw, "\r\n"))
 	text = strings.TrimPrefix(text, "\ufeff")
 	m := reLine.FindStringSubmatch(text)
 	if m == nil {
