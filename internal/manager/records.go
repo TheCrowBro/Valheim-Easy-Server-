@@ -32,32 +32,108 @@ type recordsData struct {
 	Posted string                     `json:"posted"` // the last day summed up in Discord (2006-01-02)
 }
 
+// loadRecords reads the instance's records file at once. New does this for
+// the legacy game only, exactly as it always has; every other game's file
+// is read the first time it's needed (ensureRecords), because New must not
+// read other games' files (invariant I5).
 func (m *Manager) loadRecords(inst *instance) {
-	inst.recs = recordsData{Runs: map[string][]records.Event{}}
+	inst.recs, _ = m.readRecords(inst)
+	m.markRecordsRead(inst)
+}
+
+// markRecordsRead notes that the instance's records came from its file,
+// so they may be saved over it. m.mu must be held, or the app not started.
+func (m *Manager) markRecordsRead(inst *instance) {
+	if m.disc.recsRead == nil {
+		m.disc.recsRead = map[*instance]bool{}
+	}
+	m.disc.recsRead[inst] = true
+}
+
+// readRecords reads the instance's records file. ok is false when the file
+// is there but couldn't be read (another program has it open, say): then
+// nothing may be saved over it yet.
+func (m *Manager) readRecords(inst *instance) (d recordsData, ok bool) {
+	d = recordsData{Runs: map[string][]records.Event{}}
 	path := m.instFile(inst, recordsFile)
 	b, err := os.ReadFile(path)
 	if err == nil {
-		if json.Unmarshal(b, &inst.recs) == nil {
-			if inst.recs.Runs == nil {
-				inst.recs.Runs = map[string][]records.Event{}
+		if json.Unmarshal(b, &d) == nil {
+			if d.Runs == nil {
+				d.Runs = map[string][]records.Event{}
 			}
-			return
+			return d, true
 		}
 		// Damaged: keep it for a look and start again from the logs.
-		inst.recs = recordsData{Runs: map[string][]records.Event{}}
+		d = recordsData{Runs: map[string][]records.Event{}}
 		broken := path + ".damaged-" + time.Now().Format("20060102-150405")
 		os.Rename(path, broken)
 		m.log.Printf("records were damaged; saved as %s", broken)
 	}
+	ok = err == nil || errors.Is(err, os.ErrNotExist)
 	// The first time: the daily Discord post starts tonight, not with
 	// yesterday's.
-	inst.recs.Posted = records.Midnight(time.Now()).AddDate(0, 0, -1).Format("2006-01-02")
+	d.Posted = records.Midnight(time.Now()).AddDate(0, 0, -1).Format("2006-01-02")
+	return d, ok
+}
+
+// recordsReadLocked says whether the instance's records came from its file
+// (always so for the legacy game, which New reads).
+func (m *Manager) recordsReadLocked(inst *instance) bool {
+	return inst.legacy || m.disc.recsRead[inst]
+}
+
+// ensureRecords reads a game's records file the first time its records are
+// needed: the first daily check, the first look at its records, the first
+// save. It reports whether they have been read, so they may be saved.
+//
+// Whatever was kept before the file was read (a run that ended first) is
+// newer than the file, so it's kept with what the file has, and of the two
+// days posted the later one counts: the file is added to, never replaced.
+// It runs without m.mu.
+func (m *Manager) ensureRecords(inst *instance) bool {
+	m.mu.Lock()
+	done := m.recordsReadLocked(inst)
+	m.mu.Unlock()
+	if done {
+		return true
+	}
+	m.disc.recsLoad.Lock()
+	defer m.disc.recsLoad.Unlock()
+	m.mu.Lock()
+	done = m.recordsReadLocked(inst) // read by another caller meanwhile
+	m.mu.Unlock()
+	if done {
+		return true
+	}
+	d, ok := m.readRecords(inst)
+	if !ok {
+		return false // tried again next time
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for name, evs := range inst.recs.Runs {
+		d.Runs[name] = evs
+	}
+	if inst.recs.Posted > d.Posted {
+		d.Posted = inst.recs.Posted
+	}
+	inst.recs = d
+	m.markRecordsRead(inst)
+	return true
 }
 
 // saveRecords saves the legacy game's records.
 func (m *Manager) saveRecords() { m.saveRecordsFor(m.legacy()) }
 
+// saveRecordsFor saves the instance's records, once its file has been read:
+// saving records that never came from the file would wipe the runs and the
+// day posted that it holds.
 func (m *Manager) saveRecordsFor(inst *instance) {
+	if !m.ensureRecords(inst) {
+		m.log.Printf("records: not saving %s's yet: its records file couldn't be read", inst.id)
+		return
+	}
 	m.mu.Lock()
 	b, err := json.Marshal(inst.recs)
 	m.mu.Unlock()
@@ -96,15 +172,30 @@ func (m *Manager) archiveRunLocked(run *serverRun) bool {
 	if run.rec.LogPath == "" || len(run.events) == 0 {
 		return false
 	}
+	// A game whose records file hasn't been read yet keeps the run here
+	// meanwhile: saveRecordsFor reads the file first and keeps both.
+	if run.inst.recs.Runs == nil {
+		run.inst.recs.Runs = map[string][]records.Event{}
+	}
 	run.inst.recs.Runs[name] = run.events
 	return true
 }
 
 // backfillRecords reads the logs of runs that aren't in records.json yet:
 // those from before records existed, or that ended while the app was closed.
+// It runs in the background once the app has started, so it is also where
+// each game's own records and what its players last played with are first
+// read (New reads only the legacy game's files, invariant I5).
 func (m *Manager) backfillRecords() { m.eachInstance(m.backfillRecordsFor) }
 
 func (m *Manager) backfillRecordsFor(inst *instance) {
+	if inst.srv == nil {
+		return // a game this version doesn't run: its records are left as they are
+	}
+	m.ensurePlayed(inst)
+	if !m.ensureRecords(inst) {
+		return // its file can't be read now: the next start of the app tries again
+	}
 	m.mu.Lock()
 	dir := inst.dirs.Logs
 	// The account each name last played from, to tell apart friends who
@@ -199,15 +290,20 @@ func (m *Manager) Records(period string) (records.Summary, error) {
 }
 
 // RecordsGame works out a game's records for "today", "week" or "all"
-// (GET /api/games/{id}/records). Phase 0' made it with the legacy game's
-// records; stream D makes it work for every game (6.3).
-func (m *Manager) RecordsGame(id, period string) (sum records.Summary, err error) {
-	err = m.legacyOnly(id, func() error {
-		var e error
-		sum, e = m.Records(period)
-		return e
-	})
-	return sum, err
+// (GET /api/games/{id}/records), from that game's own records (records.json
+// for the legacy game, games/<id>/records.json for another).
+func (m *Manager) RecordsGame(id, period string) (records.Summary, error) {
+	inst, err := m.instanceByID(id)
+	if err != nil {
+		return records.Summary{}, err
+	}
+	now := time.Now()
+	from, to, ok := records.Period(period, now)
+	if !ok {
+		return records.Summary{}, fmt.Errorf("unknown period %q", period)
+	}
+	m.ensureRecords(inst) // if its file can't be read now, what's known so far
+	return m.recordsBetween(inst, from, to, now), nil
 }
 
 func (m *Manager) recordsBetween(inst *instance, from, to, now time.Time) records.Summary {
@@ -227,7 +323,8 @@ func (m *Manager) recordsBetween(inst *instance, from, to, now time.Time) record
 	return records.Compute(events, from, to, now)
 }
 
-// dailyLoop posts in Discord who died the most each day.
+// dailyLoop posts each game's day in Discord: who died the most, or for a
+// game without deaths, who played.
 func (m *Manager) dailyLoop() {
 	tick := time.NewTicker(30 * time.Second)
 	defer tick.Stop()
@@ -241,44 +338,130 @@ func (m *Manager) dailyLoop() {
 	}
 }
 
-// checkDaily posts who died the most today, at 23:59, if anyone played.
-// If the computer was off or asleep then, yesterday's goes out once it's
-// back (an older day is left out).
+// checkDaily posts each game's day at 23:59, if anyone played, in that
+// game's channel. If the computer was off or asleep then, yesterday's goes
+// out once it's back (an older day is left out). Each game keeps the last
+// day it posted in its own records file, so one game's post never stands
+// for another's.
 func (m *Manager) checkDaily(now time.Time) {
 	day, when := records.Midnight(now).AddDate(0, 0, -1), "yesterday"
 	if now.Hour() == 23 && now.Minute() == 59 {
 		day, when = records.Midnight(now), "today"
 	}
+	m.eachInstance(func(inst *instance) { m.checkDailyFor(inst, day, when, now) })
+}
+
+func (m *Manager) checkDailyFor(inst *instance, day time.Time, when string, now time.Time) {
+	if inst.srv == nil {
+		return // a game this version doesn't run
+	}
+	if !m.ensureRecords(inst) {
+		return // which day it last posted is in its file: the next check tries again
+	}
 	key := day.Format("2006-01-02")
-	inst := m.legacy()
 	m.mu.Lock()
 	if inst.recs.Posted >= key {
 		m.mu.Unlock()
 		return
 	}
 	inst.recs.Posted = key
-	s := m.settings
+	r := m.discordRulesLocked(inst)
 	m.mu.Unlock()
 	m.saveRecordsFor(inst)
-	if !s.Discord || !s.DiscordDaily {
+	if !r.posts() || !r.daily {
 		return
 	}
 	sum := m.recordsBetween(inst, day, day.AddDate(0, 0, 1), now)
 	if len(sum.Players) == 0 {
 		return // nobody played
 	}
+	// The legacy game's post and its activity entries are exactly as they
+	// always were.
 	text := dailyTextFor(inst.srv.Texts(), sum, when)
+	what := "who died the most " + when
+	if !inst.legacy {
+		what = "who died the most in " + inst.short() + " " + when
+		if !inst.info.Deaths {
+			text = playedTextFor(inst.short(), inst.srv.Texts(), sum, when)
+			what = "who played " + inst.short() + " " + when
+		}
+	}
+	text = r.words(inst, text)
 	m.queueDiscord(discordPost{
-		link: s.DiscordWebhook,
+		link: r.link,
 		text: func() string { return text },
 		done: func(err error) {
 			if err != nil {
-				m.addActivity("warning", "", "Couldn't post in Discord who died the most "+when+". "+err.Error())
+				m.discordNote(inst, "warning", "Couldn't post in Discord "+what+". "+err.Error())
 				return
 			}
-			m.addActivity("discord", "", "Posted in Discord who died the most "+when+".")
+			m.discordNote(inst, "discord", "Posted in Discord "+what+".")
 		},
 	})
+}
+
+// playedTextFor is the daily post of a game without deaths (spec 6.3): how
+// many played, and who played the longest in all ("Most time"), then, as
+// the note, the longest single session when that tells something more.
+// "🎮 **3 players** played Terraria today. Most time: **Alex** (2 h 10 min)"
+func playedTextFor(short string, tx game.Texts, sum records.Summary, when string) string {
+	n := len(sum.Players)
+	noun := tx.Players
+	if n == 1 {
+		noun = tx.Player
+	}
+	if noun == "" {
+		noun = "players"
+		if n == 1 {
+			noun = "player"
+		}
+	}
+	var most, longest records.Record
+	for _, r := range sum.Records {
+		switch r.ID {
+		case "playTime":
+			most = r
+		case "longestSession":
+			longest = r
+		}
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "🎮 **%d %s** played %s %s.", n, noun, discord.Escape(short), when)
+	if most.ID != "" {
+		fmt.Fprintf(&b, " Most time: %s (%s)", boldNames(most.Names), humanSeconds(most.Value))
+	}
+	// One session each, or the same one: the note would say it again.
+	if longest.ID != "" && !(most.ID != "" && slices.Equal(longest.Names, most.Names) && longest.Value == most.Value) {
+		fmt.Fprintf(&b, "\n-# Longest session: %s, %s", plainNames(longest.Names), humanSeconds(longest.Value))
+	}
+	return b.String()
+}
+
+// boldNames lists names in bold: "**A**", "**A** and **B**", "**A**, **B**
+// and **C**".
+func boldNames(names []string) string {
+	var out []string
+	for _, n := range names {
+		out = append(out, "**"+discord.Escape(n)+"**")
+	}
+	if len(out) <= 1 {
+		return strings.Join(out, "")
+	}
+	return strings.Join(out[:len(out)-1], ", ") + " and " + out[len(out)-1]
+}
+
+// plainNames lists names as the daily post's note does: "A and B".
+func plainNames(names []string) string {
+	out := make([]string, len(names))
+	for i, n := range names {
+		out[i] = discord.Escape(n)
+	}
+	return strings.Join(out, " and ")
+}
+
+// humanSeconds says a number of seconds as people read it: "2 h 10 min".
+func humanSeconds(s float64) string {
+	return logparse.HumanDuration(time.Duration(s) * time.Second)
 }
 
 // dailyTextFor says who died the most on a day ("today" or "yesterday"),

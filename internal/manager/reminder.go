@@ -129,19 +129,49 @@ func (m *Manager) notePlayedLocked(run *serverRun) bool {
 	return true
 }
 
+// loadPlayed reads what the instance's players last played with. New does
+// this for the legacy game only; every other game's is read once the app
+// has started (ensurePlayed), because New must not read other games' files
+// (invariant I5).
 func (m *Manager) loadPlayed(inst *instance) {
+	if p := m.readPlayed(inst); p != nil {
+		if inst.legacy {
+			m.lastPlayed = p
+		} else {
+			inst.lastPlayed = p
+		}
+	}
+}
+
+func (m *Manager) readPlayed(inst *instance) *played {
 	b, err := os.ReadFile(m.instFile(inst, "lastplayed.json"))
 	if err != nil {
-		return
+		return nil
 	}
 	var p played
 	if json.Unmarshal(b, &p) == nil && p.Mods != nil {
-		if inst.legacy {
-			m.lastPlayed = &p
-		} else {
-			inst.lastPlayed = &p
-		}
+		return &p
 	}
+	return nil
+}
+
+// ensurePlayed reads what a game other than the legacy one was last played
+// with, in the background after the app has started (backfillRecords). If
+// someone has joined meanwhile, what they joined with is newer and stays:
+// the file is only the starting point. It runs without m.mu.
+func (m *Manager) ensurePlayed(inst *instance) {
+	if inst.legacy {
+		return // New read it
+	}
+	p := m.readPlayed(inst)
+	if p == nil {
+		return
+	}
+	m.mu.Lock()
+	if inst.lastPlayed == nil {
+		inst.lastPlayed = p
+	}
+	m.mu.Unlock()
 }
 
 // savePlayed saves what the legacy game's players last played with.

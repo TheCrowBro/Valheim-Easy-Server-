@@ -64,11 +64,16 @@ func Escape(s string) string {
 	return b.String()
 }
 
-// Error is a post that didn't work. Temporary ones may work if tried again
-// later; the others need a new webhook link.
+// Error is a post (or a read) that didn't work. Temporary ones may work if
+// tried again later; the others need a new webhook link (or, for a read, a
+// change in Discord).
 type Error struct {
 	Msg       string
 	Temporary bool
+	// Status is the HTTP status Discord answered with, 0 when it wasn't
+	// reached. The "still playing?" rule tells a channel the bot isn't
+	// allowed to read (403) from one Discord couldn't answer for now.
+	Status int
 }
 
 func (e *Error) Error() string { return e.Msg }
@@ -76,12 +81,21 @@ func (e *Error) Error() string { return e.Msg }
 // Post sends a message to the webhook at link. Mentions in it never ping
 // anyone and links don't get previews. client may be nil.
 func Post(ctx context.Context, client *http.Client, link, content string) error {
+	_, err := PostID(ctx, client, link, content)
+	return err
+}
+
+// PostID is Post that also returns the new message's id. The post waits for
+// Discord to make the message (?wait=true), so Discord answers with it; the
+// "still playing?" question uses it to know where the answers start. The id
+// is "" when Discord's answer didn't include one.
+func PostID(ctx context.Context, client *http.Client, link, content string) (string, error) {
 	if client == nil {
 		client = &http.Client{Timeout: 20 * time.Second}
 	}
 	u, err := url.Parse(link)
 	if err != nil {
-		return &Error{Msg: "The webhook link isn't valid."}
+		return "", &Error{Msg: "The webhook link isn't valid."}
 	}
 	q := u.Query()
 	q.Set("wait", "true") // otherwise a message Discord drops isn't reported
@@ -92,26 +106,30 @@ func Post(ctx context.Context, client *http.Client, link, content string) error 
 		"flags":            1 << 2, // SUPPRESS_EMBEDS
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 	for try := 0; ; try++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(body))
 		if err != nil {
-			return err
+			return "", err
 		}
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "DiscordBot (https://github.com/TheCrowBro/Valheim-Easy-Server-, 1)")
+		req.Header.Set("User-Agent", userAgent)
 		resp, err := client.Do(req)
 		if err != nil {
 			if ctx.Err() != nil {
-				return ctx.Err()
+				return "", ctx.Err()
 			}
-			return &Error{Msg: "Couldn't reach Discord. Check that this computer is connected to the internet.", Temporary: true}
+			return "", &Error{Msg: "Couldn't reach Discord. Check that this computer is connected to the internet.", Temporary: true}
 		}
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 		resp.Body.Close()
 		if resp.StatusCode/100 == 2 {
-			return nil
+			var made struct {
+				ID string `json:"id"`
+			}
+			json.Unmarshal(b, &made) // an answer without an id still means it was posted
+			return made.ID, nil
 		}
 		if resp.StatusCode == http.StatusTooManyRequests {
 			// Discord asks clients to slow down when they post too often.
@@ -119,16 +137,20 @@ func Post(ctx context.Context, client *http.Client, link, content string) error 
 			if try == 0 && wait <= 30*time.Second {
 				select {
 				case <-ctx.Done():
-					return ctx.Err()
+					return "", ctx.Err()
 				case <-time.After(wait):
 				}
 				continue
 			}
-			return &Error{Msg: "Discord asked the app to wait before posting again.", Temporary: true}
+			return "", &Error{Msg: "Discord asked the app to wait before posting again.", Temporary: true, Status: resp.StatusCode}
 		}
-		return statusError(resp.StatusCode, b)
+		return "", statusError(resp.StatusCode, b)
 	}
 }
+
+// userAgent is how the app names itself to Discord, which asks every client
+// to say who it is.
+const userAgent = "DiscordBot (https://github.com/TheCrowBro/Valheim-Easy-Server-, 1)"
 
 // Guild asks Discord which Discord server the webhook at link posts in, and
 // returns its ID. client may be nil.
@@ -140,7 +162,7 @@ func Guild(ctx context.Context, client *http.Client, link string) (string, error
 	if err != nil {
 		return "", &Error{Msg: "The webhook link isn't valid."}
 	}
-	req.Header.Set("User-Agent", "DiscordBot (https://github.com/TheCrowBro/Valheim-Easy-Server-, 1)")
+	req.Header.Set("User-Agent", userAgent)
 	resp, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -169,13 +191,13 @@ func statusError(code int, body []byte) error {
 	json.Unmarshal(body, &reply)
 	switch {
 	case code == http.StatusUnauthorized || code == http.StatusForbidden || code == http.StatusNotFound:
-		return &Error{Msg: "Discord says the webhook link doesn't work. The webhook may have been deleted: make a new one and paste its link in Settings."}
+		return &Error{Msg: "Discord says the webhook link doesn't work. The webhook may have been deleted: make a new one and paste its link in Settings.", Status: code}
 	case code >= 500:
-		return &Error{Msg: fmt.Sprintf("Discord had a problem (error %d).", code), Temporary: true}
+		return &Error{Msg: fmt.Sprintf("Discord had a problem (error %d).", code), Temporary: true, Status: code}
 	case reply.Message != "":
-		return &Error{Msg: fmt.Sprintf("Discord didn't accept the message (%s).", strings.TrimSuffix(reply.Message, "."))}
+		return &Error{Msg: fmt.Sprintf("Discord didn't accept the message (%s).", strings.TrimSuffix(reply.Message, ".")), Status: code}
 	}
-	return &Error{Msg: fmt.Sprintf("Discord didn't accept the message (error %d).", code)}
+	return &Error{Msg: fmt.Sprintf("Discord didn't accept the message (error %d).", code), Status: code}
 }
 
 // retryAfter reads how long Discord wants the app to wait.

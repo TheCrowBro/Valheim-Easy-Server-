@@ -22,7 +22,7 @@ func Webhook(ctx context.Context, client *http.Client, link string) (guild, chan
 	if err != nil {
 		return "", "", &Error{Msg: "The webhook link isn't valid."}
 	}
-	req.Header.Set("User-Agent", "DiscordBot (https://github.com/TheCrowBro/Valheim-Easy-Server-, 1)")
+	req.Header.Set("User-Agent", userAgent)
 	resp, err := client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
