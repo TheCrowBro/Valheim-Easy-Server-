@@ -23,9 +23,18 @@ var (
 
 	// The game's build, the number Keen's patch notes give.
 	reVersion = regexp.MustCompile(`^Game Version \(SVN\): (\S+)`)
-	// Ready: Keen's FAQ names both lines as the sign the server is up.
+	// The session is up: Keen's FAQ names these lines as the sign the
+	// server is up. On 1.0 they come a second or two after the start,
+	// about ten seconds before the world has loaded (FACTS.md, "The lines
+	// the Monitor reads"), so they are not yet "online"; see reWorld.
 	reOnline     = regexp.MustCompile(`^\[Session\] 'HostOnline' \(up\)!`)
 	reOnlineDone = regexp.MustCompile(`^\[Session\] finished transition from '[^']*' to 'Host_Online'`)
+	// The world's own state, which the server logs at every change
+	// ("[game_server] Switching state from %k to %k after %k"). Its states,
+	// in its program, are Invalid, Create, Initialize, Load, LoadEcsScene,
+	// Run, Shutdown, Destroy and Error. Run is the world loaded and
+	// running, which is when the app says the server is online.
+	reWorld = regexp.MustCompile(`^\[game_server\] Switching state from (\w+) to (\w+)\b`)
 	// The session closed: nobody can be on after this.
 	reOffline = regexp.MustCompile(`^\[Session\] 'HostOnline' \(down\)!`)
 	// A player is in, by the name they play as (their Steam name). The
@@ -44,10 +53,7 @@ var (
 	reFull         = regexp.MustCompile(`^\[online\] Session rejected with peer because it is full`)
 	// A stop, and why. The reasons are the names the program gives the
 	// console events it handles (see requested).
-	reShutdown = regexp.MustCompile(`^\[app\] Trigger gameflow shutdown, exit: (\S+)`)
-	// The server's world thread has begun shutting down, which saves the
-	// world on the way out.
-	reShutdownState = regexp.MustCompile(`^\[game_server\] Switching state from Run to Shutdown`)
+	reShutdown      = regexp.MustCompile(`^\[app\] Trigger gameflow shutdown, exit: (\S+)`)
 	reSaveSystemBad = regexp.MustCompile(`^(Shutting down Server Save System with pending changes|Error while shutting down Server Save System)`)
 	// 2024's servers logged every autosave; 1.0 logs none (FACTS.md).
 	reSaved      = regexp.MustCompile(`^\[server\] Saved\b`)
@@ -110,12 +116,23 @@ func stripPrefix(line string) string {
 	return line
 }
 
+// loading are the world's states before Run: an Error from one of them is
+// a world that couldn't load.
+var loading = []string{"Invalid", "Create", "Initialize", "Load", "LoadEcsScene"}
+
 // probeFallback is how long the server's Steam query port must have
 // answered, with no "online" line in its log, before the Monitor says it
 // is online anyway: Steam lists the server once that port answers, so
 // friends can join, and a log the app can't read (or a reworded line)
 // mustn't leave the game "starting" for good.
 const probeFallback = time.Minute
+
+// sessionFallback is how long after its session came up ("HostOnline")
+// the Monitor waits for the world's Run line before it says the server is
+// online anyway. Real 1.0 servers load a small world about ten seconds
+// after the session is up; this leaves room for a big world on a slow
+// disk, and keeps a reworded Run line from leaving the game "starting".
+const sessionFallback = 2 * time.Minute
 
 // monitor follows one run of the server. Every method is called with the
 // manager's lock held, so it calls nothing outside itself but known, which
@@ -126,10 +143,12 @@ type monitor struct {
 	state   game.RunState
 
 	peers      []peer    // connections not yet matched to a player
+	session    time.Time // when the session came up (HostOnline); zero before
 	probeUp    time.Time // when the query port first answered; zero before
 	probeCount int       // the last count it gave; -1 before
 	stopping   bool      // a stop someone asked for
 	shutdown   bool      // the world thread began shutting down (it saves)
+	failed     bool      // the world went into its Error state
 	saveBad    bool      // the save system said it couldn't save
 	saveQuit   bool      // the server told players it's quitting over saves
 }
@@ -195,7 +214,30 @@ func (m *monitor) Line(raw string, now time.Time) game.Line {
 		m.state.Version = reVersion.FindStringSubmatch(text)[1]
 
 	case reOnline.MatchString(text), reOnlineDone.MatchString(text):
-		out.Events = append(out.Events, m.online(at)...)
+		// The session is up, but the world is still loading: the Run
+		// line says when it is online (sessionFallback if none comes).
+		if m.session.IsZero() {
+			m.session = at
+		}
+
+	case reWorld.MatchString(text):
+		g := reWorld.FindStringSubmatch(text)
+		from, to := g[1], g[2]
+		switch {
+		case to == "Run":
+			out.Events = append(out.Events, m.online(at)...)
+		case from == "Run" && to == "Shutdown":
+			// The world thread has begun shutting down, which saves the
+			// world on the way out.
+			m.shutdown = true
+		case to == "Error":
+			m.failed = true
+			if slices.Contains(loading, from) {
+				add(game.Event{Kind: "load_failed", Text: "The server couldn't load the world."})
+			} else {
+				add(game.Event{Kind: "world_error", Text: "The server's world stopped with an error."})
+			}
+		}
 
 	case reOffline.MatchString(text):
 		out.Events = append(out.Events, m.leaveAll(at)...)
@@ -206,6 +248,9 @@ func (m *monitor) Line(raw string, now time.Time) game.Line {
 		if m.find(name) >= 0 {
 			break // seen again without a leave: the same player
 		}
+		// Someone is playing, so the server is up, whatever the log
+		// said before (or didn't: a log read from the middle).
+		out.Events = append(out.Events, m.online(at)...)
 		account := ""
 		if len(m.peers) == 1 {
 			// One connection waiting for its player: this is them.
@@ -258,9 +303,6 @@ func (m *monitor) Line(raw string, now time.Time) game.Line {
 			m.saveQuit = true
 			add(game.Event{Kind: "save_failed", Text: "The server is shutting down because it couldn't save the world."})
 		}
-
-	case reShutdownState.MatchString(text):
-		m.shutdown = true
 
 	case reSaveSystemBad.MatchString(text):
 		m.saveBad = true
@@ -335,13 +377,19 @@ func (m *monitor) leaveAll(at time.Time) []game.Event {
 	return evs
 }
 
-// Tick says the server is online once its query port has answered for a
-// while with no "online" line in the log (probeFallback).
+// Tick says the server is online when its log never said the world is
+// running, but its session has been up for a while (sessionFallback) or
+// its query port has answered for a while (probeFallback). A world that
+// went into its Error state stays offline.
 func (m *monitor) Tick(now time.Time) []game.Event {
-	if m.probeUp.IsZero() || m.state.Ready || m.stopping || now.Sub(m.probeUp) < probeFallback {
+	if m.state.Ready || m.stopping || m.failed {
 		return nil
 	}
-	return m.online(now)
+	if (!m.session.IsZero() && now.Sub(m.session) >= sessionFallback) ||
+		(!m.probeUp.IsZero() && now.Sub(m.probeUp) >= probeFallback) {
+		return m.online(now)
+	}
+	return nil
 }
 
 // Probed folds in the query port's answer (spec 2.6). Its count is the
