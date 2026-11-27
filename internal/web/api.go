@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"valheim-easy-server/internal/config"
+	"valheim-easy-server/internal/game"
 	"valheim-easy-server/internal/manager"
 	"valheim-easy-server/internal/platform"
 	"valheim-easy-server/internal/stats"
@@ -81,6 +82,13 @@ func (s *Server) routes() http.Handler {
 	a("POST /api/system/open-folder", s.openFolder)
 	a("POST /api/system/launch-on-login", s.launchOnLogin)
 	a("POST /api/system/quit", s.quitApp)
+
+	// The new panel's routes (gameroutes.go and approutes.go). They are all
+	// under /api/, so guard checks each of them as it checks the routes
+	// above.
+	for _, rt := range s.newRoutes() {
+		a(rt.pattern, rt.handler)
+	}
 	return securityHeaders(guard(mux))
 }
 
@@ -97,9 +105,12 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]any{"error": msg})
 }
 
-// fail turns an error into a response the panel can show.
+// fail turns an error into a response the panel can show:
+// {error, fields?, action?, data?} (spec 6.2), with 409 when another job
+// is in the way and 400 otherwise.
 func fail(w http.ResponseWriter, err error) {
 	var fe config.FieldErrors
+	var gfe game.FieldErrors
 	var ae *manager.ActionError
 	var be *manager.BusyError
 	switch {
@@ -109,8 +120,21 @@ func fail(w http.ResponseWriter, err error) {
 		// have no settings to highlight, and some fields, such as the
 		// world name, have no box on the Settings page either.
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": fe.Error(), "fields": fe})
+	case errors.As(err, &gfe):
+		// The same for the new routes, whose keys also say the scope
+		// ("server.password", "newWorld.seed"), so one form can hold the
+		// fields of several scopes.
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": gfe.Error(), "fields": gfe})
 	case errors.As(err, &ae):
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": ae.Msg, "action": ae.Action})
+		body := map[string]any{"error": ae.Msg, "action": ae.Action}
+		if ae.Data != nil {
+			// What the next step needs, such as the running games a
+			// memory warning offers to stop (manager.MemoryShort). It is
+			// only written when there is some, so the old routes' answers
+			// keep exactly the keys they had.
+			body["data"] = ae.Data
+		}
+		writeJSON(w, http.StatusBadRequest, body)
 	case errors.As(err, &be):
 		writeErr(w, http.StatusConflict, be.Error())
 	default:
@@ -297,6 +321,12 @@ func (s *Server) downloadWorld(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path, filename, err := s.m.PrepareDownload(name)
+	sendWorldZip(w, r, path, filename, err)
+}
+
+// sendWorldZip sends the zip a world download was packed into (or the
+// error that stopped it), then deletes it: it was made only for this.
+func sendWorldZip(w http.ResponseWriter, r *http.Request, path, filename string, err error) {
 	if err != nil {
 		fail(w, err)
 		return
@@ -323,8 +353,14 @@ func (s *Server) downloadBackup(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, msg)
 		return
 	}
+	s.sendBackup(w, name, id, func(out io.Writer) error { return s.m.ExportBackup(out, name, id) })
+}
+
+// sendBackup sends one of a world's backups as a zip, written by export as
+// it is read.
+func (s *Server) sendBackup(w http.ResponseWriter, name, id string, export func(io.Writer) error) {
 	out := &lazyAttachment{w: w, name: name + " backup.zip"}
-	if err := s.m.ExportBackup(out, name, id); err != nil {
+	if err := export(out); err != nil {
 		if !out.started {
 			fail(w, err) // e.g. the backup was deleted: say so, not an empty zip
 			return
@@ -367,7 +403,13 @@ func (s *Server) newUpload(w http.ResponseWriter, r *http.Request) {
 // disk so even large worlds don't need much memory. The file name may
 // include folders (when a whole world folder was chosen).
 func (s *Server) uploadFiles(w http.ResponseWriter, r *http.Request) {
-	u, err := s.m.Upload(r.PathValue("id"))
+	receiveFiles(w, r, func() (*worlds.Upload, error) { return s.m.Upload(r.PathValue("id")) })
+}
+
+// receiveFiles streams the request's files into the upload that find
+// returns (the legacy game's, or one game's on the new routes).
+func receiveFiles(w http.ResponseWriter, r *http.Request, find func() (*worlds.Upload, error)) {
+	u, err := find()
 	if err != nil {
 		fail(w, err)
 		return
@@ -516,15 +558,19 @@ func (s *Server) updateApp(w http.ResponseWriter, r *http.Request) {
 }
 
 // testDiscord posts a test message with the webhook link from the form.
+// The old panel sends only {webhook}, which is tested as today's main
+// channel; the new one may add the instance whose channel it is, so the
+// message is worded for that game.
 func (s *Server) testDiscord(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Webhook string `json:"webhook"`
+		Game    string `json:"game"`
 	}
 	if err := readJSON(r, &body); err != nil {
 		fail(w, err)
 		return
 	}
-	if err := s.m.TestDiscord(body.Webhook); err != nil {
+	if err := s.m.TestGameDiscord(body.Webhook, body.Game); err != nil {
 		fail(w, err)
 		return
 	}
@@ -649,12 +695,25 @@ var ranges = map[string]time.Duration{
 }
 
 func (s *Server) stats(w http.ResponseWriter, r *http.Request) {
+	d := statsRange(r)
+	now := time.Now()
+	s.writeStats(w, now, d, s.m.History(now.Add(-d)), s.m.ByPlayers())
+}
+
+// statsRange is the time a Stats page asks about: ?range= 15m, 1h, 6h or
+// 24h; an hour when it says none of those.
+func statsRange(r *http.Request) time.Duration {
 	d, okRange := ranges[r.URL.Query().Get("range")]
 	if !okRange {
 		d = time.Hour
 	}
-	now := time.Now()
-	raw := s.m.History(now.Add(-d))
+	return d
+}
+
+// writeStats answers a Stats page: the readings of the last d before now
+// (at most 360 of them, for the charts), how long the server ran in that
+// time, its usage by the number of players on, and this computer.
+func (s *Server) writeStats(w http.ResponseWriter, now time.Time, d time.Duration, raw []stats.Sample, byPlayers stats.Summary) {
 	samples := stats.Downsample(raw, 360)
 	if samples == nil {
 		samples = []stats.Sample{}
@@ -663,7 +722,7 @@ func (s *Server) stats(w http.ResponseWriter, r *http.Request) {
 		"samples":        samples,
 		"runningSeconds": runningSeconds(raw, now),
 		"rangeSeconds":   d.Seconds(),
-		"byPlayers":      s.m.ByPlayers(),
+		"byPlayers":      byPlayers,
 		"machine":        s.m.Machine(),
 	})
 }
@@ -698,6 +757,12 @@ func runningSeconds(samples []stats.Sample, now time.Time) float64 {
 func (s *Server) logs(w http.ResponseWriter, r *http.Request) {
 	after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
 	lines, last := s.m.Logs(after, 1000)
+	writeLogs(w, lines, last)
+}
+
+// writeLogs answers a Log page: the lines after the one it last had, and
+// the number of the last one, which it asks after next time.
+func writeLogs(w http.ResponseWriter, lines []manager.LogLine, last int64) {
 	if lines == nil {
 		lines = []manager.LogLine{}
 	}
@@ -705,7 +770,11 @@ func (s *Server) logs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) downloadLog(w http.ResponseWriter, r *http.Request) {
-	path := s.m.CurrentLogPath()
+	sendLog(w, s.m.CurrentLogPath())
+}
+
+// sendLog sends a server's log file as a download.
+func sendLog(w http.ResponseWriter, path string) {
 	f, err := os.Open(path)
 	if path == "" || err != nil {
 		writeErr(w, http.StatusNotFound, "There's no server log yet.")
