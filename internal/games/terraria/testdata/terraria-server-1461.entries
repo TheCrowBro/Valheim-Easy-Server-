@@ -1,0 +1,92 @@
+# The entries of the real terraria-server-1461.zip (57,392,309 bytes, sha256
+# 0fb586dfbf2bcee448612c90768648d89532eed6ab345aadbbb0829f9d447476, downloaded
+# 2026-11-26): created-by system (0 = FAT, so no Unix modes), the Unix mode
+# bits it carries (none here), size and name. The installer test builds a
+# small zip with these names and tiny contents.
+0	0	0	1461/
+0	0	0	1461/Linux/
+0	0	700271	1461/Linux/changelog.txt
+0	0	1090560	1461/Linux/FNA.dll
+0	0	1049	1461/Linux/FNA.dll.config
+0	0	39936	1461/Linux/I18N.dll
+0	0	71680	1461/Linux/I18N.West.dll
+0	0	0	1461/Linux/lib64/
+0	0	2958176	1461/Linux/lib64/libcrypto.so.1.1
+0	0	302728	1461/Linux/lib64/libFAudio.so.0
+0	0	728968	1461/Linux/lib64/libFNA3D.so.0
+0	0	1236120	1461/Linux/lib64/libGNS_Wrapper.so
+0	0	3637112	1461/Linux/lib64/libprotobuf.so.3.15.3.0
+0	0	4082768	1461/Linux/lib64/libSDL3.so.0
+0	0	598104	1461/Linux/lib64/libssl.so.1.1
+0	0	212992	1461/Linux/Mono.Posix.dll
+0	0	241152	1461/Linux/Mono.Security.dll
+0	0	4048	1461/Linux/monoconfig
+0	0	34366	1461/Linux/monomachineconfig
+0	0	4641792	1461/Linux/mscorlib.dll
+0	0	63	1461/Linux/open-folder
+0	0	64512	1461/Linux/OpenNAT.dll
+0	0	122880	1461/Linux/System.Configuration.dll
+0	0	1087488	1461/Linux/System.Core.dll
+0	0	2103296	1461/Linux/System.Data.dll
+0	0	2615808	1461/Linux/System.dll
+0	0	491008	1461/Linux/System.Drawing.dll
+0	0	119808	1461/Linux/System.Numerics.dll
+0	0	939008	1461/Linux/System.Runtime.Serialization.dll
+0	0	316416	1461/Linux/System.Security.dll
+0	0	3051008	1461/Linux/System.Windows.Forms.dll
+0	0	543	1461/Linux/System.Windows.Forms.dll.config
+0	0	3176448	1461/Linux/System.Xml.dll
+0	0	137728	1461/Linux/System.Xml.Linq.dll
+0	0	5631	1461/Linux/Terraria.png
+0	0	410	1461/Linux/TerrariaServer
+0	0	6021208	1461/Linux/TerrariaServer.bin.x86_64
+0	0	26107904	1461/Linux/TerrariaServer.exe
+0	0	164864	1461/Linux/WindowsBase.dll
+0	0	0	1461/Mac/
+0	0	700271	1461/Mac/changelog.txt
+0	0	0	1461/Mac/Terraria Server.app/
+0	0	0	1461/Mac/Terraria Server.app/Contents/
+0	0	1060	1461/Mac/Terraria Server.app/Contents/Info.plist
+0	0	0	1461/Mac/Terraria Server.app/Contents/MacOS/
+0	0	0	1461/Mac/Terraria Server.app/Contents/MacOS/osx/
+0	0	543232	1461/Mac/Terraria Server.app/Contents/MacOS/osx/libFAudio.0.dylib
+0	0	1026544	1461/Mac/Terraria Server.app/Contents/MacOS/osx/libFNA3D.0.dylib
+0	0	21233936	1461/Mac/Terraria Server.app/Contents/MacOS/osx/libGNS_Wrapper.dylib
+0	0	6825856	1461/Mac/Terraria Server.app/Contents/MacOS/osx/libSDL3.0.dylib
+0	0	82	1461/Mac/Terraria Server.app/Contents/MacOS/Terraria
+0	0	423	1461/Mac/Terraria Server.app/Contents/MacOS/TerrariaServer
+0	0	5487176	1461/Mac/Terraria Server.app/Contents/MacOS/TerrariaServer.bin.osx
+0	0	0	1461/Mac/Terraria Server.app/Contents/Resources/
+0	0	1090560	1461/Mac/Terraria Server.app/Contents/Resources/FNA.dll
+0	0	1049	1461/Mac/Terraria Server.app/Contents/Resources/FNA.dll.config
+0	0	39936	1461/Mac/Terraria Server.app/Contents/Resources/I18N.dll
+0	0	71680	1461/Mac/Terraria Server.app/Contents/Resources/I18N.West.dll
+0	0	212992	1461/Mac/Terraria Server.app/Contents/Resources/Mono.Posix.dll
+0	0	241152	1461/Mac/Terraria Server.app/Contents/Resources/Mono.Security.dll
+0	0	3984	1461/Mac/Terraria Server.app/Contents/Resources/monoconfig
+0	0	34056	1461/Mac/Terraria Server.app/Contents/Resources/monomachineconfig
+0	0	4641792	1461/Mac/Terraria Server.app/Contents/Resources/mscorlib.dll
+0	0	64512	1461/Mac/Terraria Server.app/Contents/Resources/OpenNAT.dll
+0	0	122880	1461/Mac/Terraria Server.app/Contents/Resources/System.Configuration.dll
+0	0	1087488	1461/Mac/Terraria Server.app/Contents/Resources/System.Core.dll
+0	0	2103296	1461/Mac/Terraria Server.app/Contents/Resources/System.Data.dll
+0	0	2615808	1461/Mac/Terraria Server.app/Contents/Resources/System.dll
+0	0	491008	1461/Mac/Terraria Server.app/Contents/Resources/System.Drawing.dll
+0	0	119808	1461/Mac/Terraria Server.app/Contents/Resources/System.Numerics.dll
+0	0	939008	1461/Mac/Terraria Server.app/Contents/Resources/System.Runtime.Serialization.dll
+0	0	316416	1461/Mac/Terraria Server.app/Contents/Resources/System.Security.dll
+0	0	3051008	1461/Mac/Terraria Server.app/Contents/Resources/System.Windows.Forms.dll
+0	0	3176448	1461/Mac/Terraria Server.app/Contents/Resources/System.Xml.dll
+0	0	137728	1461/Mac/Terraria Server.app/Contents/Resources/System.Xml.Linq.dll
+0	0	159962	1461/Mac/Terraria Server.app/Contents/Resources/Terraria.icns
+0	0	26107904	1461/Mac/Terraria Server.app/Contents/Resources/TerrariaServer.exe
+0	0	164864	1461/Mac/Terraria Server.app/Contents/Resources/WindowsBase.dll
+0	0	0	1461/Windows/
+0	0	700271	1461/Windows/changelog.txt
+0	0	121856	1461/Windows/GNS_Wrapper.dll
+0	0	64512	1461/Windows/OpenNAT.dll
+0	0	99840	1461/Windows/ReLogic.Native.dll
+0	0	4691	1461/Windows/serverconfig.txt
+0	0	123	1461/Windows/start-server.bat
+0	0	2888704	1461/Windows/steamnetworkingsockets.dll
+0	0	26106880	1461/Windows/TerrariaServer.exe

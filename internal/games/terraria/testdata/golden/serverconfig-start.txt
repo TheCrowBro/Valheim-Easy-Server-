@@ -1,0 +1,12 @@
+# Written by Easy Game Server before each start of the Terraria server.
+# Change the settings in the app: changes made here are replaced.
+world=<data>/games/terraria/saves/Forest.wld
+worldpath=<data>/games/terraria/saves
+port=7790
+maxplayers=6
+password=p=ss #1
+motd=Friday Terraria
+upnp=0
+secure=1
+language=en-US
+banlist=<data>/games/terraria/server/banlist.txt

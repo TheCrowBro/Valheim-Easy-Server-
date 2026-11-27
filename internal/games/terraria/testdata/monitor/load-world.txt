@@ -1,0 +1,14 @@
+# events
+online		The server is online and ready for players.
+# shown on the Log page
+Error Logging Enabled.
+Terraria Server v1.4.6.1
+Resetting game objects 1%
+Loading world data: 1%
+Settling liquids 1%
+Terraria Server v1.4.6.1
+Listening on port 17777
+Type 'help' for a list of commands.
+Server started
+# state
+ready=true version=1.4.6.1 count=0 players= saved=false stopping=false

@@ -1,0 +1,15 @@
+# events
+online		The server is online and ready for players.
+join	Stayer	Stayer joined the game.
+saved		World saved.
+# shown on the Log page
+Listening on port 17777
+Type 'help' for a list of commands.
+Server started
+127.0.0.1:41732 is connecting...
+Stayer has joined.
+Saving world data: 14%
+Validating world save: 25%
+Backing up world file
+# state
+ready=true version= count=1 players=Stayer saved=true stopping=false

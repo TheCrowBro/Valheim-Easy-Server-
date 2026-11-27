@@ -1,0 +1,37 @@
+Available commands:
+
+help		Displays a list of commands.
+playing		Shows the list of players.
+clear		Clear the console window.
+exit		Shutdown the server and save.
+exit-nosave	Shutdown the server without saving.
+save		Save the game world.
+kick <player>	Kicks a player from the server.
+ban <player>	Bans a player from the server.
+password	Show password.
+password <pass>	Change password.
+version		Print version number.
+time		Display game time.
+port		Print the listening port.
+maxplayers	Print the max number of players.
+say <words>	Send a message.
+motd		Print MOTD.
+motd <words>	Change MOTD.
+dawn		Change time to dawn.
+noon		Change time to noon.
+dusk		Change time to dusk.
+midnight	Change time to midnight.
+settle		Settle all water.
+seed		Displays the world seed.
+: Terraria Server v1.4.6.1
+: No players connected.
+: Port: 17777
+: 127.0.0.1:50234 is connecting...
+127.0.0.1:50234 lost connection...
+127.0.0.1:37532 is connecting...
+127.0.0.1:37532 was booted: You are not using the same version as this server.
+127.0.0.1:37546 is connecting...
+127.0.0.1:37546 was booted: You are not using the same version as this server.
+127.0.0.1:37554 is connecting...
+127.0.0.1:37554 was booted: You are not using the same version as this server.
+127.0.0.1:37558 is connecting...
