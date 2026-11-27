@@ -156,6 +156,14 @@ func (m *Manager) gameStatusLocked(inst *instance, v gameView) GameStatus {
 	if !inst.legacy {
 		gs.Warnings = m.gameWarningsLocked(inst, v)
 	}
+	if inst.run != nil && m.isHiddenLocked(inst) {
+		// It was removed from the panel, yet its server runs: started by an
+		// older version of the app after going back to it (which knows
+		// nothing of hiding, spec 3.6) or outside the app, then taken over.
+		// It shows, unstarred, until it stops; it can be stopped but not
+		// started or restarted.
+		gs.Warnings = append(gs.Warnings, inst.short()+" was removed from the panel, but its server is running, so it shows here until it stops. To keep it, add it again with Add a game.")
+	}
 	gs.ConsoleInUse = m.consoleInUseOfLocked(inst)
 	// One hook per stream.
 	router := m.routerStatusLocked(inst) // N
@@ -188,8 +196,11 @@ func (m *Manager) gamesStatusLocked(st *Status, lan []string, legacy gameView) {
 			st.Games = append(st.Games, m.foreignStatusLocked(inst))
 			continue
 		}
-		if m.isHiddenLocked(inst) {
-			continue // removed from the panel (I1): only Add a game offers it again
+		if m.isHiddenLocked(inst) && inst.run == nil {
+			// Removed from the panel (I1): only Add a game offers it again.
+			// While its server runs it is shown all the same (gameStatusLocked
+			// says why), so a hidden Valheim never runs unseen.
+			continue
 		}
 		v := legacy
 		if !inst.legacy {

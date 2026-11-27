@@ -520,9 +520,11 @@ func (m *Manager) sendRCON(ctx context.Context, run *serverRun, line string) err
 // probeLoop asks a game that has a probe (RCON, an API, A2S) who is on: every
 // probeStarting until the server is ready (failures then count for
 // nothing), once at ready, and every probeReady while it is. Each answer
-// goes through the Monitor's Probed, whose count is authoritative. Three
-// failures in a row once it is ready show a warning on the game's page;
-// the log keeps working alone. It waits while a takeover catches up.
+// goes through the Monitor's Probed, whose count is authoritative, and an
+// answer with a count proves the game's presence (2.6) until a probe
+// fails. Three failures in a row once it is ready show a warning on the
+// game's page; the log keeps working alone. It waits while a takeover
+// catches up.
 func (m *Manager) probeLoop(ctx context.Context, run *serverRun, p game.Prober) {
 	readyCh := run.readyCh
 	timer := time.NewTimer(probeStarting)
@@ -568,6 +570,13 @@ func (m *Manager) probeLoop(ctx context.Context, run *serverRun, p game.Prober) 
 			return
 		}
 		if err != nil {
+			// The latest probe didn't answer, so its count no longer proves
+			// who is on (2.6): the Monitor still holds the last answer, which
+			// may be 0 while people play. Until the next answer, auto-stop
+			// and idle sleep don't trust it and the "still playing?" rule
+			// applies instead, unless the game's log presence is proven.
+			unproven := run.probed
+			run.probed = false
 			warn := false
 			if run.ready {
 				run.probeFails++
@@ -576,18 +585,21 @@ func (m *Manager) probeLoop(ctx context.Context, run *serverRun, p game.Prober) 
 			m.mu.Unlock()
 			if warn {
 				m.log.Printf("the %s probe failed %d times in a row: %v", run.inst.id, probeFailWarn, err)
+			}
+			if warn || unproven {
 				m.notify()
 			}
 			continue
 		}
 		warned := run.probeFails >= probeFailWarn
+		proven := !run.probed && res.Count >= 0
 		run.probeFails = 0
 		run.probed = res.Count >= 0
 		sinceByName := m.sinceByNameLocked(run)
 		evs := run.mon.Probed(res, time.Now())
 		m.mu.Unlock()
 		m.handleEvents(run, evs, sinceByName)
-		if warned {
+		if warned || proven {
 			m.notify()
 		}
 	}

@@ -45,33 +45,20 @@ func (m *Manager) startGame(inst *instance) error {
 }
 
 // startChecks refuses a start that can't work (spec 4.3's steps 1 and 2):
-// this version can't run the game (foreign), the legacy game was removed
-// from the panel (hidden, I1), the owner turned the game off (disabled,
-// 8.3), its server can't run on this computer, it is already running,
-// isn't installed, or its settings need fixing. Every start comes through
-// here, whoever asks (the panel, the old routes, Discord, a wake, the
-// resume, start-with-app, a crash restart), so a hidden or disabled game
-// never starts unseen.
+// startRefusal's reasons (foreign, hidden, turned off, can't run on this
+// computer), then a server that is already running, isn't installed, or
+// whose settings need fixing. Every start asks it before its job (the
+// panel, the old routes, Discord, a wake, the resume, start-with-app, a
+// crash restart). A restart asks startRefusal instead, and doStart asks it
+// again inside every job, so a hidden or turned-off game never starts
+// unseen, whichever way it is asked.
 func (m *Manager) startChecks(inst *instance) error {
-	if inst.srv == nil {
-		return foreignError(inst)
+	if err := m.startRefusal(inst); err != nil {
+		return err
 	}
 	m.mu.Lock()
-	hidden, disabled := m.isHiddenLocked(inst), m.isDisabledLocked(inst)
-	level, needs := m.canRunLocked(inst)
 	running := inst.run != nil
 	m.mu.Unlock()
-	switch {
-	case hidden:
-		return hiddenError(inst)
-	case disabled:
-		return fmt.Errorf("%s is turned off on its Settings tab. Turn it on there to start it.", inst.short())
-	case level != game.Runs:
-		if needs == "" {
-			needs = "It can't run on this computer."
-		}
-		return fmt.Errorf("The %s server can't run on this computer. %s", inst.short(), strings.TrimSuffix(needs, ".")+".")
-	}
 	var installed bool
 	if inst.legacy {
 		m.mu.Lock()
@@ -89,6 +76,36 @@ func (m *Manager) startChecks(inst *instance) error {
 		return errNotInstalled(inst)
 	case len(errs) > 0: // an adapter may answer an empty map for "no errors"
 		return fieldErrors(errs) // the panel shows these next to the settings
+	}
+	return nil
+}
+
+// startRefusal is why the instance's server may not be started at all,
+// whether it runs now or not: this version can't run the game (foreign),
+// the legacy game was removed from the panel (hidden, I1), the owner
+// turned the game off (disabled, 8.3), or its server can't run on this
+// computer (2.10). nil when none of these holds.
+func (m *Manager) startRefusal(inst *instance) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.startRefusalLocked(inst)
+}
+
+func (m *Manager) startRefusalLocked(inst *instance) error {
+	if inst.srv == nil {
+		return foreignError(inst)
+	}
+	if m.isHiddenLocked(inst) {
+		return hiddenError(inst)
+	}
+	if m.isDisabledLocked(inst) {
+		return fmt.Errorf("%s is turned off on its Settings tab. Turn it on there to start it.", inst.short())
+	}
+	if level, needs := m.canRunLocked(inst); level != game.Runs {
+		if needs == "" {
+			needs = "It can't run on this computer."
+		}
+		return fmt.Errorf("The %s server can't run on this computer. %s", inst.short(), strings.TrimSuffix(needs, ".")+".")
 	}
 	return nil
 }
@@ -153,7 +170,16 @@ func (m *Manager) endStartWait(inst *instance) {
 // RestartServer stops and starts the legacy game's server again.
 func (m *Manager) RestartServer() error { return m.restartGame(m.legacy()) }
 
+// restartGame stops the instance's server and starts it again as one job.
+// A server that isn't running is only started, as the old route always
+// did, so a restart is refused for startRefusal's reasons just as a start
+// is. It is asked before anything is stopped: a restart that couldn't
+// start the server again would only be a stop, which Stop does (and still
+// does for a hidden or turned-off game that runs).
 func (m *Manager) restartGame(inst *instance) error {
+	if err := m.startRefusal(inst); err != nil {
+		return err
+	}
 	return m.runInstJob(inst, "restart", "Restarting "+inst.serverObject(), false, func(ctx context.Context, j *jobCtl) error {
 		if err := m.doStop(ctx, j, inst); err != nil {
 			return err
@@ -252,6 +278,13 @@ func (m *Manager) installGame(inst *instance, repair bool) error {
 // when world is empty.
 func (m *Manager) doStart(ctx context.Context, j *jobCtl, inst *instance, world string) error {
 	m.mu.Lock()
+	// Asked again here, inside the job, for every start, restart and
+	// import that starts the server again: the game may have been removed
+	// from the panel or turned off since the job was asked for.
+	if err := m.startRefusalLocked(inst); err != nil {
+		m.mu.Unlock()
+		return err
+	}
 	if inst.run != nil {
 		m.mu.Unlock()
 		return errors.New("The server is already running.")

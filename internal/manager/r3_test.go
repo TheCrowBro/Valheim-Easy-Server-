@@ -14,6 +14,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -370,8 +371,8 @@ func TestServersDamagedUsesBackup(t *testing.T) {
 
 // I1: removing Valheim from the panel only hides it, and a hidden Valheim
 // never runs unseen: nothing starts or installs it (the old routes, the new
-// ones, a wake, start-with-app, the tray), it isn't starred or in the
-// sidebar, and its files stay.
+// ones, a restart, a wake, start-with-app, the tray), it isn't starred or in
+// the sidebar, and its files stay.
 func TestHiddenLegacy(t *testing.T) {
 	env := setup(t)
 	m := env.m
@@ -389,11 +390,14 @@ func TestHiddenLegacy(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := inst.short() + " is removed from the panel. Add it again first."
+	jobs := currentJobID(m)
 	for what, try := range map[string]func() error{
 		"StartServer":   m.StartServer,
 		"StartGame":     func() error { return m.StartGame(m.legacyID, StartOptions{Memory: "anyway", Source: SourcePanel}) },
 		"a wake":        func() error { return m.startGameWith(inst, StartOptions{Source: SourceWake}) },
 		"a restart":     func() error { return m.startGameWith(inst, StartOptions{Source: SourceRestart}) },
+		"RestartServer": m.RestartServer, // of a stopped server: a start
+		"RestartGame":   func() error { return m.RestartGame(m.legacyID) },
 		"InstallServer": func() error { return m.InstallServer(false) },
 		"a star":        func() error { return m.SetStar(m.legacyID, true) },
 	} {
@@ -404,6 +408,9 @@ func TestHiddenLegacy(t *testing.T) {
 	st := m.Status()
 	if len(st.Games) != 0 || len(st.Stars) != 0 {
 		t.Fatalf("a hidden legacy game is shown: games %+v, stars %v", st.Games, st.Stars)
+	}
+	if st.State != StateStopped || currentJobID(m) != jobs {
+		t.Fatalf("a refused start or restart ran: state %s, job %+v", st.State, st.Job)
 	}
 	m.mu.Lock()
 	starred := m.isStarredLocked(inst)
@@ -434,6 +441,69 @@ func TestHiddenLegacy(t *testing.T) {
 	}
 	if err := m2.startChecks(m2.legacy()); err != nil {
 		t.Fatalf("shown again: %v", err)
+	}
+}
+
+// A hidden Valheim whose server runs all the same is shown while it runs,
+// so it never runs unseen (I1). The way there: going back to R2 after an
+// update (spec 3.6), whose panel knows nothing of hiding and shows Valheim
+// again, the owner started it there, and the next R3 build took it over.
+// It can be stopped but not restarted, and it leaves the panel again once
+// it stops.
+func TestHiddenLegacyTakenOver(t *testing.T) {
+	env := setup(t)
+	m := env.m
+	install(t, m)
+	if err := m.StartServer(); err != nil {
+		t.Fatal(err)
+	}
+	if job := waitJob(t, m, currentJobID(m)); job.Error != "" {
+		t.Fatalf("start: %s", job.Error)
+	}
+	m.Close() // the app closes; the server keeps running
+	if err := servers.Update(filepath.Join(env.data, servers.FileName), func(f *servers.File) error {
+		f.Instance(m.legacyID).Hidden = true // as it was before the older version ran
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	m2 := newTestManager(t, env.data, env)
+	env.m = m2
+	m2.Start()
+	waitFor(t, "the takeover", 20*time.Second, func() bool { return m2.Status().State == StateOnline })
+	st := m2.Status()
+	g, ok := gameOf(m2, m2.legacyID)
+	if !ok || g.State != StateOnline || st.Online != 1 {
+		t.Fatalf("a hidden Valheim that runs isn't shown: %+v (online %d)", st.Games, st.Online)
+	}
+	if g.Starred || len(st.Stars) != 0 {
+		t.Fatalf("a hidden Valheim that runs is starred: %v", st.Stars)
+	}
+	if !slices.ContainsFunc(g.Warnings, func(w string) bool { return strings.Contains(w, "removed from the panel") }) {
+		t.Fatalf("warnings %q don't say why it shows", g.Warnings)
+	}
+	want := hiddenError(m2.legacy()).Error()
+	jobs := currentJobID(m2)
+	for what, try := range map[string]func() error{
+		"RestartServer": m2.RestartServer,
+		"RestartGame":   func() error { return m2.RestartGame(m2.legacyID) },
+	} {
+		if err := try(); err == nil || err.Error() != want {
+			t.Errorf("%s of a hidden Valheim that runs = %v, want %q", what, err, want)
+		}
+	}
+	if st := m2.Status(); st.State != StateOnline || currentJobID(m2) != jobs {
+		t.Fatalf("a refused restart did something: state %s, job %+v", st.State, st.Job)
+	}
+	if err := m2.StopServer(); err != nil {
+		t.Fatal(err)
+	}
+	if job := waitJob(t, m2, currentJobID(m2)); job.Error != "" {
+		t.Fatalf("stop: %s", job.Error)
+	}
+	if st := m2.Status(); st.State != StateStopped || len(st.Games) != 0 {
+		t.Fatalf("after its stop: state %s, games %+v", st.State, st.Games)
 	}
 }
 
@@ -473,6 +543,51 @@ func TestStarsSidebarDisabled(t *testing.T) {
 	if err := m.StartGame("demo", StartOptions{Memory: "anyway"}); err == nil || !strings.Contains(err.Error(), "turned off") {
 		t.Fatalf("a game turned off started: %v", err)
 	}
+	// A restart of a stopped server is a start, so it is refused the same way.
+	if err := m.RestartGame("demo"); err == nil || !strings.Contains(err.Error(), "turned off") {
+		t.Fatalf("a game turned off was restarted: %v", err)
+	}
+	if g, _ := gameOf(m, "demo"); g.State != StateNotInstalled || g.Job != nil {
+		t.Fatalf("a game turned off is %s, job %+v", g.State, g.Job)
+	}
+}
+
+// A game whose server can't run on this computer (spec 2.10: its data
+// came from another computer, say) is refused by a start and by a restart,
+// with what it needs.
+func TestCantRunHereRefused(t *testing.T) {
+	data := t.TempDir()
+	writeServers(t, data, demoEntry(t, "elsewhere"))
+	env := &testEnv{data: data}
+	m := newTestManager(t, data, env, func(o *Options) { o.Games = []game.Game{elsewhereGame{demoGame{Game: demo.Game{ID: "elsewhere"}}}} })
+	g, ok := gameOf(m, "elsewhere")
+	if !ok || g.CanRun != game.CantRun || g.NeedsText != "Needs another computer" {
+		t.Fatalf("shown as %+v", g)
+	}
+	want := "The " + g.Short + " server can't run on this computer. Needs another computer."
+	for what, try := range map[string]func() error{
+		"StartGame":   func() error { return m.StartGame("elsewhere", StartOptions{Memory: "anyway", Source: SourcePanel}) },
+		"a wake":      func() error { return m.StartGame("elsewhere", StartOptions{Source: SourceWake}) },
+		"RestartGame": func() error { return m.RestartGame("elsewhere") },
+	} {
+		if err := try(); err == nil || err.Error() != want {
+			t.Errorf("%s = %v, want %q", what, err, want)
+		}
+	}
+	if g, _ := gameOf(m, "elsewhere"); g.Job != nil {
+		t.Fatalf("a refused start ran a job: %+v", g.Job)
+	}
+}
+
+// elsewhereGame is a demo game whose server runs only on a system no test
+// runs on.
+type elsewhereGame struct{ demoGame }
+
+func (g elsewhereGame) Info() game.Info {
+	in := g.demoGame.Info()
+	in.OS = map[string]game.Level{"plan9": game.Runs}
+	in.NeedsText = map[string]string{runtime.GOOS: "Needs another computer"}
+	return in
 }
 
 // --- another game's files and run -------------------------------------------
@@ -773,6 +888,73 @@ func TestProbeAndPresenceSeen(t *testing.T) {
 		g, _ := gameOf(m, "api")
 		return g.Count == 1 && len(g.Players) == 1
 	})
+}
+
+// A probe that stops answering no longer proves the game's presence
+// (2.6): the count it last gave may be 0 while people play, so auto-stop
+// and idle sleep mustn't trust it until the probe answers with a count
+// again. Nobody joins here, so only the probe can prove it.
+func TestProbeStopsAnswering(t *testing.T) {
+	oldStarting, oldReady := probeStarting, probeReady
+	probeStarting, probeReady = 200*time.Millisecond, 300*time.Millisecond
+	t.Cleanup(func() { probeStarting, probeReady = oldStarting, oldReady })
+	data := t.TempDir()
+	writeServers(t, data, demoEntry(t, "api"))
+	var down atomic.Bool
+	env := startGames(t, data, fakeGames(t, "", downProbeGame{demoGame{Game: demo.Game{ID: "api", API: true}}, &down}))
+	m := env.m
+	api, _ := m.instanceByID("api")
+	proven := func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return m.presenceProvenLocked(api)
+	}
+	warned := func() bool {
+		g, _ := gameOf(m, "api")
+		return slices.ContainsFunc(g.Warnings, func(w string) bool { return strings.Contains(w, "can't reach") })
+	}
+	startDemo(t, m, "api")
+	waitFor(t, "a probe with a count", 10*time.Second, proven)
+
+	down.Store(true)
+	waitFor(t, "a failed probe to take the proof back", 5*time.Second, func() bool { return !proven() })
+	waitFor(t, "the warning after three failures", 10*time.Second, warned)
+	if proven() {
+		t.Fatal("presence counts as proven while the probe fails")
+	}
+
+	down.Store(false)
+	waitFor(t, "the probe to answer again", 5*time.Second, proven)
+	waitFor(t, "the warning to go", 5*time.Second, func() bool { return !warned() })
+	f, _, _ := servers.Load(filepath.Join(data, servers.FileName))
+	if !f.Instance("api").PresenceSeen.IsZero() {
+		t.Fatal("presenceSeen was noted, but nobody joined")
+	}
+}
+
+// downProbeGame is the demo game with an API whose probe can be made to
+// stop answering, as when a game's API hangs while its server runs on.
+type downProbeGame struct {
+	demoGame
+	down *atomic.Bool
+}
+
+func (g downProbeGame) New(env game.Env) game.Server {
+	srv := g.demoGame.New(env)
+	return downProbeServer{Server: srv, probe: srv.(game.Prober), down: g.down}
+}
+
+type downProbeServer struct {
+	game.Server
+	probe game.Prober
+	down  *atomic.Bool
+}
+
+func (s downProbeServer) Probe(ctx ctxT, rec game.Record) (game.ProbeResult, error) {
+	if s.down.Load() {
+		return game.ProbeResult{Count: -1}, errors.New("the API doesn't answer")
+	}
+	return s.probe.Probe(ctx, rec)
 }
 
 // Status is read all the time by the panel while several games run, their
