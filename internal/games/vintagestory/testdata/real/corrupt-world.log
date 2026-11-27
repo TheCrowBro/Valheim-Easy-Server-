@@ -1,0 +1,30 @@
+26.11.2026 21:53:32 [Server Notification] Server logger started.
+26.11.2026 21:53:32 [Server Notification] Game Version: v1.22.7 (Stable)
+26.11.2026 21:53:32 [Server Notification] C# Framework: .net 10.0.15
+26.11.2026 21:53:32 [Server Notification] Zstd Version: 1.5.5
+26.11.2026 21:53:32 [Server Notification] Operating System: Linux (Ubuntu 24.04.5 LTS) [Kernel 6.18.44.880]
+26.11.2026 21:53:32 [Server Notification] CPU Cores: 4
+26.11.2026 21:53:32 [Server Notification] CPU: Intel(R) Xeon(R) Processor @ 2.10GHz
+26.11.2026 21:53:32 [Server Notification] Available RAM: 16087 MB
+26.11.2026 21:53:32 [Server Event] Launching server...
+26.11.2026 21:53:32 [Server Event] Server v1.22.7, network v1.22.6, api v1.22.0
+26.11.2026 21:53:32 [Server Notification] Entering runphase Initialization
+26.11.2026 21:53:32 [Server Event] Loading configuration...
+26.11.2026 21:53:32 [Server Notification] Entering runphase Configuration
+26.11.2026 21:53:32 [Server Error] Failed opening savegame.
+26.11.2026 21:53:32 [Server Error] Exception: SQLite Error 26: 'file is not a database'.
+   at Microsoft.Data.Sqlite.SqliteException.ThrowExceptionForRC(Int32 rc, sqlite3 db)
+   at Microsoft.Data.Sqlite.SqliteCommand.PrepareAndEnumerateStatements()+MoveNext()
+   at Microsoft.Data.Sqlite.SqliteCommand.GetStatements()+MoveNext()
+   at Microsoft.Data.Sqlite.SqliteDataReader.NextResult()
+   at Microsoft.Data.Sqlite.SqliteCommand.ExecuteReader(CommandBehavior behavior)
+   at Microsoft.Data.Sqlite.SqliteCommand.ExecuteReader()
+   at Microsoft.Data.Sqlite.SqliteCommand.ExecuteNonQuery()
+   at Vintagestory.API.Common.SQLiteDBConnection.OpenOrCreate(String filename, String& errorMessage, Boolean requireWriteAccess, Boolean corruptionProtection, Boolean doIntegrityCheck) in VintagestoryApi\Common\IO\SQLiteDBConnection.cs:line 77
+26.11.2026 21:53:32 [Server Fatal] Failed opening savegame, possibly corrupted. Error Message: Failed opening savegame.. Will exit server now.
+26.11.2026 21:53:32 [Server Notification] Server stop requested, begin shutdown sequence. Stop reason: Failed opening savegame
+26.11.2026 21:53:32 [Server Notification] Entering runphase Shutdown
+26.11.2026 21:53:32 [Server Event] Shutting down 7 server threads... 
+26.11.2026 21:53:32 [Server Event] Killed console thread
+26.11.2026 21:53:33 [Server Event] All threads gracefully shut down
+26.11.2026 21:53:33 [Server Event] Stopped the server!

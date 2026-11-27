@@ -1,0 +1,46 @@
+29.10.2025 16:59:16 [Warning] Error when testing to spawn entity primitivesurvival:bairdicrab at position X=120483,Y=142,Z=129785, can report to dev team but otherwise should do no harm.
+29.10.2025 16:59:16 [Error] Exception: Object reference not set to an instance of an object.
+29.10.2025 16:59:17 [Notification] A Client attempts connecting via TCP on [::ffff:192.0.2.10]:56383, assigning client id 54
+29.10.2025 16:59:17 [Notification] UDP: Client 54 connected via: [::ffff:192.0.2.10]:51390
+29.10.2025 16:59:17 [Notification] Client 54 uid MadeUpUid1AAAAAAAAAAAAAA attempting identification. Name: Brynja
+29.10.2025 16:59:18 [Notification] Sending server identification with remap False. Server control privilege is False
+29.10.2025 16:59:18 [Notification] Placing Brynja at 138579.14239501953 163.00006103515625 142297.9139404297
+29.10.2025 16:59:20 [Warning] Server overloaded. A tick took 888ms to complete.
+29.10.2025 16:59:25 [Notification] A Client attempts connecting via TCP on [::ffff:192.0.2.20]:61243, assigning client id 55
+29.10.2025 16:59:25 [Notification] UDP: Client 55 connected via: [::ffff:192.0.2.20]:58299
+29.10.2025 16:59:26 [Notification] Client 55 uid MadeUpUid2AAAAAAAAAAAAA+ attempting identification. Name: Leif
+29.10.2025 16:59:26 [Notification] Sending server identification with remap False. Server control privilege is False
+29.10.2025 16:59:26 [Notification] Placing Leif at 125529.74993896484 158.02386474609375 130148.04345703125
+29.10.2025 16:59:30 [Notification] A Client attempts connecting via TCP on [::ffff:198.51.100.30]:64570, assigning client id 56
+29.10.2025 16:59:30 [Notification] UDP: Client 56 connected via: [::ffff:198.51.100.30]:61337
+29.10.2025 16:59:31 [Notification] Client 56 uid MadeUpUid3AAAAAAAAAAAAAA attempting identification. Name: Sigrun
+29.10.2025 16:59:31 [Notification] Delayed join, need to load one spawn chunk first.
+29.10.2025 16:59:31 [Notification] Sending server identification with remap False. Server control privilege is False
+29.10.2025 16:59:31 [Notification] Placing Sigrun at 143096.28259277344 173.00006103515625 126546.4956665039
+29.10.2025 16:59:37 [Warning] Server overloaded. A tick took 796ms to complete.
+29.10.2025 16:59:52 [Event] Brynja [::ffff:192.0.2.10]:56383 joins.
+29.10.2025 16:59:52 [Warning] Server overloaded. A tick took 818ms to complete.
+29.10.2025 17:00:00 [Event] Sigrun [::ffff:198.51.100.30]:64570 joins.
+29.10.2025 17:00:00 [Notification] [fairplayguardian] got report
+29.10.2025 17:00:06 [Warning] Server overloaded. A tick took 956ms to complete.
+29.10.2025 17:00:12 [Notification] Client 56 disconnected:
+29.10.2025 17:00:12 [Notification] UDP: client disconnected Sigrun
+29.10.2025 17:00:12 [Event] Player Sigrun left.
+29.10.2025 17:00:12 [Event] Client 56 disconnected.
+29.10.2025 17:00:18 [Notification] [coinage] Sending coin 1 to RyanTheWeeb
+29.10.2025 17:00:21 [Warning] Server overloaded. A tick took 908ms to complete.
+29.10.2025 17:00:45 [Notification] A Client attempts connecting via TCP on [::ffff:198.51.100.40]:54176, assigning client id 57
+29.10.2025 17:00:45 [Notification] UDP: Client 57 connected via: [::ffff:198.51.100.40]:47064
+29.10.2025 17:00:46 [Notification] Client 57 uid MadeUpUid4AAAAAAAAAAAAAA attempting identification. Name: vfctffu
+29.10.2025 17:00:46 [Notification] Sending server identification with remap False. Server control privilege is False
+29.10.2025 17:00:46 [Notification] Placing vfctffu at 120554.84130859375 170.00006103515625 129688.1748046875
+29.10.2025 17:00:54 [Error] Error while enumerating tickables. Tickables total count is 6655
+29.10.2025 17:01:01 [Notification] A Client attempts connecting via TCP on [::ffff:203.0.113.50]:51084, assigning client id 58
+29.10.2025 17:01:01 [Notification] UDP: Client 58 connected via: [::ffff:203.0.113.50]:58002
+29.10.2025 17:01:01 [Notification] Client 58 uid MadeUpUid5AAAAAAAAAAAAAA attempting identification. Name: sparky4snow
+29.10.2025 17:01:02 [Notification] Delayed join, need to load one spawn chunk first.
+29.10.2025 17:01:08 [Event] vfctffu [::ffff:198.51.100.40]:54176 joins.
+29.10.2025 17:01:08 [Warning] Server overloaded. A tick took 860ms to complete.
+29.10.2025 17:01:12 [Event] Leif [::ffff:192.0.2.20]:61243 joins.
+29.10.2025 17:01:16 [Event] The item path is: bread-flax-perfect
+29.10.2025 17:01:16 [Event] Sliced bread-flax-perfect into 4 pieces.

@@ -1,0 +1,4 @@
+6.8.2026 07:13:41 [Notification] Client 1452 disconnected: An action you (or your client) did caused an unhandled exception
+6.8.2026 07:13:41 [Event] Player [PlayerA] got removed. Reason: Threw an exception at the server
+6.8.2026 10:27:19 [Notification] Client 1632 disconnected: An action you (or your client) did caused an unhandled exception
+6.8.2026 10:27:19 [Event] Player [PlayerB] got removed. Reason: Threw an exception at the server
