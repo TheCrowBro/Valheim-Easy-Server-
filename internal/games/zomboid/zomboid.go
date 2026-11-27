@@ -251,6 +251,12 @@ func (s *server) ExitHint(tail []string) string {
 		return "Some of the Project Zomboid server's files are missing or damaged. Click Repair to download them again."
 	case has("Workshop: item state DownloadPending -> Fail"):
 		return "The Project Zomboid server couldn't download a Steam Workshop mod its settings name, and stopped. Remove the mod from the world's settings file, or try again later."
+	case has("Required Animation Asset not found"):
+		// What a server that can't load its own character models says
+		// (FACTS.md, the first real-server check).
+		return "The Project Zomboid server couldn't load some of its own files (its character animations) and gave up. Click Repair to download them again, then start it again."
+	case has("Server Terminated"):
+		return "The Project Zomboid server hit an error and gave up. The Log page shows the error just above \"Server Terminated.\"; if it names one of the server's own files, click Repair."
 	}
 	return ""
 }
