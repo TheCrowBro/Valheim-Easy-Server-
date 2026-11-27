@@ -463,3 +463,39 @@ After review:
 Review findings (fixed in the follow-up unless it says otherwise):
 - must-fix: After the server is claimed again, the friends' password and the server name are never set on it
 - should-fix: Fingerprint(saved, "") never equals the plan's fingerprint, so a running Satisfactory would always say "restart to apply"
+
+## G-windrose (mg/g-windrose)
+
+1. **Registration:** add internal/games/all/windrose.go after the R2 cut, and change TestOneGameRegistered at the same time. Order is 100 under the (n-1)*10 scheme; stage is preview.
+2. **Spec 5.11 departures (FACTS.md §9):**
+   - The first start makes ServerDescription.json and the first world, not the install. The firewall rule names the installed program, so this way the rule can exist before the server first listens.
+   - Presence is ByName, not ByCount.
+   - The real-server check runs like the other games, not on demand (decisions Q5).
+   - The Windows stop is one "call" step (Ctrl+C to the server's console, falling back to closing its window). A window close after a Ctrl+C that arrived would be Unreal's force-quit.
+   - Added: the Visual C++ prerequisite, an advanced "Connection region" setting, and a refresh of P2pProxyAddress when this computer no longer has that address.
+   - DownloadMB follows the installed-size convention.
+3. **For M3:**
+   - State keys: `world.<id>`, `planned`, `inviteCode`, `directConnection`.
+   - Record.Extra: `inviteCode`, `worldId`.
+   - Event kinds: `code`; `saved` with no feed text (it comes every minute); and the warnings `no_backend`, `load_failed`, `wrong_password`, `bad_version`, `save_failed`.
+   - RunState.Extra: `worldId`, `backend`.
+   - `Recover` points at R5.log.
+   - The "call" stop step needs a working context.
+4. **For stream A:** if the firewall fix isn't made before a game's first start, Windows may ask about the hidden server then.
+5. **Spec gap:** Worlds().Backup can't be overridden by an adapter, because its return type lives in internal/worlds, which adapters may not import. I refused backups of the world the server has loaded, while it runs, inside Format.Files instead. A `game.Backup` alias would make a direct override possible.
+6. **Your call before stage ready:**
+   - **Third-party log data:** the anonymised excerpts in testdata/real come from public issues and bot code; sources are in FACTS.md. Tell me if you'd rather keep fewer of them.
+   - **Owner's session log:** ask the owner (or a friend) for one real session's R5.log join and leave on the Windows PC.
+7. **Cleanup:** I deleted the 2.9 GB server download and the SteamCMD copy. About 99 MB of research files remain in `/tmp/claude-0/-home-user/41f121b4-97ec-5588-a00f-1184231def86/scratchpad/wr`, and can be deleted. Nothing was pushed or tagged.
+
+After review:
+
+Nothing is blocked. One wording suggestion: the contract's Join.Public field (internal/game/contract.go, and spec 4.9's Join struct) has no comment. A short one such as "listed in the game's own public server list (Valheim)" would stop other adapters from repeating the Windrose mistake.
+
+One behaviour note: a world that was never named in the app is now listed as "The Archipelago (1A2B3C4D)" or "World 1A2B3C4D" instead of its 32-character id. As before, a fallback name can change if another world with the same WorldName is deleted, until the world is first started from the app, which saves its name for good.
+
+Review findings (fixed in the follow-up unless it says otherwise):
+- must-fix: TestStop fails on Windows CI: it expects "interrupt", but Windows returns a "call" step
+- must-fix: A world the server made under its own id loses its name when the next new world is planned; picking it again starts a fresh world
+- should-fix: A world listed under its id can never be started, because Validate rejects id-like names
+- should-fix: Join says the server is public, though Windrose has no public server list
