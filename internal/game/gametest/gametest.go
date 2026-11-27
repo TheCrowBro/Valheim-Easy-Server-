@@ -128,7 +128,7 @@ func newSession(t testing.TB, g game.Game, o Options) *Session {
 	if !o.Real && o.Fake == "" {
 		o.Fake = BuildFakeserver(t)
 	}
-	data := t.TempDir()
+	data := DataDir(t)
 	root := filepath.Join(data, "games", info.ID)
 	dirs := game.Dirs{
 		Root:     root,
@@ -157,7 +157,7 @@ func newSession(t testing.TB, g game.Game, o Options) *Session {
 		Data:     data,
 		Dirs:     dirs,
 		Log:      log.New(tl, info.ID+": ", 0),
-		HTTP:     &http.Client{Timeout: 5 * time.Minute},
+		HTTP:     &http.Client{Timeout: httpTimeout(o.Real)},
 		Store:    s.store,
 	}
 	if !o.Real {
@@ -192,13 +192,23 @@ func newSession(t testing.TB, g game.Game, o Options) *Session {
 }
 
 // install runs the adapter's installer and checks it left a program and a
-// build behind.
+// build behind. A real install can take many minutes (Satisfactory's is
+// 15 GB), so with a real server its progress goes to the test's log, and
+// how long it took.
 func (s *Session) install() {
 	s.t.Helper()
 	ctx := s.t.Context()
-	err := s.srv.Installer().Install(ctx, false, func(p game.Progress) {})
+	progress := func(game.Progress) {}
+	if s.o.Real {
+		progress = installProgress(s.tlog)
+	}
+	began := time.Now()
+	err := s.srv.Installer().Install(ctx, false, progress)
 	if err != nil {
-		s.t.Fatalf("gametest: installing %s: %v", s.info.ID, err)
+		s.t.Fatalf("gametest: installing %s (after %v): %v", s.info.ID, time.Since(began).Round(time.Second), err)
+	}
+	if s.o.Real {
+		s.tlog.Printf("installed %s in %v", s.info.ID, time.Since(began).Round(time.Second))
 	}
 	if _, err := os.Stat(s.srv.Program()); err != nil {
 		s.t.Fatalf("gametest: after the install, the server's program %s isn't there: %v", s.srv.Program(), err)
@@ -213,6 +223,34 @@ func (s *Session) install() {
 func (s *Session) start() {
 	s.t.Helper()
 	s.startTry(1)
+}
+
+// installProgress gives the test's log each new install step, and each
+// tenth of the way through one, so a long download shows how far it got
+// without a line for every percent.
+func installProgress(l *testLog) func(game.Progress) {
+	var mu sync.Mutex
+	step, tenth := "", -1
+	return func(p game.Progress) {
+		mu.Lock()
+		defer mu.Unlock()
+		t := -1
+		if p.Percent >= 0 {
+			t = int(p.Percent) / 10
+		}
+		if p.Step == step && t <= tenth {
+			return
+		}
+		if p.Step != step {
+			tenth = -1
+		}
+		step, tenth = p.Step, max(t, tenth)
+		if p.Percent >= 0 {
+			l.Printf("install: %s %.0f%%", p.Step, p.Percent)
+		} else {
+			l.Printf("install: %s", p.Step)
+		}
+	}
 }
 
 // startTry is start's try'th try (retryOnNewPorts makes the later ones).
@@ -425,17 +463,26 @@ func (s *Session) WaitEvent(kind, name string, within time.Duration) game.Event 
 				deadline = time.Now().Add(within) // the new run gets the whole wait
 				continue
 			}
-			s.t.Fatalf("gametest: the %s server exited (code %d) without a %q event%s\n%s", s.info.ID, code, kind, forName(name), a.tail())
+			s.t.Fatalf("gametest: the %s server exited (code %d) without a %q event%s\n%s%s", s.info.ID, code, kind, forName(name), a.tail(), wholeLog(a))
 		}
 		left := time.Until(deadline)
 		if left <= 0 {
-			s.t.Fatalf("gametest: no %q event%s from the %s server within %v\n%s", kind, forName(name), s.info.ID, within, a.tail())
+			s.t.Fatalf("gametest: no %q event%s from the %s server within %v\n%s%s", kind, forName(name), s.info.ID, within, a.tail(), wholeLog(a))
 		}
 		select {
 		case <-changed:
 		case <-time.After(left):
 		}
 	}
+}
+
+// wholeLog says where the run's whole log is, for a failure message that
+// shows only its end.
+func wholeLog(a *attachment) string {
+	if a.rec.LogPath == "" {
+		return ""
+	}
+	return "\n  (the whole log: " + a.rec.LogPath + ")"
 }
 
 func forName(name string) string {
@@ -570,7 +617,7 @@ func kinds(steps []game.StopStep) string {
 
 // send sends one stop step.
 func (s *Session) send(a *attachment, st game.StopStep) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout(s.o.Real))
 	defer cancel()
 	switch st.Kind {
 	case "console":
@@ -691,7 +738,7 @@ func (s *Session) cleanup() {
 		}
 		a.detach()
 		if s.t.Failed() {
-			s.t.Logf("gametest: the end of %s's last log:\n%s", s.info.ID, a.tail())
+			s.t.Logf("gametest: the end of %s's last log:\n%s%s", s.info.ID, a.tail(), wholeLog(a))
 		}
 	}
 	s.mu.Lock()
