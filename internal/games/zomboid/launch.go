@@ -50,6 +50,10 @@ type launch struct {
 	ClassPath string   // as the launcher gives it (relative to the server folder)
 	Main      string   // zombie.network.GameServer
 	Game      []string // the launcher's own arguments for the server ("-statistic", "0")
+	// Env is what the launcher sets in the environment of the Java it
+	// starts, as NAME=value: the .bat's SET lines (PZ_CLASSPATH). Spec 2.4:
+	// whatever a skipped script sets goes into the plan's environment.
+	Env []string
 }
 
 // readLaunch reads how to start the server from its folder, trying the
@@ -93,18 +97,32 @@ var (
 	reSet    = regexp.MustCompile(`(?i)^set\s+(?:"([^"=]+)=([^"]*)"|([^=\s]+)=(.*))$`)
 	reVar    = regexp.MustCompile(`%([A-Za-z_][A-Za-z0-9_]*)%`)
 	reBatArg = regexp.MustCompile(`^%(?:[0-9]|\*)$`)
+	// reBatSelf is the .bat's own path with modifiers: %~dp0 is the folder
+	// it is in, with a backslash at the end.
+	reBatSelf = regexp.MustCompile(`(?i)%~([a-z]*)0`)
 )
 
 // parseBat reads the Java command from a Windows .bat as cmd.exe would
 // run it: SET lines give variables, which %NAME% then stands for, and the
 // line that names the main class is the command. Its first word (the
 // Java program) is left out: the app runs its own Program(). "%1 %2", the
-// .bat's own arguments, are left out too.
+// .bat's own arguments, are left out too. %~dp0, the .bat's own folder,
+// becomes ".\": the plan runs the server in that folder, so the paths mean
+// the same, and the app never hands Java a "%~dp0" it would take as part
+// of a folder's name. Every SET is also kept for the plan's environment.
 func parseBat(text string) (launch, error) {
 	text = strings.TrimPrefix(text, "\ufeff")
 	vars := map[string]string{}
+	var setOrder []string // the names SET, as first written
 	expand := func(s string) (string, bool) {
 		ok := true
+		s = reBatSelf.ReplaceAllStringFunc(s, func(m string) string {
+			if strings.EqualFold(m, "%~dp0") {
+				return `.\`
+			}
+			ok = false // another part of the .bat's own path: not worked out
+			return m
+		})
 		out := reVar.ReplaceAllStringFunc(s, func(m string) string {
 			v, found := vars[strings.ToUpper(m[1:len(m)-1])]
 			if !found {
@@ -127,6 +145,9 @@ func parseBat(text string) (launch, error) {
 				name, value = m[3], m[4]
 			}
 			value, _ = expand(strings.TrimSpace(value))
+			if _, seen := vars[strings.ToUpper(name)]; !seen {
+				setOrder = append(setOrder, name)
+			}
 			vars[strings.ToUpper(name)] = value
 			continue
 		}
@@ -181,6 +202,13 @@ func parseBat(text string) (launch, error) {
 		}
 		if l.ClassPath == "" {
 			return launch{}, errors.New("its Java command has no class path")
+		}
+		for _, name := range setOrder {
+			// "SET NAME=" with nothing after it removes the variable,
+			// so it adds nothing.
+			if v := vars[strings.ToUpper(name)]; v != "" {
+				l.Env = append(l.Env, name+"="+v)
+			}
 		}
 		return l, nil
 	}

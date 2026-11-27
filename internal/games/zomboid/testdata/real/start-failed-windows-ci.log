@@ -1,0 +1,60 @@
+	Stack trace:
+		zombie.core.skinnedmodel.ModelManager.getAnimationAssetRequired(ModelManager.java:1890)
+		zombie.core.skinnedmodel.ModelManager.create(ModelManager.java:206)
+		zombie.network.GameServer.doMinimumInit(GameServer.java:1537)
+		zombie.network.GameServer.main(GameServer.java:816)
+LOG  : General      f:0 st:680,281> Server Terminated.
+LOG  : Network      f:0 st:680,293> Loading world...
+LOG  : General      f:0 st:680,563> Loading worldgen params
+LOG  : General      f:0 st:680,564> IsoMetaGrid.Create: begin scanning directories
+LOG  : General      f:0 st:680,583> Looking in these map folders:
+LOG  : General      f:0 st:680,586> <End of map-folders list>
+LOG  : General      f:0 st:680,733> IsoMetaGrid.Create: X: [ -250 250 ], Y: [ -250 250 ]
+LOG  : General      f:0 st:680,734> World seed: pWDdfwOLpPIqucSQ -1895622839
+LOG  : General      f:0 st:680,738> IsoMetaGrid.Create: finished scanning directories in 0.173 seconds
+ERROR: General      f:0 st:680,747 at KahluaThread.flushErrorMessage      > -------------------------------------------------------------
+attempted index: biomes of non-table: null
+ERROR: General      f:0 st:680,748 at KahluaThread.flushErrorMessage      > dumping Lua stack trace
+-----------------------------------------
+STACK TRACE
+-----------------------------------------
+	Lua(Vanilla).WorldGenOverride(WorldGenOverride.lua:4)
+ERROR: General      f:0 st:680,748> Lua(Vanilla).WorldGenOverride> Exception thrown
+	java.lang.RuntimeException: attempted index: biomes of non-table: null at KahluaThread.tableget(KahluaThread.java:1430).
+	Stack trace:
+		se.krka.kahlua.vm.KahluaThread.tableget(KahluaThread.java:1430)
+		Lua(Vanilla).WorldGenOverride(WorldGenOverride.lua:4)
+		se.krka.kahlua.vm.KahluaThread.luaMainloop(KahluaThread.java:371)
+		se.krka.kahlua.vm.KahluaThread.call(KahluaThread.java:162)
+		se.krka.kahlua.vm.KahluaThread.pcall(KahluaThread.java:1740)
+		se.krka.kahlua.vm.KahluaThread.pcall(KahluaThread.java:1544)
+		se.krka.kahlua.integration.LuaCaller.pcall(LuaCaller.java:69)
+		se.krka.kahlua.integration.LuaCaller.protectedCall(LuaCaller.java:109)
+		zombie.Lua.LuaManager.RunLuaInternal(LuaManager.java:1395)
+		zombie.Lua.LuaManager.RunLua(LuaManager.java:1347)
+		zombie.Lua.LuaManager.RunLua(LuaManager.java:1336)
+		zombie.iso.worldgen.WorldGenChunk.runLuaOverride(WorldGenChunk.java:132)
+		zombie.iso.worldgen.WorldGenChunk.<init>(WorldGenChunk.java:79)
+		zombie.iso.IsoMetaGrid.CreateStep1(IsoMetaGrid.java:1472)
+		zombie.iso.IsoWorld.init(IsoWorld.java:2187)
+		zombie.network.GameServer.main(GameServer.java:829)
+ERROR: General      f:0 st:680,748 at KahluaThread.flushErrorMessage      > dumping Lua stack trace
+-----------------------------------------
+STACK TRACE
+-----------------------------------------
+	Lua(Vanilla).WorldGenOverride(WorldGenOverride.lua:4)
+Nov 27, 2026 1:18:58 AM zombie.Lua.LuaManager RunLuaInternal
+SEVERE: attempted index: biomes of non-table: null java.lang.RuntimeException
+Nov 27, 2026 1:18:58 AM zombie.Lua.LuaManager RunLuaInternal
+SEVERE: java.lang.RuntimeException: attempted index: biomes of non-table: null
+Nov 27, 2026 1:18:58 AM zombie.Lua.LuaManager RunLuaInternal
+SEVERE: at C:\Users\runneradmin\AppData\Local\Temp\TestRealServerconformance4264870362\001\games\zomboid\server\media\maps\Muldraugh, KY\WorldGenOverride.lua:4
+
+ERROR: General      f:0 st:680,756> GameServer.main> Exception thrown
+	java.lang.NullPointerException: Cannot invoke "se.krka.kahlua.vm.KahluaTable.rawget(Object)" because "worldgenTable" is null at WorldGenChunk.<init>(WorldGenChunk.java:83). Message: Exception Thrown
+	Stack trace:
+		zombie.iso.worldgen.WorldGenChunk.<init>(WorldGenChunk.java:83)
+		zombie.iso.IsoMetaGrid.CreateStep1(IsoMetaGrid.java:1472)
+		zombie.iso.IsoWorld.init(IsoWorld.java:2187)
+		zombie.network.GameServer.main(GameServer.java:829)
+LOG  : General      f:0 st:680,756> Server Terminated.

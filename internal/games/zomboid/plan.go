@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -40,6 +41,15 @@ const stateAdminPassword = "adminPassword"
 //     (FACTS.md: otherwise they follow Windows' language).
 var extraJVM = []string{"-Drconlo=true", "-Duser.language=en", "-Duser.country=US"}
 
+// javaOptionVars are the environment variables every Java on the computer
+// reads extra options from. The plan sets them empty, so the server's Java
+// runs with only the launcher's options and the app's: a _JAVA_OPTIONS
+// another program set for all of Java (some set -Xmx512m) would otherwise
+// win over the "Java memory" setting, and the server would run out of
+// memory. Java then notes "Picked up _JAVA_OPTIONS: " with nothing after
+// it, as a real server's log shows (FACTS.md), and the Log page hides that.
+var javaOptionVars = []string{"_JAVA_OPTIONS", "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS"}
+
 func port(sv game.Saved, role string, def int) int {
 	if p := sv.Ports[role]; p > 0 {
 		return p
@@ -69,7 +79,12 @@ func rconPort(sv game.Saved) int { return port(sv, roleRCON, defaultRCONPort) }
 //     the console (FACTS.md), and give it the same password every start.
 //   - -port and -udpport are the instance's ports, which win over the
 //     settings file; the file gets them too.
-func (s *server) args(l launch, sv game.Saved, world, adminPW string) []string {
+//
+// cacheDir is the saves folder as the server is given it: Plan spells it
+// in full (longPath); Fingerprint uses the instance's folder as it is
+// named, without asking the disk, so a restart is never asked for over
+// how a folder is spelt.
+func (s *server) args(l launch, sv game.Saved, world, adminPW, cacheDir string) []string {
 	mem := sv.Server.Int("memoryMB", defMemoryMB)
 	a := append([]string(nil), l.JVM...)
 	a = append(a, "-Xmx"+strconv.Itoa(mem)+"m")
@@ -77,7 +92,7 @@ func (s *server) args(l launch, sv game.Saved, world, adminPW string) []string {
 	a = append(a, "-cp", l.ClassPath, l.Main)
 	a = append(a, l.Game...)
 	return append(a,
-		"-cachedir="+s.env.Dirs.Saves,
+		"-cachedir="+cacheDir,
 		"-servername", world,
 		"-adminusername", adminUser,
 		"-adminpassword", adminPW,
@@ -139,7 +154,7 @@ func sandboxFor(sv game.Saved, world string) (sandboxSettings, bool) {
 // change to any of them says "restart to apply".
 func (s *server) Fingerprint(sv game.Saved, world string) string {
 	h := sha256.New()
-	for _, a := range s.args(launch{Main: mainClass}, sv, world, "") {
+	for _, a := range s.args(launch{Main: mainClass}, sv, world, "", s.env.Dirs.Saves) {
 		io.WriteString(h, a+"\x00")
 	}
 	for _, st := range s.iniSettings(sv, "") {
@@ -183,8 +198,12 @@ func (s *server) Plan(ctx context.Context, req game.PlanRequest) (game.Plan, err
 			return game.Plan{}, game.FieldErrors{"seed": p}
 		}
 	}
-	// The data folder is on the command line (-cachedir).
-	if p := folderProblem(s.env.Dirs.Saves); p != "" {
+	// The server gets its folders with every short "8.3" name spelt out
+	// (longPath): the install folder as its working folder, and the saves
+	// folder on its command line (-cachedir), whose characters must also
+	// be ones Java gets on Windows (folderProblem).
+	dir, cacheDir := longPath(s.env.Dirs.Server), longPath(s.env.Dirs.Saves)
+	if p := folderProblem(cacheDir); p != "" {
 		return game.Plan{}, errors.New(p)
 	}
 	wait := readyWaitStart
@@ -212,15 +231,22 @@ func (s *server) Plan(ctx context.Context, req game.PlanRequest) (game.Plan, err
 		return game.Plan{}, fmt.Errorf("couldn't write Project Zomboid's settings for %q: %w", req.World, err)
 	}
 
-	var env []string
+	// The environment the launcher gives the Java it starts: the .bat's
+	// SET lines (PZ_CLASSPATH), as spec 2.4 asks of a skipped script, and
+	// on Linux what start-server.sh sets. The variables every Java reads
+	// extra options from are emptied (javaOptionVars).
+	env := slices.Clone(l.Env)
+	for _, name := range javaOptionVars {
+		env = append(env, name+"=")
+	}
 	if s.env.Fake == nil && s.launchOS() == "linux" {
-		env = linuxEnv(s.env.Dirs.Server)
+		env = append(env, linuxEnv(dir)...)
 	}
 	sv := req.Saved
 	return game.Plan{
 		Exe:         s.Program(),
-		Args:        s.args(l, sv, req.World, adminPW),
-		Dir:         s.env.Dirs.Server, // the class path and natives/ are relative to it
+		Args:        s.args(l, sv, req.World, adminPW, cacheDir),
+		Dir:         dir, // the class path and natives/ are relative to it
 		Env:         env,
 		Output:      game.Capture, // the server prints its whole log on standard output
 		LogPath:     req.LogPath,

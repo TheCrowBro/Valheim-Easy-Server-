@@ -1,7 +1,7 @@
 {
   "os": ["windows-latest"],
   "onDemand": false,
-  "timeoutMinutes": 120,
+  "timeoutMinutes": 60,
   "package": "./internal/games/zomboid/",
   "run": "TestRealServer"
 }

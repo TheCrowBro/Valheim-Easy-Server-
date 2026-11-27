@@ -146,6 +146,33 @@ func TestMonitorShutdownIsNotAStopRequest(t *testing.T) {
 	}
 }
 
+// The end of the log of the first real-server check's server on GitHub's
+// Windows runner (testdata/real, FACTS.md): it couldn't load its
+// animations, then its world, wrote "Server Terminated." twice and never
+// started. The Monitor says so once, and the start is never online, not
+// even if the server later said it had started or RCON answered.
+func TestMonitorRealStartFailed(t *testing.T) {
+	m, evs, lines := feed(t, string(readTestdata(t, "real/start-failed-windows-ci.log")))
+	if got := kinds(evs); !slices.Equal(got, []string{"load_failed"}) || !strings.Contains(evs[0].Text, "Server Terminated.") || !strings.Contains(evs[0].Text, "while starting") {
+		t.Errorf("events %q (%+v)", got, evs)
+	}
+	shown := slices.ContainsFunc(lines, func(l game.Line) bool { return !l.Hide && l.Text == "Server Terminated." })
+	if !shown {
+		t.Errorf("the Log page doesn't show \"Server Terminated.\"")
+	}
+	out := m.Line("LOG  : Network      f:0 st:680,900> *** SERVER STARTED ****", time.Now())
+	evs = append(out.Events, m.Probed(game.ProbeResult{Up: true, Count: 0, Names: []string{}}, time.Now())...)
+	if st := m.State(); st.Ready || slices.Contains(kinds(evs), "online") {
+		t.Errorf("after it gave up, the start came online: %+v, %q", st, kinds(evs))
+	}
+
+	// A server that was running and then gives up says so in other words.
+	_, evs, _ = feed(t, "LOG  : Network      f:0 st:1,000> *** SERVER STARTED ****\nLOG  : General      f:9 st:9,000> Server Terminated.")
+	if got := kinds(evs); !slices.Equal(got, []string{"online", "load_failed"}) || !strings.Contains(evs[1].Text, "stopped working") {
+		t.Errorf("after running: %q (%+v)", got, evs)
+	}
+}
+
 func TestMonitorRCONFailed(t *testing.T) {
 	_, evs, _ := feed(t, "LOG  : General      f:0 st:1,000> RCON: error creating socket on port 27015")
 	if len(evs) != 1 || evs[0].Kind != "rcon_failed" || !strings.Contains(evs[0].Text, "27015") {
@@ -258,6 +285,8 @@ func TestExitHint(t *testing.T) {
 		{"java.lang.OutOfMemoryError: Java heap space", "ran out of memory"},
 		{"LOG  : General      f:0 st:1> Exiting due to errors loading C:\\x\\Server\\W_SandboxVars.lua", "sandbox settings"},
 		{"LOG  : General      f:0 st:6,740,022> Workshop: item state DownloadPending -> Fail ID=3077900375", "Workshop"},
+		{"java.lang.NullPointerException: Required Animation Asset not found: bob/bob_idle", "couldn't load some of its own files"},
+		{"LOG  : General      f:0 st:680,281> Server Terminated.", "gave up"},
 	} {
 		if got := s.ExitHint([]string{"LOG  : General      f:0 st:1> something", c.line}); !strings.Contains(got, c.want) {
 			t.Errorf("%q: hint %q, want one with %q", c.line, got, c.want)

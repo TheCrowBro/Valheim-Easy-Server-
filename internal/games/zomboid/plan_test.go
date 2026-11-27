@@ -78,6 +78,9 @@ func TestParseBatB42(t *testing.T) {
 	if l.ClassPath != "java/;java/projectzomboid.jar" || l.Main != mainClass || !slices.Equal(l.Game, []string{"-statistic", "0"}) {
 		t.Errorf("class path %q, main %q, game args %q", l.ClassPath, l.Main, l.Game)
 	}
+	if !slices.Equal(l.Env, []string{"PZ_CLASSPATH=java/;java/projectzomboid.jar"}) {
+		t.Errorf("environment %q, want the .bat's SET", l.Env)
+	}
 	// The same file with LF line endings and a BOM, as an editor might
 	// leave it, reads the same.
 	l2, err := parseBat("\ufeff" + lf(string(readTestdata(t, "launch/StartServer64.bat"))))
@@ -100,6 +103,11 @@ func TestParseBatOtherForms(t *testing.T) {
 		{name: "a comment and the nosteam launcher's game arguments",
 			bat: "rem Project Zomboid\r\n:: start\r\njre64\\bin\\java -cp java/ zombie.network.GameServer -nosteam %1\r\n",
 			cp:  "java/", game: []string{"-nosteam"}},
+		{name: "the .bat's own folder, %~dp0, stands for the server folder",
+			bat: "@cd /d \"%~dp0\"\r\nSET PZ_CLASSPATH=%~DP0java/;%~dp0java/projectzomboid.jar\r\n" +
+				`"%~dp0jre64\bin\java.exe" -Djava.library.path=%~dp0natives/ -cp %PZ_CLASSPATH% zombie.network.GameServer -statistic 0 %1 %2` + "\r\n",
+			cp: `.\java/;.\java/projectzomboid.jar`, jvm: []string{`-Djava.library.path=.\natives/`}, game: []string{"-statistic", "0"}},
+		{name: "another part of the .bat's own path", bat: `java.exe -Dself=%~f0 -cp java/ zombie.network.GameServer`, err: "doesn't set"},
 		{name: "no Java line", bat: "@echo hello\r\nPAUSE\r\n", err: "no line runs"},
 		{name: "a variable the .bat never sets", bat: `java.exe -cp %MISSING% zombie.network.GameServer`, err: "doesn't set"},
 		{name: "no class path", bat: `java.exe -Xmx1g zombie.network.GameServer`, err: "no class path"},
@@ -120,6 +128,20 @@ func TestParseBatOtherForms(t *testing.T) {
 				t.Errorf("got %+v", l)
 			}
 		})
+	}
+}
+
+// Every SET before the Java line goes into the plan's environment, in the
+// order first set, with its last value; "SET NAME=" adds nothing; a SET
+// after the Java line never reached it.
+func TestParseBatEnvironment(t *testing.T) {
+	l, err := parseBat("set _JAVA_OPTIONS=-Dfoo=1\r\nSET \"JARS=java/a.jar\"\r\nset EMPTY=\r\nset _java_options=-Dfoo=2\r\n" +
+		"java -cp %JARS% zombie.network.GameServer\r\nset LATER=x\r\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"_JAVA_OPTIONS=-Dfoo=2", "JARS=java/a.jar"}; !slices.Equal(l.Env, want) {
+		t.Errorf("environment %q, want %q", l.Env, want)
 	}
 }
 
@@ -221,17 +243,50 @@ func TestCommandLineGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	golden(t, "command-line-windows.txt", commandLine(s, s.args(bat, sv, "World", "ADMINPASSWORD"), nil))
+	saves := s.env.Dirs.Saves
+	// The .bat's SET lines go into the environment too.
+	golden(t, "command-line-windows.txt", commandLine(s, s.args(bat, sv, "World", "ADMINPASSWORD", saves), bat.Env))
 	j, err := parseLaunchJSON(readTestdata(t, "launch/ProjectZomboid64.json"), "windows")
 	if err != nil {
 		t.Fatal(err)
 	}
-	golden(t, "command-line-windows-json.txt", commandLine(s, s.args(j, sv, "World", "ADMINPASSWORD"), nil))
+	golden(t, "command-line-windows-json.txt", commandLine(s, s.args(j, sv, "World", "ADMINPASSWORD", saves), j.Env))
 	j, err = parseLaunchJSON(readTestdata(t, "launch/ProjectZomboid64-linux.json"), "linux")
 	if err != nil {
 		t.Fatal(err)
 	}
-	golden(t, "command-line-linux.txt", commandLine(s, s.args(j, sv, "World", "ADMINPASSWORD"), linuxEnv(s.env.Dirs.Server)))
+	golden(t, "command-line-linux.txt", commandLine(s, s.args(j, sv, "World", "ADMINPASSWORD", saves), linuxEnv(s.env.Dirs.Server)))
+}
+
+// A start gives the server its folders spelt in full, with the launcher's
+// environment and none of the computer's own Java options, and
+// Fingerprint doesn't read the disk to know them.
+func TestPlanFoldersAndEnvironment(t *testing.T) {
+	env := testEnv(t)
+	s := Game{}.New(env).(*server)
+	if err := s.Installer().Install(context.Background(), false, nil); err != nil {
+		t.Fatal(err)
+	}
+	sv := defaultSaved(t, s)
+	s.store.Save(func(c *game.Saved) error { *c = sv.Clone(); return nil })
+	p, err := s.Plan(context.Background(), game.PlanRequest{World: "World", New: true, Saved: sv, LogPath: filepath.Join(env.Dirs.Logs, "zomboid-x.log")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Dir != longPath(env.Dirs.Server) {
+		t.Errorf("Dir = %q, want %q", p.Dir, longPath(env.Dirs.Server))
+	}
+	if !slices.Contains(p.Args, "-cachedir="+longPath(env.Dirs.Saves)) {
+		t.Errorf("no -cachedir=%s in %q", longPath(env.Dirs.Saves), p.Args)
+	}
+	// The fake install has the real Build 42 .bat beside the stand-in; the
+	// variables Java takes extra options from are emptied.
+	if want := []string{"PZ_CLASSPATH=java/;java/projectzomboid.jar", "_JAVA_OPTIONS=", "JAVA_TOOL_OPTIONS=", "JDK_JAVA_OPTIONS="}; !slices.Equal(p.Env, want) {
+		t.Errorf("Env = %q, want %q", p.Env, want)
+	}
+	if p.Fingerprint != s.Fingerprint(sv, "World") {
+		t.Errorf("the plan's fingerprint %q isn't Fingerprint's %q", p.Fingerprint, s.Fingerprint(sv, "World"))
+	}
 }
 
 // The settings file the plan writes: a new world's (only the app's keys),
