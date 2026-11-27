@@ -354,8 +354,10 @@ jobs:
       # real servers (real-server.yml, run by hand on that branch) must have
       # passed on exactly the commit merged in: the merge's second parent
       # (docs/dev/multigame/spec.md, 7.4 and 8.2). Runs started by a push
-      # don't count, as they may check only some games. This job has no
-      # checkout, so it asks GitHub.
+      # don't count, as they may check only some games, and nor do runs
+      # started by hand that asked for only some ("changed", or a list of
+      # games): only one with "all" among its games checked every game.
+      # This job has no checkout, so it asks GitHub.
       - name: Check the real servers passed on what is released
         env:
           GH_TOKEN: ${{ github.token }}
@@ -377,11 +379,18 @@ jobs:
             echo "::error::$SHA's files aren't the same as those of $parent, the commit merged in, so they aren't what the real servers were checked on. Release by merging the tested branch with git merge --no-ff onto the default branch as it was at the last release (docs/dev/multigame/spec.md, 8.2)."
             exit 1
           fi
-          runs=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow real-server.yml --commit "$parent" --limit 100 --json conclusion,event,url)
+          runs=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow real-server.yml --commit "$parent" --limit 100 --json conclusion,event,displayTitle,url)
           echo "real-server.yml's runs on $parent: $runs"
-          passed=$(echo "$runs" | jq -r '[.[] | select(.conclusion == "success" and .event == "workflow_dispatch")][0].url // ""')
+          # The games a run was started with are in its title (run-name in
+          # real-server.yml): "Real servers on <branch>: <games>", where a
+          # branch name can't hold a colon. They're split at commas, trimmed
+          # and lowercased as real-server.yml's plan job reads them, so
+          # "all", "All" or "minecraft, all" counts, and a title with
+          # ", and the big ones" after the games does too.
+          passed=$(echo "$runs" | jq -r '[.[] | select(.conclusion == "success" and .event == "workflow_dispatch"
+            and ((.displayTitle // "") | sub("^[^:]*: "; "") | split(",") | map(ascii_downcase | gsub("^\\s+|\\s+$"; "")) | any(.[]; . == "all")))][0].url // ""')
           if [ -z "$passed" ]; then
-            echo "::error::real-server.yml has no passed run, started by hand, on $parent (the commit merged in). Run it on that branch; once it passes, re-run this workflow's failed jobs."
+            echo "::error::real-server.yml has no passed run, started by hand with games set to all, on $parent (the commit merged in). Run it on that branch with games set to all; once it passes, re-run this workflow's failed jobs."
             exit 1
           fi
           echo "The real servers passed on $parent: $passed"
