@@ -5,23 +5,27 @@ package manager
 // an instance id; the old method names (StartServer, Worlds…) stay as the
 // legacy game's, for the old routes, the tray and main.go.
 //
-// Phase 0' made these with their signatures so the API stream can be
-// written against them at once (stream M3 owns this file from then on).
-// Where the legacy game already has the same method, the …Game form calls
-// it for the legacy instance; for any other instance, and where no legacy
-// method exists yet, it answers errNotYet until M3 (or the stream named in
-// the comment) fills it in. Nothing here changes what the legacy methods do.
+// Phase 0' made these with their signatures so the API stream could be
+// written against them at once; stream M3 owns this file. Where the legacy
+// game already has the same method, the …Game form calls it for the legacy
+// instance, so it behaves exactly as on the old routes; every other
+// instance goes through its adapter and its servers.json entry
+// (gamemethods.go has the settings, worlds, players, lists and log). A
+// foreign instance (srv nil) answers why this version can't use it.
+// Nothing here changes what the legacy methods do.
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
+	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 
 	"valheim-easy-server/internal/config"
 	"valheim-easy-server/internal/game"
+	"valheim-easy-server/internal/records"
 	"valheim-easy-server/internal/servers"
 	"valheim-easy-server/internal/worlds"
 )
@@ -34,32 +38,110 @@ func errNoGame(id string) error {
 	return fmt.Errorf("There's no game %q on this computer.", id)
 }
 
-// instanceByID finds an instance. In R2 and phase 0' the instances are made
-// in New and never change, so it reads them without m.mu; M3 guards them
-// once adding and removing a game change them.
+// instanceByID finds an instance, foreign ones too (inst.srv is nil for
+// them). It may be called with or without m.mu.
 func (m *Manager) instanceByID(id string) (*instance, error) {
-	if inst := m.instances[id]; inst != nil {
+	if inst := m.insts.Load().byID[id]; inst != nil {
 		return inst, nil
 	}
 	return nil, errNoGame(id)
+}
+
+// runningInstance is instanceByID for an action that needs the game's
+// server: a foreign instance says why this version can't do it.
+func (m *Manager) runningInstance(id string) (*instance, error) {
+	inst, err := m.instanceByID(id)
+	if err == nil && inst.srv == nil {
+		err = foreignError(inst)
+	}
+	return inst, err
+}
+
+// The reasons a servers.json entry is foreign (instance.foreign).
+const (
+	foreignUnknown = "This version of the app doesn't know this game: a newer version added it."
+	foreignHidden  = "This game is switched off in this version of the app."
+	foreignSecond  = "This version of the app runs only one server of this game."
+)
+
+func foreignError(inst *instance) error {
+	return fmt.Errorf("%s can't be used here. %s", inst.short(), inst.foreign)
 }
 
 // newGameInstance makes the instance for a servers.json entry of a
 // non-legacy game: its folders under games/<id>, its servers.json-backed
 // game.Store, and its game.Env (Note, and Fake under EGS_DEV_FAKE_SERVERS).
 // An entry whose game this build doesn't run gets a foreign instance (srv
-// nil, foreign saying why). It does no work on disk, so New stays quick
-// (I5). A's AddGame and M3's New use it.
+// nil, foreign saying why): a game it doesn't know, one whose stage is
+// hidden in this build (unless EGS_DEV_ALL_STAGES=1), or a second server of
+// the legacy game, whose files can only be the legacy ones. It does no work
+// on disk, so New stays quick (I5). A's AddGame and M3's New use it; the
+// caller adds it with addInstanceLocked.
 func (m *Manager) newGameInstance(in servers.Instance) (*instance, error) {
-	return nil, errNotYet
+	if !servers.ValidID(in.ID) {
+		return nil, fmt.Errorf("the instance id %q can't be a folder name", in.ID)
+	}
+	if in.ID == m.legacyID {
+		return nil, fmt.Errorf("%q is the main game's own instance", in.ID)
+	}
+	inst := &instance{id: in.ID, dirs: m.gameDirs(in.ID), known: map[string]*KnownPlayer{},
+		uploads: map[string]*worlds.Upload{}, logs: newRing[LogLine](3000),
+		recs: recordsData{Runs: map[string][]records.Event{}}}
+	g, ok := m.gameByID(in.Game)
+	if !ok {
+		short := in.Game
+		if short == "" {
+			short = in.ID
+		}
+		inst.info = game.Info{ID: in.Game, Name: short, Short: short, Letter: firstLetter(short), Color: "#6b7280"}
+		inst.foreign = foreignUnknown
+		return inst, nil
+	}
+	inst.g, inst.info = g, g.Info()
+	switch {
+	case inst.info.Legacy || in.Legacy:
+		inst.foreign = foreignSecond
+		return inst, nil
+	case inst.info.Stage == game.Hidden && !m.allStages:
+		inst.foreign = foreignHidden
+		return inst, nil
+	case inst.info.Stage == game.Hidden:
+		inst.info.Stage = game.Preview // EGS_DEV_ALL_STAGES: shown as a preview
+	}
+	inst.srv = g.New(game.Env{Instance: in.ID, Data: m.opt.DataDir, Dirs: inst.dirs, Log: m.log, HTTP: gameClient,
+		Store: serversStore{m: m, id: in.ID}, Fake: m.fake,
+		Note: func(kind, text string) { m.instActivity(inst, kind, "", text) }})
+	return inst, nil
 }
 
 // addInstanceLocked puts a new instance in m.instances and m.order (Add a
-// game); removeInstanceLocked takes one out (removing a game). M3 makes
-// readers of the instances safe for this first.
-func (m *Manager) addInstanceLocked(inst *instance) {}
+// game); removeInstanceLocked takes one out (removing a game; never the
+// legacy one, which is only hidden). Both make new lists, so code reading
+// the old ones without m.mu is never disturbed.
+func (m *Manager) addInstanceLocked(inst *instance) {
+	if _, ok := m.instances[inst.id]; ok {
+		return
+	}
+	byID := make(map[string]*instance, len(m.instances)+1)
+	for id, i := range m.instances {
+		byID[id] = i
+	}
+	byID[inst.id] = inst
+	m.setInstancesLocked(byID, append(slices.Clone(m.order), inst.id))
+}
 
-func (m *Manager) removeInstanceLocked(id string) {}
+func (m *Manager) removeInstanceLocked(id string) {
+	if _, ok := m.instances[id]; !ok || id == m.legacyID {
+		return
+	}
+	byID := make(map[string]*instance, len(m.instances))
+	for k, i := range m.instances {
+		if k != id {
+			byID[k] = i
+		}
+	}
+	m.setInstancesLocked(byID, slices.DeleteFunc(slices.Clone(m.order), func(k string) bool { return k == id }))
+}
 
 // legacyOnly runs fn when id is the legacy instance, which already has the
 // method; any other instance gets errNotYet until M3 builds the general one.
@@ -101,7 +183,7 @@ const (
 
 // StartGame starts an instance's server (POST /api/games/{id}/start).
 func (m *Manager) StartGame(id string, o StartOptions) error {
-	inst, err := m.instanceByID(id)
+	inst, err := m.runningInstance(id)
 	if err != nil {
 		return err
 	}
@@ -137,7 +219,7 @@ func (m *Manager) startGameWith(inst *instance, o StartOptions) error {
 
 // StopGame saves the world and stops an instance's server.
 func (m *Manager) StopGame(id string) error {
-	inst, err := m.instanceByID(id)
+	inst, err := m.runningInstance(id)
 	if err != nil {
 		return err
 	}
@@ -146,7 +228,7 @@ func (m *Manager) StopGame(id string) error {
 
 // RestartGame stops an instance's server and starts it again.
 func (m *Manager) RestartGame(id string) error {
-	inst, err := m.instanceByID(id)
+	inst, err := m.runningInstance(id)
 	if err != nil {
 		return err
 	}
@@ -155,7 +237,7 @@ func (m *Manager) RestartGame(id string) error {
 
 // ForceStopGame ends an instance's server process at once, without saving.
 func (m *Manager) ForceStopGame(id string) error {
-	inst, err := m.instanceByID(id)
+	inst, err := m.runningInstance(id)
 	if err != nil {
 		return err
 	}
@@ -164,7 +246,7 @@ func (m *Manager) ForceStopGame(id string) error {
 
 // InstallGame installs, updates or (repair) re-checks an instance's server.
 func (m *Manager) InstallGame(id string, repair bool) error {
-	inst, err := m.instanceByID(id)
+	inst, err := m.runningInstance(id)
 	if err != nil {
 		return err
 	}
@@ -191,23 +273,40 @@ func (m *Manager) CancelGameJob(id string) error {
 
 // StopAll saves and stops every running game, each in its own job, so they
 // stop at the same time (the tray's "Stop all games", POST
-// /api/power/stop-all). reason goes to the log. It returns the first
-// refusal, after asking every game. M3 makes it wait for the app job and
-// write one activity entry (6.6).
+// /api/power/stop-all). reason goes to the log. While the app's own job
+// runs (going to sleep, which stops every game itself) it is refused with
+// that job's BusyError, so the caller waits for it (main's stopAndWait).
+// Otherwise it writes one activity entry and returns the first refusal,
+// after asking every game.
 func (m *Manager) StopAll(reason string) error {
 	if reason != "" {
 		m.log.Printf("stopping every game: %s", reason)
 	}
-	var errs []error
-	for _, id := range m.order {
-		inst := m.instances[id]
-		m.mu.Lock()
-		on := inst.run != nil
+	var on []*instance
+	m.mu.Lock()
+	if running(m.appJob) {
+		t := m.appJob.Title
 		m.mu.Unlock()
-		if on {
-			if err := m.stopGame(inst); err != nil {
-				errs = append(errs, err)
-			}
+		return &BusyError{Title: lowerFirst(t)}
+	}
+	m.eachInstance(func(inst *instance) {
+		if inst.run != nil && inst.srv != nil && !inst.run.stopping {
+			on = append(on, inst)
+		}
+	})
+	m.mu.Unlock()
+	if len(on) == 0 {
+		return nil
+	}
+	names := make([]string, len(on))
+	for i, inst := range on {
+		names[i] = inst.short()
+	}
+	m.addActivity("stopped", "", "Saving and stopping every game that is running: "+strings.Join(names, ", ")+".")
+	var errs []error
+	for _, inst := range on {
+		if err := m.stopGame(inst); err != nil {
+			errs = append(errs, err)
 		}
 	}
 	if len(errs) > 0 {
@@ -219,28 +318,81 @@ func (m *Manager) StopAll(reason string) error {
 // --- stars, the sidebar, turning a game off ----------------------------------
 
 // SetStar stars or unstars a game (POST /api/games/{id}/star): starred
-// games are under Active and get their Discord command (6.4).
+// games are under Active and get their Discord command (6.4). A removed
+// (hidden) legacy game is added back first, never starred where it is
+// hidden.
 func (m *Manager) SetStar(id string, on bool) error {
-	if _, err := m.instanceByID(id); err != nil {
+	inst, err := m.instanceByID(id)
+	if err != nil {
 		return err
 	}
-	return errNotYet // M3: servers.json app.stars, then WK's starsChanged
+	m.mu.Lock()
+	hidden := m.isHiddenLocked(inst)
+	m.mu.Unlock()
+	if hidden && on {
+		return hiddenError(inst)
+	}
+	changed := false
+	err = m.updateServers(func(f *servers.File) error {
+		has := slices.Contains(f.App.Stars, id)
+		switch {
+		case on && !has:
+			f.App.Stars = append(f.App.Stars, id)
+			changed = true
+		case !on && has:
+			f.App.Stars = slices.DeleteFunc(f.App.Stars, func(s string) bool { return s == id })
+			changed = true
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if changed {
+		m.go_(m.starsChanged) // WK: the waker's commands follow the stars
+	}
+	return nil
 }
 
 // SetSidebar remembers which of the sidebar's lists are open
 // (POST /api/app/sidebar).
 func (m *Manager) SetSidebar(activeOpen, inactiveOpen bool) error {
-	return errNotYet // M3: servers.json app.activeOpen/inactiveOpen
+	return m.updateServers(func(f *servers.File) error {
+		f.App.ActiveOpen, f.App.InactiveOpen = &activeOpen, &inactiveOpen
+		return nil
+	})
 }
 
 // starsLocked are the starred instances, in the order they were starred.
+// A hidden legacy game and ids no instance has are left out.
 func (m *Manager) starsLocked() []string {
-	return append([]string{}, m.servers.App.Stars...)
+	out := []string{}
+	for _, id := range m.servers.App.Stars {
+		if inst := m.instances[id]; inst != nil && !m.isHiddenLocked(inst) && !slices.Contains(out, id) {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
-// isStarredLocked reports whether the instance is starred.
+// isStarredLocked reports whether the instance is starred (never a hidden
+// legacy game, I1).
 func (m *Manager) isStarredLocked(inst *instance) bool {
-	return slices.Contains(m.servers.App.Stars, inst.id)
+	return slices.Contains(m.servers.App.Stars, inst.id) && !m.isHiddenLocked(inst)
+}
+
+// firstLetter is a name's first letter in capitals, for a letter tile.
+func firstLetter(name string) string {
+	for _, r := range name {
+		return strings.ToUpper(string(r))
+	}
+	return "?"
+}
+
+// hiddenError answers anything that would start or show a hidden legacy
+// game (I1).
+func hiddenError(inst *instance) error {
+	return fmt.Errorf("%s is removed from the panel. Add it again first.", inst.short())
 }
 
 // isDisabledLocked reports whether the owner turned the game off
@@ -263,8 +415,13 @@ func (m *Manager) isHiddenLocked(inst *instance) bool {
 
 // canRunLocked says whether the instance's server runs on this computer,
 // and why not (spec 2.10): Info.OS, then the adapter's own run-time answer
-// (game.Supporter). M3 adds fake mode, which ignores both.
+// (game.Supporter). Fake mode ignores both, so fake games run on every
+// system (7.1), and the legacy game always runs where the app does, as it
+// always has.
 func (m *Manager) canRunLocked(inst *instance) (game.Level, string) {
+	if inst.legacy || inst.srv != nil && m.fake != nil {
+		return game.Runs, ""
+	}
 	l, why := inst.info.LevelOn(runtime.GOOS, runtime.GOARCH)
 	if l == game.Runs && inst.srv != nil {
 		if s, ok := inst.srv.(game.Supporter); ok {
@@ -276,11 +433,21 @@ func (m *Manager) canRunLocked(inst *instance) (game.Level, string) {
 
 // presenceProvenLocked reports whether the instance's player count can be
 // trusted to stop it or let the computer sleep (spec 2.6): the legacy
-// instance's always can; another's once its probe has answered with a
-// count, or once this install has seen its first join (presenceSeen). M3
-// adds the last two; A's auto-stop and idle sleep and D's ask rule use it.
+// instance's always can; another's once the latest probe of its running
+// server answered with a count, or once this install has seen its first
+// join (servers.json presenceSeen). A's auto-stop and idle sleep and D's
+// ask rule use it.
 func (m *Manager) presenceProvenLocked(inst *instance) bool {
-	return inst.legacy
+	switch {
+	case inst.legacy:
+		return true
+	case inst.srv == nil:
+		return false
+	case inst.run != nil && inst.run.probed:
+		return true
+	}
+	in := m.servers.Instance(inst.id)
+	return in != nil && !in.PresenceSeen.IsZero()
 }
 
 // portChosenLocked reports whether the owner chose the role's port, so the
@@ -295,10 +462,37 @@ func (m *Manager) portChosenLocked(inst *instance, role string) bool {
 }
 
 // updateServers changes servers.json (spec 3.2) and the manager's copy:
-// load, change, back up, write. It runs without m.mu and refuses in safe
-// mode. M3 builds it; until then nothing writes servers.json, as in R2.
+// load, change, back up, write, then publish the new list. It runs
+// without m.mu (it takes it to publish) and refuses in safe mode. change
+// works on a fresh copy of the file: it may change it freely, and nothing
+// changes when it returns an error. Changes are made one at a time, so the
+// list in memory always follows the file.
 func (m *Manager) updateServers(change func(*servers.File) error) error {
-	return errNotYet
+	m.mu.Lock()
+	safe := m.safeMode
+	m.mu.Unlock()
+	if safe != "" {
+		return errSafeMode
+	}
+	m.serversMu.Lock()
+	defer m.serversMu.Unlock()
+	var next servers.File
+	err := servers.Update(filepath.Join(m.opt.DataDir, servers.FileName), func(f *servers.File) error {
+		if err := change(f); err != nil {
+			return err
+		}
+		next = *f // Update's own copy, which nothing changes after this
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	next.Schema = servers.Schema
+	m.mu.Lock()
+	m.publishServersLocked(next)
+	m.mu.Unlock()
+	m.notify()
+	return nil
 }
 
 // --- settings ---------------------------------------------------------------
@@ -346,23 +540,6 @@ type GameSettingsChange struct {
 	EULA *bool `json:"eula,omitempty"`
 }
 
-// GameSettings is a game's Settings tab.
-func (m *Manager) GameSettings(id string) (GameSettingsView, error) {
-	if _, err := m.instanceByID(id); err != nil {
-		return GameSettingsView{}, err
-	}
-	return GameSettingsView{}, errNotYet
-}
-
-// UpdateGameSettings saves what changed on a game's Settings tab. Field
-// errors come back keyed "server.<key>" (2.9).
-func (m *Manager) UpdateGameSettings(id string, ch GameSettingsChange) error {
-	if _, err := m.instanceByID(id); err != nil {
-		return err
-	}
-	return errNotYet
-}
-
 // AppSettingsChange is what POST /api/app/settings changes: the app-wide
 // settings, only the parts that are set. All but RouterPorts are in
 // settings.json, with the meanings they have today; RouterPorts is
@@ -373,11 +550,6 @@ type AppSettingsChange struct {
 	AutoUpdate     *bool `json:"autoUpdate,omitempty"`
 	StartAfterWake *bool `json:"startAfterWake,omitempty"`
 	RouterPorts    *bool `json:"routerPorts,omitempty"`
-}
-
-// UpdateAppSettings saves the App settings page.
-func (m *Manager) UpdateAppSettings(ch AppSettingsChange) error {
-	return errNotYet
 }
 
 // --- worlds -----------------------------------------------------------------
@@ -401,153 +573,74 @@ type WorldSchemas struct {
 	NewWorld game.Schema `json:"newWorld"`
 }
 
-// WorldsGame lists a game's worlds and their backups.
-func (m *Manager) WorldsGame(id string) (GameWorldsView, error) {
-	if _, err := m.instanceByID(id); err != nil {
-		return GameWorldsView{}, err
-	}
-	return GameWorldsView{}, errNotYet
-}
-
-// SelectWorldGame makes name the world the game's next start uses (and
-// restarts it with that world when restart is set).
-func (m *Manager) SelectWorldGame(id, name string, restart bool) error {
-	return m.legacyOnly(id, func() error { return m.SelectWorld(name, restart) })
-}
-
-// CreateWorldGame makes a new world from its new-world values; the server
-// makes it at its first start.
-func (m *Manager) CreateWorldGame(id, name string, values game.Values, restart bool) error {
-	if _, err := m.instanceByID(id); err != nil {
-		return err
-	}
-	return errNotYet
-}
-
-// SetWorldValuesGame saves a world's world-scope values.
-func (m *Manager) SetWorldValuesGame(id, name string, values game.Values) error {
-	if _, err := m.instanceByID(id); err != nil {
-		return err
-	}
-	return errNotYet
-}
-
-// DeleteWorldGame deletes a world (its backups stay).
-func (m *Manager) DeleteWorldGame(id, name string) error {
-	return m.legacyOnly(id, func() error { return m.DeleteWorld(name) })
-}
-
-// BackupWorldGame backs a world up now.
-func (m *Manager) BackupWorldGame(id, name string) error {
-	return m.legacyOnly(id, func() error { return m.BackupWorld(name) })
-}
-
-// RestoreWorldGame puts a world back as one of its backups has it.
-func (m *Manager) RestoreWorldGame(id, name, backupID string) error {
-	return m.legacyOnly(id, func() error { return m.RestoreWorld(name, backupID) })
-}
-
-// RenameWorldGame renames a world where the game allows it.
-func (m *Manager) RenameWorldGame(id, name, newName string) error {
-	return m.legacyOnly(id, func() error { return m.RenameWorld(name, newName) })
-}
-
-// PrepareDownloadGame makes a world's download.
-func (m *Manager) PrepareDownloadGame(id, name string) (path, filename string, err error) {
-	err = m.legacyOnly(id, func() error {
-		var e error
-		path, filename, e = m.PrepareDownload(name)
-		return e
-	})
-	return path, filename, err
-}
-
-// ExportBackupGame writes one of a world's backups to w.
-func (m *Manager) ExportBackupGame(id string, w io.Writer, name, backupID string) error {
-	return m.legacyOnly(id, func() error { return m.ExportBackup(w, name, backupID) })
-}
-
 // --- uploads and the owner's own worlds ---------------------------------------
 
 // NewUploadGame starts an upload of worlds for the game.
-func (m *Manager) NewUploadGame(id string) (u *worlds.Upload, err error) {
-	err = m.legacyOnly(id, func() error {
-		var e error
-		u, e = m.NewUpload()
-		return e
-	})
-	return u, err
+func (m *Manager) NewUploadGame(id string) (*worlds.Upload, error) {
+	inst, err := m.runningInstance(id)
+	if err != nil {
+		return nil, err
+	}
+	return m.newUploadFor(inst)
 }
 
 // UploadGame is one of the game's uploads.
-func (m *Manager) UploadGame(id, uploadID string) (u *worlds.Upload, err error) {
-	err = m.legacyOnly(id, func() error {
-		var e error
-		u, e = m.Upload(uploadID)
-		return e
-	})
-	return u, err
+func (m *Manager) UploadGame(id, uploadID string) (*worlds.Upload, error) {
+	inst, err := m.runningInstance(id)
+	if err != nil {
+		return nil, err
+	}
+	return m.uploadFor(inst, uploadID)
 }
 
 // FinishUploadGame unpacks an upload and lists the worlds in it.
-func (m *Manager) FinishUploadGame(id, uploadID string) (c []worlds.Candidate, err error) {
-	err = m.legacyOnly(id, func() error {
-		var e error
-		c, e = m.FinishUpload(uploadID)
-		return e
-	})
-	return c, err
+func (m *Manager) FinishUploadGame(id, uploadID string) ([]worlds.Candidate, error) {
+	inst, err := m.runningInstance(id)
+	if err != nil {
+		return nil, err
+	}
+	return m.finishUploadFor(inst, uploadID)
 }
 
 // DiscardUploadGame throws an upload away.
 func (m *Manager) DiscardUploadGame(id, uploadID string) error {
-	return m.legacyOnly(id, func() error {
-		m.DiscardUpload(uploadID)
-		return nil
-	})
+	inst, err := m.runningInstance(id)
+	if err != nil {
+		return err
+	}
+	m.discardUploadFor(inst, uploadID)
+	return nil
 }
 
 // ImportUploadGame imports the chosen worlds of an upload, as a job.
-func (m *Manager) ImportUploadGame(id, uploadID string, choices []worlds.Choice) (job int, err error) {
-	err = m.legacyOnly(id, func() error {
-		var e error
-		job, e = m.ImportUpload(uploadID, choices)
-		return e
-	})
-	return job, err
+func (m *Manager) ImportUploadGame(id, uploadID string, choices []worlds.Choice) (int, error) {
+	inst, err := m.runningInstance(id)
+	if err != nil {
+		return 0, err
+	}
+	return m.importUploadFor(inst, uploadID, choices)
 }
 
 // LocalWorldsGame lists the worlds in the owner's own copy of the game on
 // this computer.
-func (m *Manager) LocalWorldsGame(id string) (c []worlds.Candidate, err error) {
-	err = m.legacyOnly(id, func() error {
-		c = m.LocalWorlds()
-		return nil
-	})
-	return c, err
+func (m *Manager) LocalWorldsGame(id string) ([]worlds.Candidate, error) {
+	inst, err := m.runningInstance(id)
+	if err != nil {
+		return nil, err
+	}
+	return m.localWorldsFor(inst), nil
 }
 
 // ImportLocalGame imports the chosen worlds of the owner's own game.
-func (m *Manager) ImportLocalGame(id string, choices []worlds.Choice) (job int, err error) {
-	err = m.legacyOnly(id, func() error {
-		var e error
-		job, e = m.ImportLocal(choices)
-		return e
-	})
-	return job, err
+func (m *Manager) ImportLocalGame(id string, choices []worlds.Choice) (int, error) {
+	inst, err := m.runningInstance(id)
+	if err != nil {
+		return 0, err
+	}
+	return m.importLocalFor(inst, choices)
 }
 
 // --- players and lists ----------------------------------------------------------
-
-// KnownPlayersGame lists everyone who has played the game, most recent
-// first.
-func (m *Manager) KnownPlayersGame(id string) (p []KnownPlayer, err error) {
-	err = m.legacyOnly(id, func() error {
-		p = m.KnownPlayers()
-		return nil
-	})
-	return p, err
-}
 
 // GameList is one of a game's player lists (GET /api/games/{id}/lists).
 type GameList struct {
@@ -555,64 +648,4 @@ type GameList struct {
 	IDs  []string      `json:"ids"`
 }
 
-// ListsGame returns a game's player lists; none for a game without them.
-func (m *Manager) ListsGame(id string) ([]GameList, error) {
-	inst, err := m.instanceByID(id)
-	if err != nil {
-		return nil, err
-	}
-	if !inst.legacy {
-		return nil, errNotYet
-	}
-	out := []GameList{}
-	l, ok := inst.srv.(game.Lister)
-	if !ok {
-		return out, nil
-	}
-	for _, k := range l.Lists() {
-		ids, err := l.ReadList(k.ID)
-		if err != nil {
-			return nil, err
-		}
-		if ids == nil {
-			ids = []string{}
-		}
-		out = append(out, GameList{Kind: k, IDs: ids})
-	}
-	return out, nil
-}
-
-// SetListGame replaces one of a game's player lists (live when it can).
-func (m *Manager) SetListGame(id, kind string, ids []string) error {
-	return m.legacyOnly(id, func() error { return m.SetList(config.ListKind(kind), ids) })
-}
-
-// AllowPlayer adds a turned-away player to the game's allow list, with one
-// click (POST /api/games/{id}/allow, spec 5.2).
-func (m *Manager) AllowPlayer(id, name string) error {
-	if _, err := m.instanceByID(id); err != nil {
-		return err
-	}
-	return errNotYet
-}
-
 // --- the log ---------------------------------------------------------------
-
-// LogsGame returns the game's server log lines after seq (oldest first).
-func (m *Manager) LogsGame(id string, after int64, limit int) (lines []LogLine, last int64, err error) {
-	err = m.legacyOnly(id, func() error {
-		lines, last = m.Logs(after, limit)
-		return nil
-	})
-	return lines, last, err
-}
-
-// CurrentLogPathGame is the log file of the game's running (or last)
-// server.
-func (m *Manager) CurrentLogPathGame(id string) (path string, err error) {
-	err = m.legacyOnly(id, func() error {
-		path = m.CurrentLogPath()
-		return nil
-	})
-	return path, err
-}

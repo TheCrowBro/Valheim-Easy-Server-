@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"valheim-easy-server/internal/config"
@@ -190,7 +191,10 @@ func (m *Manager) checkForUpdate(install, auto bool) error {
 		switch {
 		case m.app.updating:
 			err = errUpdatingAlready
-		case m.busyLocked():
+		case m.busyLocked(), auto && len(m.consoleInUseLocked()) > 0:
+			// An automatic update also waits while a console game is played
+			// (spec 2.11): its console would be gone until its next start.
+			// One the owner asks for goes ahead (the panel warned).
 			err = errUpdateBusy
 		default:
 			m.app.updating = true // no new jobs or uploads from here on
@@ -227,7 +231,7 @@ func (m *Manager) checkForUpdate(install, auto bool) error {
 	if rel.Title != "" {
 		text += ": " + rel.Title
 	}
-	m.addActivity("update", "", text+". The "+m.legacy().short()+" server keeps running while the app restarts.")
+	m.addActivity("update", "", text+". "+keepsRunningText(m.runningNames(), m.legacy().short()))
 	m.saveData()
 	m.notify()
 	go func() {
@@ -235,4 +239,30 @@ func (m *Manager) checkForUpdate(install, auto bool) error {
 		m.opt.Relaunch()
 	}()
 	return nil
+}
+
+// keepsRunningText says which game servers keep running while the app
+// restarts into a new build: the legacy game's sentence as before when it
+// is the only one (or nothing runs).
+func keepsRunningText(names []string, legacy string) string {
+	switch len(names) {
+	case 0:
+		return "The " + legacy + " server keeps running while the app restarts."
+	case 1:
+		return "The " + names[0] + " server keeps running while the app restarts."
+	}
+	return "The " + strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1] + " servers keep running while the app restarts."
+}
+
+// runningNames are the short names of the running games, legacy first.
+func (m *Manager) runningNames() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []string
+	m.eachInstance(func(inst *instance) {
+		if inst.run != nil {
+			out = append(out, inst.short())
+		}
+	})
+	return out
 }

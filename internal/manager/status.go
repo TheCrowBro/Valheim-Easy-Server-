@@ -136,9 +136,15 @@ type checkCache struct {
 // its program and build, as it always did.
 func (m *Manager) Status() Status {
 	acts := m.activity.last(40)
-	lan := lanIPs()
+	m.mu.Lock()
+	fresh := m.lanAt.IsZero()
+	m.mu.Unlock()
+	if fresh {
+		m.refreshLAN() // only before the checks loop has run (spec 4.8)
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	lan := append([]string{}, m.lan...)
 	s := m.settings
 	inst := m.legacy()
 	st := Status{
@@ -252,7 +258,7 @@ func (m *Manager) Status() Status {
 			st.Warnings = append(st.Warnings, "The drive with the worlds is almost full. "+inst.short()+" stops saving when it runs out of space: free up some room.")
 		}
 	}
-	if errs := inst.srv.Validate(saved, ""); errs != nil {
+	if errs := inst.srv.Validate(saved, ""); len(errs) > 0 {
 		st.Warnings = append(st.Warnings, "Some settings need fixing before the server can start: "+errs.Error())
 	}
 	st.Warnings = append(st.Warnings, m.foreignWarningsLocked()...)
@@ -276,6 +282,20 @@ func (m *Manager) jobsLocked() []Job {
 	})
 	return out
 }
+
+// refreshLAN reads this computer's LAN addresses into the cache Status
+// uses (spec 4.8): reading them means one system call per network adapter
+// (on Windows, GetAdaptersAddresses), too slow for every Status. The checks
+// loop refreshes it every minute and after a wake.
+func (m *Manager) refreshLAN() {
+	lan := lanAddrs()
+	m.mu.Lock()
+	m.lan, m.lanAt = lan, time.Now()
+	m.mu.Unlock()
+}
+
+// lanAddrs is lanIPs; the quickness tests count its calls.
+var lanAddrs = lanIPs
 
 // lanIPs lists this computer's local network addresses (IPv4), for how
 // friends at home join.
@@ -344,11 +364,20 @@ func fetchPublicIP() string {
 	return ip
 }
 
-// checksLoop refreshes slower checks (firewall, disk space, hibernation).
+// checksLoop refreshes slower checks (firewall, disk space, hibernation),
+// what Status shows of each other game without touching its disk (spec
+// 4.8), and the LAN addresses. A long gap between two of its rounds means
+// the computer slept: its network and addresses may have changed, so it
+// looks again at once.
 func (m *Manager) checksLoop() {
 	tick := time.NewTicker(5 * time.Second)
 	defer tick.Stop()
+	last := time.Now()
 	for {
+		if gap := time.Now().Round(0).Sub(last.Round(0)); gap > time.Minute {
+			m.RefreshChecks() // woke up (or the clock moved): everything again
+		}
+		last = time.Now()
 		inst := m.legacy()
 		m.mu.Lock()
 		due := time.Since(m.checks.at) > time.Minute
@@ -367,7 +396,10 @@ func (m *Manager) checksLoop() {
 			m.mu.Lock()
 			m.checks = c
 			m.mu.Unlock()
-			m.scanForeign() // other games' servers: still running?
+			m.refreshLAN()
+			m.eachInstance(m.refreshCache) // the other games: installed, build, disk
+			m.checkGameFirewalls()         // and their firewall rules (stream A's firewall.go)
+			m.scanForeign()                // other games' servers: still running?
 		}
 		select {
 		case <-m.ctx.Done():

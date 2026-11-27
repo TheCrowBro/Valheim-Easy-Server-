@@ -32,6 +32,7 @@ import (
 	"valheim-easy-server/internal/jetkvm/fakekvm"
 	"valheim-easy-server/internal/mods/modstest"
 	"valheim-easy-server/internal/platform"
+	"valheim-easy-server/internal/servers"
 	"valheim-easy-server/internal/steamcmd"
 	"valheim-easy-server/internal/wol"
 )
@@ -261,21 +262,6 @@ func TestAdoptRerunsAfter(t *testing.T) {
 var otherGames = []string{"minecraft", "terraria", "necesse", "vintagestory", "zomboid", "enshrouded",
 	"corekeeper", "palworld", "satisfactory", "windrose"}
 
-// tenOtherGames gives data ten other games' folders, each with a run
-// record of a running server and 30 logs.
-func tenOtherGames(t *testing.T, data string) {
-	t.Helper()
-	pid, started := thisProcess(t)
-	for _, id := range otherGames {
-		writeRun(t, data, id, game.Record{PID: pid, Started: started, Name: id})
-		logs := filepath.Join(data, "games", id, "logs")
-		os.MkdirAll(logs, 0o755)
-		for i := 0; i < 30; i++ {
-			os.WriteFile(filepath.Join(logs, fmt.Sprintf("%s-2026-11-%02d_18-00-00.log", id, i+1)), []byte("a line\n"), 0o644)
-		}
-	}
-}
-
 // countAccess counts the run records read and the processes opened while
 // fn runs (the counting hook of spec 4.8 and I5).
 func countAccess(t *testing.T, fn func()) (games, procs int) {
@@ -301,53 +287,6 @@ func countAccess(t *testing.T, fn func()) (games, procs int) {
 	mu.Lock()
 	defer mu.Unlock()
 	return games, procs
-}
-
-// I5: New does no work for other games' folders (an older build kills a
-// new one that doesn't answer within a minute).
-func TestNewIsQuick(t *testing.T) {
-	data := t.TempDir()
-	tenOtherGames(t, data)
-	var took time.Duration
-	games, procs := countAccess(t, func() {
-		start := time.Now()
-		env := &testEnv{data: data}
-		newTestManager(t, data, env)
-		took = time.Since(start)
-	})
-	if games != 0 || procs != 0 {
-		t.Fatalf("New read %d of the other games' files and opened %d processes", games, procs)
-	}
-	if !raceEnabled && took > 2*time.Second {
-		t.Fatalf("New took %s", took)
-	}
-}
-
-// 4.8: Status reads nothing of other games' (they are scanned by the
-// checks, every minute), so the panel's polling stays quick.
-func TestStatusIsQuick(t *testing.T) {
-	data := t.TempDir()
-	tenOtherGames(t, data)
-	env := &testEnv{data: data}
-	m := newTestManager(t, data, env)
-	m.scanForeign()
-	if n := len(m.Status().Warnings); n < len(otherGames) {
-		t.Fatalf("%d warnings for %d other games' servers", n, len(otherGames))
-	}
-	var took time.Duration
-	games, procs := countAccess(t, func() {
-		start := time.Now()
-		for i := 0; i < 20; i++ {
-			m.Status()
-		}
-		took = time.Since(start) / 20
-	})
-	if games != 0 || procs != 0 {
-		t.Fatalf("Status read %d of the other games' files and opened %d processes", games, procs)
-	}
-	if !raceEnabled && took > 100*time.Millisecond {
-		t.Fatalf("Status took %s", took)
-	}
 }
 
 // Status is read all the time by the panel while the settings change and
@@ -644,7 +583,13 @@ func TestSecretFilesPrivate(t *testing.T) {
 	m.saveWaker()
 	other := filepath.Join(env.data, "games", "minecraft", "run.json")
 	saveRuntime(other, game.Record{PID: 1, Secrets: map[string]string{"rcon": "x"}})
-	for _, name := range []string{"settings.json", "runtime.json", "jetkvm.json", filepath.Join("games", "minecraft", "run.json")} {
+	// servers.json holds Discord webhooks and adapters' passwords; changing
+	// it keeps the previous copy as its backup, which holds them too.
+	if err := m.SetSidebar(false, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"settings.json", "runtime.json", "jetkvm.json", filepath.Join("games", "minecraft", "run.json"),
+		servers.FileName, servers.FileName + servers.BackupSuffix} {
 		fi, err := os.Stat(filepath.Join(env.data, name))
 		if err != nil {
 			t.Fatal(err)

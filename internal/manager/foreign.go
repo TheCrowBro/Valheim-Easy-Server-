@@ -38,7 +38,7 @@ func (m *Manager) scanForeign() {
 	var live []foreignRun
 	for _, path := range files {
 		id := filepath.Base(filepath.Dir(path))
-		if _, ours := m.instances[id]; ours {
+		if inst, err := m.instanceByID(id); err == nil && inst.srv != nil {
 			continue // an instance this version runs: adoption takes care of it
 		}
 		rec, err := loadRuntime(path)
