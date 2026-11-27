@@ -64,6 +64,7 @@ type igd struct {
 
 	mu            sync.Mutex
 	external      string
+	externalOf    map[string]string    // by service type, when one says something else (a line that's down: "0.0.0.0")
 	entries       map[string]*igdEntry // by "UDP 2456"
 	calls         []string             // the SOAP actions, in order
 	permanentOnly bool                 // refuses leases other than 0 (725)
@@ -195,7 +196,11 @@ func (g *igd) control(w http.ResponseWriter, r *http.Request) {
 	key := v["NewProtocol"] + " " + v["NewExternalPort"]
 	switch action {
 	case "GetExternalIPAddress":
-		reply(w, service, action, "NewExternalIPAddress", g.external)
+		ext, ok := g.externalOf[service]
+		if !ok {
+			ext = g.external
+		}
+		reply(w, service, action, "NewExternalIPAddress", ext)
 	case "AddPortMapping", "AddAnyPortMapping":
 		if action == "AddAnyPortMapping" && !strings.HasSuffix(service, ":2") {
 			fault(w, 401, "Invalid Action")

@@ -52,16 +52,24 @@ func (u *upnpRouter) version() int {
 // connection service says its internet address, or failing that the first
 // whose service answers at all (a router whose line is down still forwards
 // ports once it is up); nil when none.
+//
+// A service that answers 0.0.0.0 may be connected to nothing: a DSL router
+// often lists an unused WANIPConnection next to the PPP connection that
+// carries its traffic, and the unused one answers like that. Ports
+// forwarded on it would say "open" while friends outside still couldn't
+// join, so it only counts as the fallback, like a service that refuses
+// (see Connected for the other reasons a router says 0.0.0.0, when the
+// fallback is the right one).
 func (f finder) findUPnP(ctx context.Context, lan, gateway net.IP) *upnpRouter {
 	var fallback *upnpRouter
 	for _, a := range f.search(ctx, lan, gateway) {
 		for _, r := range f.services(ctx, a.location) {
-			_, err := r.ExternalIP(ctx)
-			if err == nil {
+			ip, err := r.ExternalIP(ctx)
+			if err == nil && Connected(ip) {
 				return r
 			}
 			var ue *upnpError
-			if fallback == nil && errors.As(err, &ue) {
+			if fallback == nil && (err == nil || errors.As(err, &ue)) {
 				fallback = r
 			}
 		}

@@ -90,6 +90,51 @@ func TestUPnPServicesInOrder(t *testing.T) {
 	}
 }
 
+// A DSL router often lists an unused WANIPConnection next to the PPP
+// connection that carries its traffic, and the unused one says its
+// internet address is 0.0.0.0. The app must forward ports on the PPP one:
+// on the other they would say "open" and reach nobody. When every service
+// says 0.0.0.0 (the line is down), the first one is still the router's,
+// in the usual order, so it forwards once the line is up.
+func TestUPnPPrefersConnectedService(t *testing.T) {
+	const ip1, ppp = "urn:schemas-upnp-org:service:WANIPConnection:1", "urn:schemas-upnp-org:service:WANPPPConnection:1"
+	g := newIGD(t, ip1, ppp)
+	g.with(func() { g.externalOf = map[string]string{ip1: "0.0.0.0", ppp: "203.0.113.9"} })
+	r := findIGD(t, g)
+	if r.service != ppp {
+		t.Fatalf("chose %s, want the connected PPP service", r.service)
+	}
+	if ip, err := r.ExternalIP(ctx(t)); err != nil || ip.String() != "203.0.113.9" {
+		t.Fatalf("external IP = %v, %v", ip, err)
+	}
+	if err := r.Map(ctx(t), loopback, valheimGame, 2*time.Hour); err != nil {
+		t.Fatalf("map: %v", err)
+	}
+
+	down := newIGD(t, ip1, ppp)
+	down.with(func() { down.externalOf = map[string]string{ip1: "0.0.0.0", ppp: "0.0.0.0"} })
+	if r := findIGD(t, down); r.service != ip1 {
+		t.Fatalf("with the line down, chose %s, want %s", r.service, ip1)
+	}
+
+	// A service whose answer isn't an address at all doesn't count, so the
+	// one that said 0.0.0.0 is the fallback.
+	garbled := newIGD(t, ip1, ppp)
+	garbled.with(func() { garbled.externalOf = map[string]string{ip1: "not an address", ppp: "0.0.0.0"} })
+	if r := findIGD(t, garbled); r.service != ppp {
+		t.Fatalf("chose %s, want the one that answered 0.0.0.0", r.service)
+	}
+}
+
+// Connected tells a real internet address from a router's "none".
+func TestConnected(t *testing.T) {
+	for ip, want := range map[string]bool{"203.0.113.9": true, "100.64.0.1": true, "192.168.0.2": true, "0.0.0.0": false, "": false, "::": false} {
+		if got := Connected(net.ParseIP(ip)); got != want {
+			t.Errorf("Connected(%q) = %v, want %v", ip, got, want)
+		}
+	}
+}
+
 // A router that only keeps mappings until it restarts (725) gets one
 // without a lease.
 func TestUPnPPermanentLeasesOnly(t *testing.T) {

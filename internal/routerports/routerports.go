@@ -146,6 +146,20 @@ func (f finder) find(ctx context.Context, lan, gateway net.IP) (Router, error) {
 // carrier-grade NAT (RFC 6598).
 var cgnatNet = &net.IPNet{IP: net.IPv4(100, 64, 0, 0).To4(), Mask: net.CIDRMask(10, 32)}
 
+// Connected says whether a router's external address is a real one. A
+// router, or one of its connection services, that isn't connected to the
+// internet (the line is down, or it's a connection the provider doesn't
+// use) says 0.0.0.0, and ports forwarded there reach nobody. Some routers
+// (those built on miniupnpd, which many are) also say 0.0.0.0 instead of a
+// private address of their own, when they sit behind another router or
+// the provider's shared address; that one does carry the traffic, but
+// nothing can be told from it, so it counts as not connected too: the
+// app keeps it only when no other service says a real address.
+func Connected(external net.IP) bool {
+	ext := external.To4()
+	return ext != nil && !ext.IsUnspecified()
+}
+
 // NAT reports "cgnat" when the router's external address is in
 // 100.64.0.0/10 (carrier-grade NAT: the internet can't reach this
 // computer), "double" when it is a private address or isn't the public
@@ -156,10 +170,10 @@ var cgnatNet = &net.IPNet{IP: net.IPv4(100, 64, 0, 0).To4(), Mask: net.CIDRMask(
 // couldn't be looked up). Only IPv4 is compared: the router forwards IPv4,
 // and an IPv6 public address says nothing about it.
 func NAT(external, public net.IP) string {
-	ext := external.To4()
-	if ext == nil || ext.IsUnspecified() {
-		return "" // a router not connected to the internet yet says 0.0.0.0
+	if !Connected(external) {
+		return ""
 	}
+	ext := external.To4()
 	if cgnatNet.Contains(ext) {
 		return "cgnat"
 	}

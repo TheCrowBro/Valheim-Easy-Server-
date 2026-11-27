@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -14,8 +15,19 @@ import (
 	"time"
 
 	"valheim-easy-server/internal/game"
+	"valheim-easy-server/internal/platform"
 	"valheim-easy-server/internal/routerports"
 )
+
+// realRouterNet is what router.go reaches the network with, kept before
+// init puts the stand-ins in (a package's variables are all set before any
+// of its init functions run), so useRealRouter can put back exactly that.
+var realRouterNet = struct {
+	find    func(context.Context, net.IP, net.IP) (routerports.Router, error)
+	gateway func() (net.IP, error)
+	lanFor  func(net.IP) net.IP
+	steam   func(context.Context, string) ([]routerports.SteamServer, error)
+}{findRouter, routerGateway, routerLANFor, steamSees}
 
 // Every test in this package stays off the real network's router, whatever
 // its options: no router answers, and Steam is never asked. The router
@@ -112,13 +124,15 @@ func (f *fakeRouter) with(change func()) {
 
 // routerTest is a manager whose router is fr (nil: none answers) and whose
 // public address is 203.0.113.7, with Valheim's crossplay off so it needs
-// router ports. finds counts the router lookups.
+// router ports. finds counts the router lookups; answer changes which
+// router a lookup finds.
 type routerTest struct {
 	*testEnv
-	fr    *fakeRouter
-	port  int
-	finds *int
-	mu    *sync.Mutex
+	fr     *fakeRouter
+	port   int
+	finds  *int
+	mu     *sync.Mutex
+	answer func(*fakeRouter)
 }
 
 func routerSetup(t *testing.T, fr *fakeRouter) *routerTest {
@@ -128,17 +142,24 @@ func routerSetup(t *testing.T, fr *fakeRouter) *routerTest {
 	oldIP, oldFind := publicIPURL, findRouter
 	publicIPURL = ip.URL
 	rt := &routerTest{fr: fr, finds: new(int), mu: &sync.Mutex{}}
+	answers := fr
+	rt.answer = func(f *fakeRouter) {
+		rt.mu.Lock()
+		defer rt.mu.Unlock()
+		answers = f
+	}
 	findRouter = func(_ context.Context, lan, gw net.IP) (routerports.Router, error) {
 		rt.mu.Lock()
 		*rt.finds++
+		found := answers
 		rt.mu.Unlock()
 		if !lan.Equal(testLAN) || !gw.Equal(testGateway) {
 			return nil, fmt.Errorf("looked for the router at %s from %s", gw, lan)
 		}
-		if fr == nil {
+		if found == nil {
 			return nil, routerports.ErrNoRouter
 		}
-		return fr, nil
+		return found, nil
 	}
 	t.Cleanup(func() { publicIPURL, findRouter = oldIP, oldFind })
 	rt.testEnv = setup(t, func(o *Options) { o.NoPublicIP = false })
@@ -644,4 +665,194 @@ func TestRouterLeftAloneWithoutPublicIP(t *testing.T) {
 	if v := m.Router(); v.On || len(v.Games) != 0 {
 		t.Fatalf("router view = %+v", v)
 	}
+}
+
+// round runs one round now, as the clock would, and waits for it.
+func round(m *Manager) {
+	m.mu.Lock()
+	done := m.routerWaitLocked()
+	m.routerAskLocked()
+	m.mu.Unlock()
+	m.routerWaitFor(done)
+}
+
+// A router that says its internet address is 0.0.0.0 isn't connected: it
+// was the best that answered, or its line has gone down. So each round
+// looks for the router again, and once another service is connected (a
+// DSL router's PPP one) the ports go there; while nothing else answers,
+// the one that does is kept. A router that says a real address isn't
+// looked for again.
+func TestRouterLooksAgainWhenNotConnected(t *testing.T) {
+	dead := newFakeRouter("0.0.0.0")
+	rt := routerSetup(t, dead)
+	m, port := rt.m, rt.port
+	rt.start(t)
+	waitFor(t, "the ports on the router that answered", 10*time.Second, func() bool {
+		return dead.mapped("udp", port) && dead.mapped("udp", port+1)
+	})
+	if st := m.Status(); st.Router == nil || st.Router.Kind != "upnp" || st.Router.ExternalIP != "" {
+		t.Fatalf("Status router = %+v (0.0.0.0 is no address)", st.Router)
+	}
+
+	// Nothing else answers: the same router is kept, and asked again.
+	rt.answer(nil)
+	finds, maps := rt.findCount(), dead.count(key("map udp", port))
+	round(m)
+	if rt.findCount() <= finds || dead.count(key("map udp", port)) <= maps {
+		t.Fatalf("looked %d more times, mapped %d more times", rt.findCount()-finds, dead.count(key("map udp", port))-maps)
+	}
+	if p := ports(m); p["game"] != "open" || p["query"] != "open" {
+		t.Fatalf("ports = %v", p)
+	}
+	if v := m.Router(); v.Kind != "upnp" || v.Problem != "" || v.ExternalIP != "" {
+		t.Fatalf("router view = %+v", v)
+	}
+
+	// The connected one answers now: the ports go there.
+	live := newFakeRouter("203.0.113.7")
+	rt.answer(live)
+	round(m)
+	if !live.mapped("udp", port) || !live.mapped("udp", port+1) {
+		t.Fatal("the ports aren't on the connected router")
+	}
+	if st := m.Status(); st.Router == nil || st.Router.ExternalIP != "203.0.113.7" {
+		t.Fatalf("Status router = %+v", st.Router)
+	}
+
+	// It says a real address, so the next round asks it without looking.
+	finds, maps = rt.findCount(), live.count(key("map udp", port))
+	round(m)
+	if rt.findCount() != finds || live.count(key("map udp", port)) <= maps {
+		t.Fatalf("looked %d more times, mapped %d more times", rt.findCount()-finds, live.count(key("map udp", port))-maps)
+	}
+}
+
+// routerDespiteNoPublicIP (for the real-server check) uses the router with
+// NoPublicIP, which the tests' managers have; the public address is still
+// never looked up.
+func TestRouterDespiteNoPublicIP(t *testing.T) {
+	fr := newFakeRouter("203.0.113.7")
+	oldFind, oldOn := findRouter, routerDespiteNoPublicIP
+	findRouter = func(context.Context, net.IP, net.IP) (routerports.Router, error) { return fr, nil }
+	routerDespiteNoPublicIP = true
+	t.Cleanup(func() { findRouter, routerDespiteNoPublicIP = oldFind, oldOn }) // after the manager closes (setup's cleanup runs first)
+	asked := false
+	var mu sync.Mutex
+	ip := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		asked = true
+		mu.Unlock()
+		w.Write([]byte("203.0.113.7"))
+	}))
+	t.Cleanup(ip.Close)
+	oldIP := publicIPURL
+	publicIPURL = ip.URL
+	t.Cleanup(func() { publicIPURL = oldIP })
+	env := setup(t) // NoPublicIP, as every test manager
+	m := env.m
+	s := m.Settings()
+	s.Crossplay = false
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	install(t, m)
+	if err := m.StartServer(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "server online", 20*time.Second, func() bool { return m.Status().State == StateOnline })
+	if err := m.CheckRouter(); err != nil {
+		t.Fatal(err)
+	}
+	if p := ports(m); p["game"] != "open" || p["query"] != "open" {
+		t.Fatalf("ports = %v", p)
+	}
+	if !fr.mapped("udp", s.Port) || !fr.mapped("udp", s.Port+1) {
+		t.Fatal("not mapped")
+	}
+	if v := m.Router(); !v.On || v.Kind != "upnp" || len(v.Games) != 1 || v.Games[0].State != "open" {
+		t.Fatalf("router view = %+v", v)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if asked {
+		t.Fatal("the public address was looked up with NoPublicIP")
+	}
+}
+
+// useRealRouter is for TestRealServer's part with crossplay off (spec 5.1:
+// it "maps router ports when the runner's network has a router that
+// answers", skipped otherwise), whose manager has NoPublicIP like every
+// test's. Call it before New: it turns routerDespiteNoPublicIP on and puts
+// back the real network in place of this file's stand-ins (init), until
+// the test ends. Both are needed: NoPublicIP alone keeps the router alone,
+// and without NoPublicIP every test here still finds no router, because
+// init's stand-ins answer for it. Nothing else may use it: it asks the
+// real router of whoever runs the test to forward ports.
+func useRealRouter(t *testing.T) {
+	t.Helper()
+	oldFind, oldGateway, oldLAN, oldSteam, oldOn := findRouter, routerGateway, routerLANFor, steamSees, routerDespiteNoPublicIP
+	n := realRouterNet
+	findRouter, routerGateway, routerLANFor, steamSees = n.find, n.gateway, n.lanFor, n.steam
+	routerDespiteNoPublicIP = true
+	t.Cleanup(func() {
+		findRouter, routerGateway, routerLANFor, steamSees, routerDespiteNoPublicIP = oldFind, oldGateway, oldLAN, oldSteam, oldOn
+	})
+}
+
+// useRealRouter puts back the app's own network functions, not init's
+// stand-ins, and takes them away again when the test ends (so a real-server
+// run can't leave the developer's router in reach of the tests after it).
+func TestUseRealRouter(t *testing.T) {
+	same := func(a, b any) bool { return reflect.ValueOf(a).Pointer() == reflect.ValueOf(b).Pointer() }
+	reaches := func() bool {
+		return same(findRouter, routerports.Find) && same(routerGateway, platform.DefaultGateway) &&
+			same(routerLANFor, lanTowards) && same(steamSees, routerports.SteamSees)
+	}
+	if reaches() || routerDespiteNoPublicIP {
+		t.Fatal("the tests reach the real router")
+	}
+	t.Run("on", func(t *testing.T) {
+		useRealRouter(t)
+		if !reaches() || !routerDespiteNoPublicIP {
+			t.Fatal("useRealRouter didn't put back the real network")
+		}
+	})
+	if reaches() || routerDespiteNoPublicIP {
+		t.Fatal("the real network stayed after the test")
+	}
+}
+
+// checkRealRouter is TestRealServer's router check, while Valheim runs
+// with crossplay off (after useRealRouter): it asks the router again and,
+// when one answers, wants every port the game needs open (forwarded by
+// the app, or already set on the router to this computer). When none
+// answers (GitHub's runners have no router that does) it says so and
+// doesn't fail: the check is skipped. It says whether a router answered.
+func checkRealRouter(t *testing.T, m *Manager) bool {
+	t.Helper()
+	if err := m.CheckRouter(); err != nil {
+		t.Errorf("router check: %v", err)
+		return false
+	}
+	v := m.Router()
+	if v.Kind == "" {
+		t.Logf("no router answered (gateway %q, %s): the router ports check is skipped", v.Gateway, v.Problem)
+		return false
+	}
+	t.Logf("router: %s, internet address %q, NAT %q", v.Kind, v.ExternalIP, v.NAT)
+	n := 0
+	for _, mp := range v.Mappings {
+		if mp.Instance != m.legacyID {
+			continue
+		}
+		n++
+		t.Logf("  %s %s %d: %s %s", mp.Role, mp.Proto, mp.Port, mp.State, mp.Error)
+		if mp.State != portOpen && mp.State != portByHand {
+			t.Errorf("router port %s %d is %s: %s", mp.Proto, mp.Port, mp.State, mp.Error)
+		}
+	}
+	if n != 2 {
+		t.Errorf("%d router ports for Valheim, want its game and query ports: %+v", n, v.Mappings)
+	}
+	return true
 }

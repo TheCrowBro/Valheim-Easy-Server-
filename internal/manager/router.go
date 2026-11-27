@@ -34,7 +34,8 @@ package manager
 // counts as open, "set on the router", and is never removed by the app.
 // With NoPublicIP (the tests, and anything else that keeps the app off the
 // internet) the app leaves the router alone too, so a test run never asks
-// the developer's own router to forward anything.
+// the developer's own router to forward anything; only the real-server
+// check turns the router back on (routerDespiteNoPublicIP).
 
 import (
 	"context"
@@ -185,8 +186,23 @@ const (
 )
 
 // routerSkipped says the app leaves the router alone this run (NoPublicIP:
-// the tests). Status and the views then say nothing about it.
-func (m *Manager) routerSkipped() bool { return m.opt.NoPublicIP }
+// the tests, unless routerDespiteNoPublicIP). Status and the views then say
+// nothing about it.
+func (m *Manager) routerSkipped() bool { return m.opt.NoPublicIP && !routerDespiteNoPublicIP }
+
+// routerDespiteNoPublicIP lets a manager built with NoPublicIP use the
+// router all the same. NoPublicIP is how the tests keep the app off the
+// internet, and the app reads it as "leave the router alone" too, so that
+// no test run asks the developer's own router to forward anything. The one
+// check that should ask a real router, TestRealServer with crossplay off
+// (spec 5.1: it "maps router ports when the runner's network has a router
+// that answers", skipped otherwise), turns this on before New, through
+// router_test.go's useRealRouter, and leaves it until the manager is
+// closed. The app itself never sets it: it doesn't use NoPublicIP, so it
+// uses the router anyway. With it, the round still never looks up the
+// public address (that stays NoPublicIP's), so double NAT is only found
+// from a private router address and Steam isn't asked.
+var routerDespiteNoPublicIP = false
 
 // routerOnLocked says whether the app opens router ports: the App
 // settings' switch (servers.json app.routerPorts, on unless turned off).
@@ -211,7 +227,7 @@ func (m *Manager) Router() RouterView {
 	}
 	on := m.routerOnLocked()
 	v.On, v.Checking, v.Kind, v.NAT, v.CGNAT = on, r.busy, r.kind, r.nat, r.nat == "cgnat"
-	v.ExternalIP, v.Gateway, v.PublicIP = ipText(r.external), ipText(r.gateway), r.public
+	v.ExternalIP, v.Gateway, v.PublicIP = externalText(r.external), ipText(r.gateway), r.public
 	if v.PublicIP == "" {
 		v.PublicIP = m.net.public
 	}
@@ -334,7 +350,7 @@ func (m *Manager) routerSummaryLocked() *RouterStatus {
 	if m.routerSkipped() || r.checked.IsZero() {
 		return nil
 	}
-	return &RouterStatus{Kind: r.kind, ExternalIP: ipText(r.external), CGNAT: r.nat == "cgnat",
+	return &RouterStatus{Kind: r.kind, ExternalIP: externalText(r.external), CGNAT: r.nat == "cgnat",
 		Problem: m.routerProblemLocked(m.routerOnLocked())}
 }
 
@@ -774,7 +790,10 @@ func (m *Manager) routerRounds() {
 			m.mu.Lock()
 			defer m.mu.Unlock()
 			m.routerApplyLocked(p, res)
-			nat, natKnown = m.router.nat, res.external != nil
+			// A router that says 0.0.0.0 (routerports.Connected) tells
+			// nothing about carrier-grade NAT either way, so what an earlier
+			// round found stays.
+			nat, natKnown = m.router.nat, routerports.Connected(res.external)
 			more = m.router.again && m.routerCtx().Err() == nil
 			m.router.again = false
 			if !more {
@@ -864,9 +883,25 @@ func (m *Manager) routerWork(p routerPlan) (res routerResult) {
 	// The router from before must still answer (it may have restarted, or
 	// this may be another network); else it is looked for again.
 	if res.rt != nil {
-		if ext, err := res.rt.ExternalIP(ctx); err == nil {
+		ext, err := res.rt.ExternalIP(ctx)
+		switch {
+		case err == nil && routerports.Connected(ext):
 			res.external = ext
-		} else {
+		case err == nil:
+			// It answers 0.0.0.0 (routerports.Connected): it was kept only
+			// because nothing better answered, its line has gone down, or
+			// it won't name a private address of its own. Once a connection
+			// is up it may be another of the router's services that carries
+			// the traffic (a DSL router's PPP one), so it is looked for
+			// again, which costs a couple of seconds a round; when nothing
+			// else answers, this one is kept.
+			old, gateway, lan := res.rt, res.gateway, res.lan
+			discover()
+			if res.rt == nil {
+				res.rt, res.gateway, res.lan, res.noRouter, res.external = old, gateway, lan, false, ext
+				fresh = false
+			}
+		default:
 			discover()
 		}
 	} else {
@@ -913,7 +948,7 @@ func (m *Manager) routerWork(p routerPlan) (res routerResult) {
 		res.maps[g.id] = errs
 	}
 	// PCP says the router's address only in a mapping's answer.
-	if res.external == nil && res.rt != nil && len(p.games) > 0 {
+	if !routerports.Connected(res.external) && res.rt != nil && len(p.games) > 0 {
 		if ext, err := res.rt.ExternalIP(ctx); err == nil {
 			res.external = ext
 		}
@@ -1084,6 +1119,15 @@ func lanTowards(gw net.IP) net.IP {
 
 func ipText(ip net.IP) string {
 	if ip == nil {
+		return ""
+	}
+	return ip.String()
+}
+
+// externalText is the router's internet address for the owner: "" while it
+// says 0.0.0.0 (routerports.Connected), which is no address at all.
+func externalText(ip net.IP) string {
+	if !routerports.Connected(ip) {
 		return ""
 	}
 	return ip.String()
