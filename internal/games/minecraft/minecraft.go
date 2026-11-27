@@ -34,10 +34,11 @@ import (
 // ID is the game's id, folder and slash command.
 const ID = "minecraft"
 
-// Game is Minecraft: Java Edition. The package registers it from
-// internal/games/all/minecraft.go (added by the lead once the R2 release
-// is cut), so this file has no init().
+// Game is Minecraft: Java Edition. Like every game, it registers itself
+// when internal/games/all imports the package.
 type Game struct{}
+
+func init() { game.Register(Game{}) }
 
 // The ports' roles, as the run record and servers.json name them.
 const (

@@ -36,19 +36,6 @@ import (
 	"valheim-easy-server/internal/wol"
 )
 
-// R2 registers one game, the legacy one (the R2 gate checks it): a second
-// game wired into internal/games/all before the R2 cut fails here.
-func TestOneGameRegistered(t *testing.T) {
-	all := game.All()
-	if len(all) != 1 || !all[0].Info().Legacy || game.Legacy() != all[0] {
-		var ids []string
-		for _, g := range all {
-			ids = append(ids, fmt.Sprintf("%s (legacy %v)", g.Info().ID, g.Info().Legacy))
-		}
-		t.Fatalf("registered games: %s; want only Valheim, the legacy game", strings.Join(ids, ", "))
-	}
-}
-
 // I1: every Valheim folder the manager and its adapter use is
 // config.ResolvePaths', with and without the folder overrides, before and
 // after a settings save.

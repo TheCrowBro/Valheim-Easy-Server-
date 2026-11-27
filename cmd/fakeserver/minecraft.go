@@ -52,7 +52,9 @@ func init() {
 // is how Minecraft's server is started (other Java games name their own
 // jar or main class).
 func matchMinecraft(c Call) bool {
-	return c.Program == "java" && strings.EqualFold(filepath.Base(c.Args.String("jar", "")), "server.jar") && c.Args.Has("nogui")
+	// --universe is Minecraft's own: Necesse's Server.jar also runs with
+	// -nogui, and a case-blind jar name can't tell them apart.
+	return c.Program == "java" && strings.EqualFold(filepath.Base(c.Args.String("jar", "")), "server.jar") && c.Args.Has("nogui") && c.Args.Has("universe")
 }
 
 type minecraft struct {
