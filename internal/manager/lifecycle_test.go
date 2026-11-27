@@ -1566,15 +1566,17 @@ func TestSizeMB(t *testing.T) {
 
 // The running games are listed largest first, without one on its way out.
 func TestRunningGamesLargestFirst(t *testing.T) {
-	m := &Manager{instances: map[string]*instance{}}
+	m := &Manager{}
+	byID, order := map[string]*instance{}, []string{}
 	for i, mb := range []uint64{100, 3000, 2000} {
 		id := fmt.Sprintf("g%d", i)
 		inst := &instance{id: id, info: game.Info{Short: id}}
 		inst.run = &serverRun{inst: inst, memNow: mb << 20}
-		m.instances[id] = inst
-		m.order = append(m.order, id)
+		byID[id] = inst
+		order = append(order, id)
 	}
-	m.instances["g0"].run.stopping = true
+	m.setInstancesLocked(byID, order) // the published list eachInstance reads
+	byID["g0"].run.stopping = true
 	got := m.runningGamesLocked()
 	if len(got) != 2 || got[0].ID != "g1" || got[1].ID != "g2" || got[0].MemMB != 3000 {
 		t.Fatalf("running = %+v", got)

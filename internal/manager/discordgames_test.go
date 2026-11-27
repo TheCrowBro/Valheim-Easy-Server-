@@ -257,10 +257,11 @@ type testServer struct {
 	store *testStore
 }
 
-func (s *testServer) Store() game.Store                     { return s.store }
-func (s *testServer) Program() string                       { return filepath.Join(s.dir, "not-installed") }
-func (s *testServer) Texts() game.Texts                     { return game.Texts{Players: "players", Player: "player"} }
-func (s *testServer) Fingerprint(game.Saved, string) string { return "" }
+func (s *testServer) Store() game.Store                            { return s.store }
+func (s *testServer) Program() string                              { return filepath.Join(s.dir, "not-installed") }
+func (s *testServer) Texts() game.Texts                            { return game.Texts{Players: "players", Player: "player"} }
+func (s *testServer) Fingerprint(game.Saved, string) string        { return "" }
+func (s *testServer) Validate(game.Saved, string) game.FieldErrors { return nil }
 func (s *testServer) Join(in game.JoinInput) game.Join {
 	j := game.Join{How: "address", Port: 7777, LAN: []string{}, Steps: []string{}, Hint: "In " + s.info.Short + ", choose Join."}
 	if s.info.Presence == game.Unknown { // like Windrose: an invite code
