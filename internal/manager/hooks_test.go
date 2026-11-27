@@ -37,8 +37,13 @@ func (r *recorder) onReady(inst *instance) { r.add("ready %s", inst.id) }
 func (r *recorder) onEvent(inst *instance, ev game.Event) {
 	r.add("event %s %s %s", inst.id, ev.Kind, ev.Name)
 }
-func (r *recorder) onExit(inst *instance, exit *ExitInfo, auto bool) {
-	r.add("exit %s expected=%v auto=%v", inst.id, exit.Expected, auto)
+func (r *recorder) onExit(inst *instance, run *serverRun, exit *ExitInfo) {
+	// The observer gets the run that ended, after the instance has let go
+	// of it (hooks.go).
+	if run == nil || run.inst != inst || inst.run != nil {
+		r.add("exit %s with the wrong run", inst.id)
+	}
+	r.add("exit %s expected=%v auto=%v", inst.id, exit.Expected, run != nil && run.autoStopped)
 }
 func (r *recorder) onTick(now time.Time) {
 	r.mu.Lock()
@@ -99,13 +104,13 @@ func TestObserverList(t *testing.T) {
 // panicker is an observer whose every method panics.
 type panicker struct{}
 
-func (panicker) onReady(*instance)                 { panic("onReady") }
-func (panicker) onEvent(*instance, game.Event)     { panic("onEvent") }
-func (panicker) onExit(*instance, *ExitInfo, bool) { panic("onExit") }
-func (panicker) onTick(time.Time)                  { panic("onTick") }
-func (panicker) onJob(*instance, *Job)             { panic("onJob") }
-func (panicker) onTakeover(*instance)              { panic("onTakeover") }
-func (panicker) onWake(string)                     { panic("onWake") }
+func (panicker) onReady(*instance)                       { panic("onReady") }
+func (panicker) onEvent(*instance, game.Event)           { panic("onEvent") }
+func (panicker) onExit(*instance, *serverRun, *ExitInfo) { panic("onExit") }
+func (panicker) onTick(time.Time)                        { panic("onTick") }
+func (panicker) onJob(*instance, *Job)                   { panic("onJob") }
+func (panicker) onTakeover(*instance)                    { panic("onTakeover") }
+func (panicker) onWake(string)                           { panic("onWake") }
 
 // A panic in one observer is logged; the next still runs and the caller
 // keeps the lock, which it lets go as usual.
@@ -162,6 +167,9 @@ func TestObserversCalledAtFixedPoints(t *testing.T) {
 	waitFor(t, "the exit", 20*time.Second, func() bool {
 		return rec.has("exit "+id+" expected=true auto=false") && rec.has("job "+id+" stop finished")
 	})
+	if rec.has("exit " + id + " with the wrong run") {
+		t.Fatalf("onExit wasn't given the run that ended:\n%s", rec)
+	}
 
 	// A takeover: the app closes with the server running, and the next one
 	// takes it over and catches up with its log.

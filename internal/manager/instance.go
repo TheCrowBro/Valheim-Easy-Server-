@@ -101,14 +101,18 @@ type serverRun struct {
 	stdin *os.File // console games: the app's end of the game's stdin pipe; nil after a takeover (2.11) (M3)
 	// autoStopped: this run is being stopped by auto-stop or the "still
 	// playing?" rule, for the reason autoReason (stopIdle or stopAsked). Its
-	// exit then doesn't reset machineIdleSince, and the stopped post says
-	// why (A sets it for auto-stop, D for the ask rule).
+	// exit then doesn't reset machineIdleSince, and the stopped post and the
+	// activity entry say why. autoMinutes is the auto-stop setting the stop
+	// was decided with, so "nobody played for an hour" stays true if the
+	// setting changes while the game stops. A's autoStopGame sets all three
+	// (D's ask rule calls it with stopAsked).
 	autoStopped bool
 	autoReason  stopReason
+	autoMinutes int
 	memNow      uint64                // memory in use at the last sample, bytes (A)
 	cpuNow      float64               // CPU at the last sample, percent of the whole computer (A)
 	probeFails  int                   // probes that failed in a row; 3 shows a warning (2.6) (M3)
-	mappings    []routerports.Mapping // router ports mapped for this run (6.5) (N)
+	mappings    []routerports.Mapping // router ports mapped for this run (6.5); onExit gives N the ended run to unmap them (N)
 }
 
 // state is what the run's Monitor knows. A run without one (only made by

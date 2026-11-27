@@ -85,6 +85,9 @@ var (
 	_ func(*Manager, *instance, stopReason) error                                           = (*Manager).autoStopGame           // A
 	_ func(int) string                                                                      = autoStopText                      // A
 	_ func(*Manager, *instance) error                                                       = (*Manager).memoryCheckLocked      // A
+	_ func(*Manager, *instance, StartOptions) error                                         = (*Manager).memoryForStartLocked   // A
+	_ func(*Manager, context.Context, *jobCtl, *instance, StartOptions) error               = (*Manager).memoryInStartJob       // A
+	_ func(*Manager, *serverRun) string                                                     = (*Manager).autoStopActivityLocked // A
 	_ func(*Manager) []RunningGame                                                          = (*Manager).runningGamesLocked     // A
 	_ func(*Manager, game.Info, map[string]int) (map[string]int, error)                     = (*Manager).pickPortsLocked        // A
 	_ func(*Manager) map[int]string                                                         = (*Manager).reservedPortsLocked    // A
@@ -106,6 +109,8 @@ var (
 	_ func(*Manager, bool)                                                                  = (*Manager).routerPortsChanged     // N
 	_ func(*Manager, string)                                                                = (*Manager).noteNAT                // N
 	_ func(*Manager, *instance, StartOptions) error                                         = (*Manager).startGameWith          // M3
+	_ func(*Manager, *instance) error                                                       = (*Manager).startChecks            // M3
+	_ func(*Manager, *instance, func(context.Context, *jobCtl) error) error                 = (*Manager).runStartJob            // M3
 	_ func(*Manager, string) (*instance, error)                                             = (*Manager).instanceByID           // M3
 	_ func(*Manager, servers.Instance) (*instance, error)                                   = (*Manager).newGameInstance        // M3
 	_ func(*Manager, *instance)                                                             = (*Manager).addInstanceLocked      // M3

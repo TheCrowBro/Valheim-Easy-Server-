@@ -18,8 +18,9 @@ import (
 )
 
 // routerState is stream N's own app-wide state (Manager.router), guarded by
-// m.mu: the router found, its external address, the NAT kind, the gateway,
-// each instance's mappings and what Steam sees. N adds its fields here.
+// m.mu: the router found, its external address, the NAT kind, the gateway
+// and what Steam sees. A running game's own mappings are on its run
+// (serverRun.mappings), so they end with it. N adds its fields here.
 type routerState struct{}
 
 // RouterView is GET /api/router: everything the app knows about the way in
@@ -78,8 +79,8 @@ func (m *Manager) routerSummaryLocked() *RouterStatus {
 }
 
 // unmapPorts removes the instance's router mappings now (A's RemoveGame
-// calls it; a stop removes them through routerObserver.onExit). It runs
-// without m.mu.
+// calls it; a stop removes them through routerObserver.onExit, which gets
+// the ended run and so its serverRun.mappings). It runs without m.mu.
 func (m *Manager) unmapPorts(inst *instance) {}
 
 // routerPortsChanged follows the App settings' "router ports" switch
@@ -94,14 +95,15 @@ func (m *Manager) routerPortsChanged(on bool) {}
 func (m *Manager) noteNAT(kind string) {}
 
 // routerObserver is stream N's observer (hooks.go): map on ready and after
-// a takeover or a wake, unmap on exit. Every method runs with m.mu held and
-// must not block: the router is asked in a goroutine.
+// a takeover or a wake (keeping them in inst.run.mappings), unmap on exit
+// (the ended run's mappings, which onExit is given). Every method runs with
+// m.mu held and must not block: the router is asked in a goroutine.
 type routerObserver struct{ m *Manager }
 
-func (o routerObserver) onReady(inst *instance)                           {}
-func (o routerObserver) onEvent(inst *instance, ev game.Event)            {}
-func (o routerObserver) onExit(inst *instance, exit *ExitInfo, auto bool) {}
-func (o routerObserver) onTick(now time.Time)                             {}
-func (o routerObserver) onJob(inst *instance, job *Job)                   {}
-func (o routerObserver) onTakeover(inst *instance)                        {}
-func (o routerObserver) onWake(cause string)                              {}
+func (o routerObserver) onReady(inst *instance)                                {}
+func (o routerObserver) onEvent(inst *instance, ev game.Event)                 {}
+func (o routerObserver) onExit(inst *instance, run *serverRun, exit *ExitInfo) {}
+func (o routerObserver) onTick(now time.Time)                                  {}
+func (o routerObserver) onJob(inst *instance, job *Job)                        {}
+func (o routerObserver) onTakeover(inst *instance)                             {}
+func (o routerObserver) onWake(cause string)                                   {}

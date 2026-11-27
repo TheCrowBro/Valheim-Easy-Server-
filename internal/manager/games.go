@@ -13,6 +13,7 @@ package manager
 // the comment) fills it in. Nothing here changes what the legacy methods do.
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -109,13 +110,29 @@ func (m *Manager) StartGame(id string, o StartOptions) error {
 
 // startGameWith is the one path every start takes in R3: the panel,
 // Discord, a wake, start-with-app, a crash restart and the resume (spec
-// 4.3). M3 adds 4.3's checks here (foreign, hidden, disabled, can't run on
-// this computer (never for the legacy instance, which has always run
-// wherever the app does), memory through A's memoryCheckLocked unless
-// o.Memory is "anyway" or o.Source is SourceRestart, "stop:<id>"), then
-// the start job. Until then it is the legacy start.
+// 4.3). It is the legacy start's checks (server.go's startChecks: steps 1
+// and 2), then the memory step (3), which is stream A's in memory.go:
+// memoryForStartLocked before the job (the check, unless o.Memory is
+// "anyway" or o.Source is SourceRestart) and memoryInStartJob inside it
+// (stopping the game "stop:<id>" names), then the start job (4). M3 adds
+// the rest of step 1 to the checks (foreign, hidden, disabled, can't run
+// on this computer, which never applies to the legacy instance: it has
+// always run wherever the app does) and moves the other starts here.
+// StartServer doesn't come this way, so the old routes and the tray start
+// Valheim exactly as before.
 func (m *Manager) startGameWith(inst *instance, o StartOptions) error {
-	return m.startGame(inst)
+	if err := m.startChecks(inst); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	err := m.memoryForStartLocked(inst, o)
+	m.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	return m.runStartJob(inst, func(ctx context.Context, j *jobCtl) error {
+		return m.memoryInStartJob(ctx, j, inst, o)
+	})
 }
 
 // StopGame saves the world and stops an instance's server.

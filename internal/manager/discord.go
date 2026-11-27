@@ -46,7 +46,7 @@ const (
 	stopCrash
 	stopCrashRestart
 	// R3 (spec 6.3); onExit picks them from serverRun.autoReason.
-	stopIdle  // auto-stop: "nobody played for an hour" (A sets it, autoStopText)
+	stopIdle  // auto-stop: "nobody played for an hour" (A sets it; autoStopText(run.autoMinutes))
 	stopAsked // the "still playing?" rule: its "Turning … off" line is the only stopped post (D)
 )
 

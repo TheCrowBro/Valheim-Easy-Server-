@@ -40,25 +40,44 @@ func (m *Manager) autoStopMinutesLocked(inst *instance) int {
 
 // autoStopGame stops a game that nobody is using: it marks the run
 // autoStopped with why (stopIdle for auto-stop, stopAsked for D's "still
-// playing?" rule), then runs the stop chain as a quiet job (runQuietJob),
-// so neither the job nor the exit resets machineIdleSince. It runs without
-// m.mu: an observer starts it with m.go_.
+// playing?" rule) and, for stopIdle, autoMinutes with the instance's
+// minutes, then runs the stop chain as a quiet job (runQuietJob), so
+// neither the job nor the exit resets machineIdleSince. M3's onExit then
+// picks the stopped post's reason and the activity entry
+// (autoStopActivityLocked) from the run. It runs without m.mu: an observer
+// starts it with m.go_.
 func (m *Manager) autoStopGame(inst *instance, why stopReason) error {
 	return errNotYet
 }
 
-// autoStopText says how long nobody played, from the instance's minutes:
-// "an hour" at 60, "2 hours" at 120, otherwise "<n> minutes" (spec 4.5).
-// The activity entry and D's stopped post (stopIdle) both use it: "nobody
+// autoStopText says how long nobody played, from the instance's minutes,
+// exactly as spec 4.5 gives it: "an hour" at 60, "2 hours" at 120,
+// otherwise "<n> minutes" ("90 minutes", and "180 minutes" too: the
+// setting is in minutes, so the text says what the owner typed). The
+// activity entry and D's stopped post (stopIdle) both use it: "nobody
 // played for an hour".
 func autoStopText(minutes int) string {
-	switch {
-	case minutes == 60:
+	switch minutes {
+	case 60:
 		return "an hour"
-	case minutes > 60 && minutes%60 == 0:
-		return fmt.Sprintf("%d hours", minutes/60)
+	case 120:
+		return "2 hours"
 	}
 	return fmt.Sprintf("%d minutes", minutes)
+}
+
+// autoStopActivityLocked is the activity entry for a run that auto-stop or
+// the "still playing?" rule stopped, which M3's onExit adds in place of
+// "The server stopped.": "Minecraft stopped: nobody played for an hour."
+// (4.5), from the minutes the stop was decided with (run.autoMinutes), and
+// for the ask rule "Windrose stopped: nobody answered for 2 hours.", the
+// same reason its "Turning … off" post gives (4.6). m.mu must be held.
+func (m *Manager) autoStopActivityLocked(run *serverRun) string {
+	name := run.inst.short()
+	if run.autoReason == stopAsked {
+		return name + " stopped: nobody answered for 2 hours."
+	}
+	return fmt.Sprintf("%s stopped: nobody played for %s.", name, autoStopText(run.autoMinutes))
 }
 
 // lifecycleObserver is stream A's observer (hooks.go): auto-stop's clock
@@ -66,10 +85,10 @@ func autoStopText(minutes int) string {
 // held and must not block.
 type lifecycleObserver struct{ m *Manager }
 
-func (o lifecycleObserver) onReady(inst *instance)                           {}
-func (o lifecycleObserver) onEvent(inst *instance, ev game.Event)            {}
-func (o lifecycleObserver) onExit(inst *instance, exit *ExitInfo, auto bool) {}
-func (o lifecycleObserver) onTick(now time.Time)                             {}
-func (o lifecycleObserver) onJob(inst *instance, job *Job)                   {}
-func (o lifecycleObserver) onTakeover(inst *instance)                        {}
-func (o lifecycleObserver) onWake(cause string)                              {}
+func (o lifecycleObserver) onReady(inst *instance)                                {}
+func (o lifecycleObserver) onEvent(inst *instance, ev game.Event)                 {}
+func (o lifecycleObserver) onExit(inst *instance, run *serverRun, exit *ExitInfo) {}
+func (o lifecycleObserver) onTick(now time.Time)                                  {}
+func (o lifecycleObserver) onJob(inst *instance, job *Job)                        {}
+func (o lifecycleObserver) onTakeover(inst *instance)                             {}
+func (o lifecycleObserver) onWake(cause string)                                   {}

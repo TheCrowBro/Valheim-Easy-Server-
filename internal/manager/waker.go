@@ -595,10 +595,10 @@ func (m *Manager) wakeReply(inst *instance, err error) {}
 // m.mu held and must not block.
 type wakerObserver struct{ m *Manager }
 
-func (o wakerObserver) onReady(inst *instance)                           {}
-func (o wakerObserver) onEvent(inst *instance, ev game.Event)            {}
-func (o wakerObserver) onExit(inst *instance, exit *ExitInfo, auto bool) {}
-func (o wakerObserver) onTick(now time.Time)                             {}
-func (o wakerObserver) onJob(inst *instance, job *Job)                   {}
-func (o wakerObserver) onTakeover(inst *instance)                        {}
-func (o wakerObserver) onWake(cause string)                              {}
+func (o wakerObserver) onReady(inst *instance)                                {}
+func (o wakerObserver) onEvent(inst *instance, ev game.Event)                 {}
+func (o wakerObserver) onExit(inst *instance, run *serverRun, exit *ExitInfo) {}
+func (o wakerObserver) onTick(now time.Time)                                  {}
+func (o wakerObserver) onJob(inst *instance, job *Job)                        {}
+func (o wakerObserver) onTakeover(inst *instance)                             {}
+func (o wakerObserver) onWake(cause string)                                   {}

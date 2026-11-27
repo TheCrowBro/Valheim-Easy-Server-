@@ -38,10 +38,14 @@ type observer interface {
 	// from a taken-over server's log don't come here, nor the leaves at the
 	// end of a run: onExit says that.
 	onEvent(inst *instance, ev game.Event)
-	// onExit: the run ended. inst.run is already nil and inst.lastExit is
-	// exit. auto: auto-stop or the "still playing?" rule stopped it
-	// (serverRun.autoStopped).
-	onExit(inst *instance, exit *ExitInfo, auto bool)
+	// onExit: the run ended. run is that run, handed over because inst.run
+	// is already nil (so anything asking "is it running?" already says no):
+	// run.rec has the ports it started with, run.mappings its router ports
+	// (N unmaps them), run.autoStopped says auto-stop or the "still
+	// playing?" rule stopped it and run.autoReason which (stopIdle or
+	// stopAsked). inst.lastExit is exit. The run's fields stay guarded by
+	// m.mu, like a running one's.
+	onExit(inst *instance, run *serverRun, exit *ExitInfo)
 	// onTick: every sample tick (Options.SampleInterval, 2 s), after the
 	// usage sample and before the idle-sleep check, so auto-stop is decided
 	// first (spec 4.5). Not called on the tick that notices a wake-up.

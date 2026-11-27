@@ -54,10 +54,10 @@ func (m *Manager) KeepOn(id string) error {
 // with m.mu held and must not block.
 type askObserver struct{ m *Manager }
 
-func (o askObserver) onReady(inst *instance)                           {}
-func (o askObserver) onEvent(inst *instance, ev game.Event)            {}
-func (o askObserver) onExit(inst *instance, exit *ExitInfo, auto bool) {}
-func (o askObserver) onTick(now time.Time)                             {}
-func (o askObserver) onJob(inst *instance, job *Job)                   {}
-func (o askObserver) onTakeover(inst *instance)                        {}
-func (o askObserver) onWake(cause string)                              {}
+func (o askObserver) onReady(inst *instance)                                {}
+func (o askObserver) onEvent(inst *instance, ev game.Event)                 {}
+func (o askObserver) onExit(inst *instance, run *serverRun, exit *ExitInfo) {}
+func (o askObserver) onTick(now time.Time)                                  {}
+func (o askObserver) onJob(inst *instance, job *Job)                        {}
+func (o askObserver) onTakeover(inst *instance)                             {}
+func (o askObserver) onWake(cause string)                                   {}

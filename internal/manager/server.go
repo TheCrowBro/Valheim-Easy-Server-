@@ -31,8 +31,21 @@ func errNotInstalled(inst *instance) error {
 // setting is on).
 func (m *Manager) StartServer() error { return m.startGame(m.legacy()) }
 
-// startGame starts an instance's server as a job.
+// startGame starts an instance's server as a job: R2's start, which
+// StartServer (the old route, the tray, start-with-app, the resume and the
+// wake packet) and a crash restart still use. startGameWith (games.go), the
+// R3 path, is the same checks and job with 4.3's memory step between them.
 func (m *Manager) startGame(inst *instance) error {
+	if err := m.startChecks(inst); err != nil {
+		return err
+	}
+	return m.runStartJob(inst, nil)
+}
+
+// startChecks refuses a start that can't work: the server is already
+// running, isn't installed, or its settings need fixing (spec 4.3's steps 1
+// and 2 as R2 has them; M3 adds the rest of step 1).
+func (m *Manager) startChecks(inst *instance) error {
 	m.mu.Lock()
 	running := inst.run != nil
 	installed := m.installedLocked(inst)
@@ -46,7 +59,21 @@ func (m *Manager) startGame(inst *instance) error {
 	case errs != nil:
 		return fieldErrors(errs) // the panel shows these next to the settings
 	}
+	return nil
+}
+
+// runStartJob runs the start as the instance's job "start" (4.3's step 4).
+// first, when not nil, runs inside the job before the server is started,
+// and an error from it ends the job: that is where the memory dialog's
+// "Stop Valheim and start" stops the other game (stream A's
+// memoryInStartJob), so the two never look like separate actions.
+func (m *Manager) runStartJob(inst *instance, first func(context.Context, *jobCtl) error) error {
 	return m.runInstJob(inst, "start", "Starting the server", true, func(ctx context.Context, j *jobCtl) error {
+		if first != nil {
+			if err := first(ctx, j); err != nil {
+				return err
+			}
+		}
 		return m.doStart(ctx, j, inst, "")
 	})
 }
@@ -216,6 +243,13 @@ func (m *Manager) doStart(ctx context.Context, j *jobCtl, inst *instance, world 
 	}
 	if err != nil {
 		return actionOf(err)
+	}
+	// The ports check (spec 2.5, stream A's ports.go) for every game but the
+	// legacy one, which keeps today's check inside its Plan.
+	if !inst.legacy {
+		if err := m.checkPorts(inst); err != nil {
+			return err
+		}
 	}
 	j.setCancellable(false)
 	j.step(fmt.Sprintf("Starting the %s server…", inst.short()), -1)
@@ -631,15 +665,22 @@ func (m *Manager) onExit(run *serverRun, code int) {
 	if post, ok := m.stoppedPostLocked(run, why); ok {
 		m.queueDiscord(post)
 	}
-	auto := run.autoStopped
-	m.observeLocked(func(o observer) { o.onExit(inst, exit, auto) }) // hooks.go
+	// The observers get the run that ended (inst.run is nil now): its ports,
+	// router mappings and why auto-stop stopped it.
+	m.observeLocked(func(o observer) { o.onExit(inst, run, exit) }) // hooks.go
+	// The activity entry says why, as the stopped post does: auto-stop's
+	// text comes from the run (stream A's autostop.go).
+	stopped := "The server stopped."
+	if run.autoStopped {
+		stopped = m.autoStopActivityLocked(run)
+	}
 	m.mu.Unlock()
 
 	run.proc.Close()
 	os.Remove(runtimePath)
 	m.updateAwake() // still awake if it has just woken up
 	if expected {
-		m.addActivity("stopped", "", "The server stopped.")
+		m.addActivity("stopped", "", stopped)
 	} else {
 		m.addActivity("crashed", "", fmt.Sprintf("The server stopped unexpectedly (exit code %d). %s", code, m.exitHintFor(inst)))
 	}

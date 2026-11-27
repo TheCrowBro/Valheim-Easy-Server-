@@ -32,7 +32,9 @@ func (m *Manager) reservedPortsLocked() map[int]string {
 // checkPorts is the start's port check for a non-legacy instance: nil, or
 // an *ActionError with Action "pick_ports" ("Port 7777 (TCP) is being used
 // by another program: <name>"; for a chosen port, "change it in
-// Settings"). It runs without m.mu: it reads the system's port tables.
+// Settings"). M3's doStart calls it inside the start job, after Plan and
+// before the launch (spec 4.3), never for the legacy instance. It runs
+// without m.mu: it reads the system's port tables.
 func (m *Manager) checkPorts(inst *instance) error {
 	return nil
 }
