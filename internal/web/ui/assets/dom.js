@@ -8,7 +8,14 @@ export function h(tag, props, ...kids) {
     for (const [k, v] of Object.entries(props)) {
       if (v == null || v === false) continue;
       if (k === 'class') el.className = v;
-      else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+      else if (k === 'style' && typeof v === 'object') {
+        // Custom properties (a game's colour, '--g') need setProperty.
+        for (const [sk, sv] of Object.entries(v)) {
+          if (sv == null) continue;
+          if (sk.startsWith('--')) el.style.setProperty(sk, sv);
+          else el.style[sk] = sv;
+        }
+      }
       else if (k.startsWith('on') && typeof v === 'function') el[k] = v;
       else if (k === 'value') { el.value = v; el.setAttribute('value', v); }
       else if (k === 'checked') { el.checked = !!v; if (v) el.setAttribute('checked', ''); }
@@ -119,6 +126,13 @@ const ICONS = {
   chevronDown: '<polyline points="6 9 12 15 18 9"/>',
   send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
   message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  // added for the panel with several games
+  star: '<path d="M12 3.6l2.55 5.2 5.75.84-4.15 4.05.98 5.71L12 16.7l-5.13 2.7.98-5.71L3.7 9.64l5.75-.84z"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  menu: '<line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/>',
+  chevronRight: '<polyline points="9 6 15 12 9 18"/>',
+  userX: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="8" x2="22" y2="13"/><line x1="22" y1="8" x2="17" y2="13"/>',
+  router: '<rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 17h.01M10 17h.01"/><path d="M15 13V9M9.5 6.5a4 4 0 0 1 5 0M7 4a7.5 7.5 0 0 1 10 0"/>',
 };
 
 const tpl = document.createElement('template');

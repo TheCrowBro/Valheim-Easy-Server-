@@ -1,4 +1,4 @@
-/* Valheim Easy Server control panel. Dark, calm, readable. */
+/* The control panel. Dark, calm, readable. */
 :root {
   color-scheme: dark;
   --bg: #0f1418;
@@ -76,15 +76,16 @@ code, .mono { font-family: var(--mono); font-size: .92em; }
 }
 .sidebar {
   position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 6px; padding: 18px 12px;
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
 }
-.brand { display: flex; align-items: center; gap: 11px; padding: 4px 10px 18px; }
+.brand { display: flex; align-items: center; gap: 11px; padding: 4px 10px 14px; }
 .brand img { width: 34px; height: 34px; }
 .brand b { display: block; font-size: 15px; letter-spacing: .01em; }
 .brand span { display: block; font-size: 12.5px; color: var(--muted); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nav { display: flex; flex-direction: column; gap: 3px; }
+.nav { display: flex; flex-direction: column; gap: 2px; }
 .nav a {
-  position: relative; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px;
-  color: var(--text-2); font-weight: 500; text-decoration: none;
+  position: relative; display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 10px;
+  color: var(--text-2); font-weight: 500; text-decoration: none; min-width: 0;
 }
 .nav a:hover { background: var(--surface); color: var(--text); }
 .nav a.active { background: var(--surface-2); color: var(--text); }
@@ -92,13 +93,61 @@ code, .mono { font-family: var(--mono); font-size: .92em; }
   content: ""; position: absolute; left: -12px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent);
 }
 .nav svg { width: 20px; height: 20px; flex: none; }
-.nav .count { margin-left: auto; font-size: 12px; background: var(--surface-3); color: var(--text); border-radius: 99px; padding: 1px 8px; }
-.sidebar-foot { margin-top: auto; padding: 12px 10px 4px; font-size: 12.5px; color: var(--muted); }
+.nav .grow { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav .count { margin-left: auto; font-size: 12px; background: var(--surface-3); color: var(--text); border-radius: 99px; padding: 1px 8px; flex: none; }
+.nav .count.live { background: var(--good-soft); color: var(--good-text); }
+.nav a.add { color: var(--muted); margin-top: 6px; }
+.nav a.add:hover { color: var(--text); }
+.nav-group, .twirl {
+  color: var(--muted); font-size: 11.5px; letter-spacing: .09em; text-transform: uppercase; font-weight: 600; padding: 14px 12px 4px;
+}
+.twirl {
+  display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: 0; font-family: inherit; cursor: pointer;
+  text-align: left; border-radius: 8px;
+}
+.twirl:hover { color: var(--text); }
+.twirl svg { width: 14px; height: 14px; flex: none; transition: transform .15s; }
+.twirl[aria-expanded="false"] svg { transform: rotate(-90deg); }
+.twirl .n { font-weight: 500; letter-spacing: 0; text-transform: none; }
+.nav-games { display: flex; flex-direction: column; gap: 2px; }
+.nav-game { display: flex; align-items: center; border-radius: 10px; position: relative; }
+.nav-game a { flex: 1; gap: 10px; padding: 7px 6px 7px 12px; }
+.nav-game.active > a { background: transparent; }
+.nav-game.active { background: var(--surface-2); }
+.nav-game.active > a::before { left: -12px; }
+.nav-game:hover { background: var(--surface); }
+.nav-game.active:hover { background: var(--surface-2); }
+.nav-game a:hover { background: transparent; }
+.nav-game .dot { margin-left: auto; width: 8px; height: 8px; }
+.nav-empty { color: var(--muted); font-size: 12.5px; padding: 4px 12px 6px; }
+.sidebar-foot { margin-top: auto; padding: 14px 10px 4px; font-size: 12.5px; color: var(--muted); }
+.nav-scrim { display: none; }
+.topbar .nav-toggle { display: none; }
+
+/* letter tiles in each game's colour */
+.gm {
+  width: 22px; height: 22px; border-radius: 6px; display: inline-grid; place-items: center; flex: none;
+  font-size: 10.5px; font-weight: 800; letter-spacing: -.02em; color: #10151a; background: var(--g, var(--muted)); line-height: 1;
+}
+.gm.xs { width: 18px; height: 18px; border-radius: 5px; font-size: 9px; }
+.gm.lg { width: 32px; height: 32px; border-radius: 9px; font-size: 14px; }
+.gm.xl { width: 52px; height: 52px; border-radius: 13px; font-size: 21px; }
+
+/* the star button: "we're playing this now" */
+.starbtn {
+  background: none; border: 0; padding: 5px; margin-right: 4px; color: var(--muted); cursor: pointer; display: grid; place-items: center;
+  border-radius: 7px; flex: none; opacity: .75;
+}
+.starbtn svg { width: 16px; height: 16px; }
+.starbtn:hover { color: var(--text); opacity: 1; background: var(--surface-3); }
+.starbtn.on { color: var(--accent); opacity: 1; }
+.starbtn.on svg { fill: currentColor; }
 
 .main { padding: 22px 32px 56px; min-width: 0; }
 .page { max-width: 1240px; margin: 0 auto; }
 .topbar { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
-.topbar h1 { font-size: 24px; margin-right: auto; }
+.topbar h1 { font-size: 24px; margin-right: auto; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.topbar h1 > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .offline-banner {
   display: flex; gap: 12px; align-items: center; background: var(--bad-soft); border: 1px solid rgba(208, 59, 59, .4);
   color: var(--text); padding: 12px 16px; border-radius: var(--radius-sm); margin-bottom: 16px;
@@ -612,36 +661,130 @@ details.where .steps { margin-bottom: 8px; }
 .copyable { display: inline-flex; align-items: center; gap: 6px; }
 kbd { font-family: var(--mono); font-size: 12px; background: var(--surface-3); border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; }
 
+/* ---------- several games ---------- */
+.btn-xs { min-height: 26px; padding: 0 7px; font-size: 12.5px; border-radius: 7px; }
+.btn-icon.btn-xs { width: 26px; }
+.btn-xs svg { width: 14px; height: 14px; }
+.banner { margin-bottom: 16px; }
+.warn-text { color: var(--warn); }
+.ruled-top { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+.empty-state { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; padding: 26px; }
+.empty-state h2 { font-size: 19px; }
+details.more { border-top: 1px solid var(--line); padding-top: 12px; }
+details.more > summary { cursor: pointer; color: var(--text-2); font-weight: 600; width: max-content; max-width: 100%; }
+details.more[open] > summary { margin-bottom: 14px; }
+.stack > .callout + .callout { margin-top: -6px; }
+
+/* a game's page: its tabs */
+.tabs {
+  display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 18px; overflow-x: auto; scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tabs a {
+  display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; color: var(--muted); font-weight: 600; font-size: 14.5px;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; text-decoration: none;
+}
+.tabs a svg { width: 16px; height: 16px; }
+.tabs a:hover { color: var(--text); text-decoration: none; }
+.tabs a.active { color: var(--text); border-bottom-color: var(--accent); }
+
+/* Overview: game cards */
+.gcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px; }
+.gcard { border-top: 3px solid var(--g, var(--line)); display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; }
+.gcard-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.gcard-name { font-weight: 650; font-size: 16px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gcard-name:hover { color: var(--accent-2); text-decoration: none; }
+.gcard-head .badge { margin-left: auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+.gcard-head .starbtn { margin-right: -6px; }
+.gcard-state { display: flex; align-items: center; gap: 9px; font-size: 16px; font-weight: 650; }
+.gcard-state .dot { width: 9px; height: 9px; }
+.kv-line { color: var(--text-2); font-size: 13.5px; overflow-wrap: anywhere; }
+.kv-line b { color: var(--text); font-weight: 600; }
+.kv-line svg { width: 14px; height: 14px; vertical-align: -2px; }
+.kv-line.row { flex-wrap: nowrap; }
+.gcard .callout { padding: 10px 12px; }
+.gcard-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 6px; }
+.gcard-actions .btn-ghost { margin-left: auto; }
+.ov-inactive { padding: 10px 18px; }
+.ov-twirl { padding: 6px 0; font-size: 12px; }
+.idle-list { display: flex; flex-direction: column; margin-top: 4px; }
+.idle-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); min-width: 0; }
+.idle-row .grow { flex: 1; min-width: 0; }
+.idle-row .name { font-weight: 600; color: var(--text); }
+.idle-row .sub { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* the memory bar */
+.membar { height: 12px; border-radius: 99px; background: var(--surface-3); display: flex; overflow: hidden; }
+.membar i { display: block; height: 100%; background: var(--g, var(--muted)); }
+.membar i.other { background: #4a5560; }
+.membar i + i { border-left: 2px solid var(--surface); }
+.mem-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: 13px; color: var(--text-2); }
+.mem-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.mem-legend span::before { content: ""; width: 9px; height: 9px; border-radius: 3px; background: var(--g, var(--muted)); }
+.mem-legend span.other::before { background: #4a5560; }
+.mem-legend span.free::before { background: var(--surface-3); border: 1px solid var(--line-2); }
+.feed-game { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: var(--text); margin-right: 6px; }
+
+/* Add a game */
+.gl { display: flex; flex-direction: column; gap: 10px; }
+.gi {
+  display: flex; align-items: center; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px 16px; min-width: 0;
+}
+.gi .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.gi.off { opacity: .6; }
+.gi.off .gm { filter: grayscale(.6); }
+.gi-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 15.5px; }
+.facts { display: flex; flex-wrap: wrap; gap: 3px 14px; color: var(--muted); font-size: 13px; }
+.facts span { display: inline-flex; align-items: center; gap: 5px; }
+.facts svg { width: 14px; height: 14px; }
+.facts .ok { color: var(--good-text); }
+.facts .warnt { color: var(--warn); font-weight: 600; }
+.add-head { border-top: 3px solid var(--g, var(--line)); }
+.add-head h2 { font-size: 20px; margin-bottom: 4px; }
+.cands { display: grid; gap: 8px; margin-top: 12px; }
+.key-option.eula a { color: var(--accent-2); }
+.key-option .error { color: var(--bad-text); }
+
 /* ---------- responsive ---------- */
 @media (max-width: 1100px) {
   .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 860px) {
-  .shell { grid-template-columns: minmax(0, 1fr); }
-  .shell { background: var(--bg); }
+  /* On a phone the sidebar slides in from the left, from the menu button. */
+  .shell { grid-template-columns: minmax(0, 1fr); background: var(--bg); }
   .sidebar {
-    position: fixed; top: auto; bottom: 0; left: 0; right: 0; height: auto; z-index: 30; flex-direction: row;
-    padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); background: var(--bg-2); border-top: 1px solid var(--line);
+    position: fixed; top: 0; bottom: 0; left: 0; width: min(290px, 86vw); height: auto; z-index: 40;
+    background: var(--bg-2); border-right: 1px solid var(--line-2); box-shadow: var(--shadow);
+    transform: translateX(-105%); transition: transform .18s ease-out; visibility: hidden;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
   }
+  .nav-open .sidebar { transform: none; visibility: visible; }
+  .nav-open .nav-scrim { display: block; position: fixed; inset: 0; z-index: 35; background: rgba(5, 8, 10, .55); }
+  .topbar .nav-toggle { display: inline-flex; margin-left: -8px; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .tile .value { font-size: 22px; }
   .tile.record .value { font-size: 18px; }
-  .sidebar .brand, .sidebar-foot { display: none; }
-  .nav { flex-direction: row; width: 100%; justify-content: space-around; }
-  .nav a { flex-direction: column; gap: 2px; padding: 6px 4px; font-size: 11.5px; flex: 1; text-align: center; }
-  .nav a.active::before { display: none; }
-  .nav .count { position: absolute; top: 2px; right: calc(50% - 22px); padding: 0 5px; font-size: 10.5px; }
-  .main { padding: 16px 16px 96px; }
+  .main { padding: 14px 16px 64px; }
   .grid-2, .grid-3 { grid-template-columns: minmax(0, 1fr); }
   .hero { padding: 20px; }
   .hero h2 { font-size: 26px; }
   .hero-actions { flex-basis: 100%; }
   .hero-actions .btn { flex: 1; }
-  .topbar h1 { font-size: 21px; }
+  .topbar { gap: 10px; margin-bottom: 16px; }
+  .topbar h1 { font-size: 20px; flex: 1 1 0; }
+  .topbar .status-pill { order: 3; flex-basis: 100%; justify-content: center; }
   .join-code { font-size: 34px; }
   .kv { column-gap: 8px; }
   .kv dd.mono { font-size: 12.5px; }
   .console { height: calc(100vh - 260px); }
+  .tabs { margin-left: -16px; margin-right: -16px; padding: 0 16px; }
+  .gcards { grid-template-columns: minmax(0, 1fr); }
+  .gi { flex-wrap: wrap; }
+  .gi > .btn, .gi > a.btn { margin-left: 46px; }
+  .idle-row { flex-wrap: wrap; }
+  .idle-row .grow { flex-basis: calc(100% - 80px); }
+  .idle-row .btn { margin-left: 34px; }
 }
 @media (max-width: 600px) {
   .card-head.wrap .segmented { width: 100%; }
