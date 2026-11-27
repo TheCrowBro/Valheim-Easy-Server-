@@ -645,6 +645,17 @@ jobs:
       - name: Free disk space
         shell: bash
         run: df -h
+      # Where the test keeps the servers it installs and runs: gametest
+      # honours EGS_TEST_DATA (internal/game/gametest/data.go), removing a
+      # test's folder there when the test passes and keeping it when it
+      # fails, so the step after the test can save the servers' logs.
+      # Without it a test's data lived in its own temporary folder, which
+      # the test removes when it ends, so a failed check uploaded nothing.
+      # The runner's temporary folder is also on its biggest drive (D:, not
+      # the nearly full C:, on Windows) and has short paths.
+      - name: Choose the test's data folder
+        shell: bash
+        run: echo "EGS_TEST_DATA=$RUNNER_TEMP/gametest" >> "$GITHUB_ENV"
       # The game's own preparation, such as building the Mac mod loader for
       # Valheim, so its Mac cell tests the one releases ship. A .sh script
       # is run as a program, so its first line picks the shell.
@@ -680,22 +691,74 @@ jobs:
       # in these values.
       - name: The real server
         run: go test -tags realserver -run ${{ matrix.run }} -v -count=1 -timeout ${{ matrix.timeoutMinutes }}m ${{ matrix.package }}
-      # The test makes its data folder with t.TempDir(), in the system's
-      # temporary folder, and removes it when it ends. What's left after a
-      # failure (when the test was cut off by its timeout, or a file was
-      # still open) is saved here: the logs, not the downloaded server.
+      # Saves the logs, not the downloaded servers, of every test that
+      # failed: from each data folder gametest kept in EGS_TEST_DATA (one
+      # per failed test, or every one when go test's -timeout cut the run
+      # off), and from what a test that makes its own temporary folder
+      # (t.TempDir: the manager's Valheim check, an adapter's extra server)
+      # left there, which happens only when the run was cut off.
       - name: Collect the test's logs
         if: failure()
         shell: bash
         env:
           OUT: ${{ runner.temp }}/real-server-logs
         run: |
+          # Git Bash on Windows: the runner's paths as Unix ones. Never
+          # fails (the step runs with -e), and leaves "" as it is.
+          unix() {
+            if [ -n "$1" ] && command -v cygpath >/dev/null 2>&1; then
+              cygpath -u "$1" 2>/dev/null || printf '%s\n' "$1"
+            else
+              printf '%s\n' "$1"
+            fi
+          }
+          OUT=$(unix "$OUT")
           mkdir -p "$OUT"
+
+          # collect DIR DEST copies one test's logs and small settings files
+          # from DIR to DEST, keeping their places in the folder. Saving logs
+          # must never be what fails, so a file that can't be read is
+          # skipped.
+          collect() {
+            local dir=$1 dest=$2
+            { (cd "$dir" && {
+                # Logs anywhere: each run's output (games/<id>/logs), the
+                # servers' own log files and folders, SteamCMD's.
+                find . -type f -size -51200k \( -iname '*.log' -o -ipath '*/logs/*' \) -print0
+                # Small notes and settings near the top: gametest.txt (which
+                # test it was), the run record, the settings the adapter
+                # wrote, a server's own notes. Not deep in a server's files,
+                # where a game keeps thousands (Vintage Story's assets), and
+                # not the Java and .NET runtimes.
+                find . -maxdepth 5 -type f -size -1024k \( -iname '*.txt' -o -iname '*.json' -o -iname '*.ini' -o -iname '*.cfg' \
+                  -o -iname '*.properties' -o -iname '*.xml' -o -iname '*.yaml' -o -iname '*.yml' -o -iname '*.toml' \) \
+                  -not -ipath './games/*/runtime/*' -print0
+                # The settings Unreal servers keep deep inside (Palworld's
+                # and Satisfactory's Saved/Config).
+                find . -type f -size -1024k -ipath '*/saved/config/*' -print0
+              } 2>/dev/null) || true; } |
+              while IFS= read -r -d '' f; do
+                { mkdir -p "$dest/$(dirname "$f")" && cp -p "$dir/$f" "$dest/$f"; } 2>/dev/null ||
+                  echo "Couldn't copy $dir/$f (still open?)"
+              done
+          }
+
+          # gametest's data folders: <the test's name, cut short>-<number>,
+          # each with a gametest.txt naming the whole test.
+          data=$(unix "${EGS_TEST_DATA:-}")
+          if [ -n "$data" ] && [ -d "$data" ]; then
+            for dir in "$data"/*/; do
+              if [ -d "$dir" ]; then collect "$dir" "$OUT/$(basename "$dir")"; fi
+            done
+          fi
+
           # Go's temporary folder: TMPDIR on a Mac; TEMP on Windows, which
           # Git Bash also shows as /tmp. Each folder is searched once.
           seen=()
           for tmp in "${TMPDIR:-}" "${TEMP:-}" "${TMP:-}" /tmp; do
-            if [ -z "$tmp" ] || [ ! -d "$tmp" ]; then continue; fi
+            if [ -z "$tmp" ]; then continue; fi
+            tmp=$(unix "$tmp")
+            if [ ! -d "$tmp" ]; then continue; fi
             dup=
             for s in "${seen[@]+"${seen[@]}"}"; do
               if [ "$tmp" -ef "$s" ]; then dup=1; fi
@@ -704,21 +767,14 @@ jobs:
             seen+=("$tmp")
             # t.TempDir() names the folder after the test: TestRealServer123/001.
             for dir in "$tmp"/Test*/; do
-              if [ ! -d "$dir" ]; then continue; fi
-              name=$(basename "$dir")
-              # Saving logs must never be what fails, so a file that can't be
-              # read is skipped.
-              { (cd "$dir" && find . -type f \( -iname '*.log' -o -iname '*.txt' -o -ipath '*/logs/*' \) -size -50M -print0 2>/dev/null) || true; } |
-                while IFS= read -r -d '' f; do
-                  { mkdir -p "$OUT/$name/$(dirname "$f")" && cp -p "$dir/$f" "$OUT/$name/$f"; } 2>/dev/null ||
-                    echo "Couldn't copy $dir$f (still open?)"
-                done
+              if [ -d "$dir" ]; then collect "$dir" "$OUT/$(basename "$dir")"; fi
             done
           done
+
           if [ -n "$(find "$OUT" -type f | head -n 1)" ]; then
             find "$OUT" -type f
           else
-            echo "The test left no data folder: it removes it when it ends, unless it was cut off. Its own output above has the server's log."
+            echo "No test left a data folder behind. A test kept in its own temporary folder removes it when it ends, unless the run was cut off; its own output above has the end of the server's log."
           fi
           df -h
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

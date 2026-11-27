@@ -21,7 +21,7 @@ import (
 // With the stand-in (the default) it runs in seconds on every system, so
 // it is each adapter's first test. With o.Real it runs the same checks
 // against the real server, except the scripted players (nobody joins a
-// real server in CI).
+// real server in CI), with waits sized for a real server (waits.go).
 //
 // In order: the install leaves Program() and Build(); the first start
 // plans a new world; the server says it's online within 30 s; its public
@@ -84,25 +84,34 @@ func Conformance(t *testing.T, g game.Game, o Options) {
 		checkPlayers(t, s, steps)
 	}
 	if p, ok := srv.(game.Prober); ok {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		res, err := p.Probe(ctx, s.Record())
-		cancel()
-		if err != nil || !res.Up {
-			t.Errorf("the probe of the running server: Up=%v, %v", res.Up, err)
+		asked := time.Now()
+		if res, tries, err := probeUp(p, s.Record(), o.Real); err != nil || !res.Up {
+			again := ""
+			if tries > 1 {
+				again = fmt.Sprintf(" (asked %d times over %v)", tries, time.Since(asked).Round(time.Second))
+			}
+			t.Errorf("the probe of the running server%s: Up=%v, %v", again, res.Up, err)
 		}
 	}
 	if plan.Console {
 		// Before the app exits with a console game running, it types the
 		// save line and waits up to 10 s for the world to be saved (spec
-		// 2.11).
+		// 2.11). A real server gets longer (saveWait): its save goes on
+		// after the app has gone, so what must hold is that the line
+		// saves; taking longer than the app waits is noted for the game's
+		// FACTS.md.
 		if plan.SaveLine == "" {
 			t.Errorf("a console game's plan needs a SaveLine: the line that saves without stopping, which the app types before it exits")
 		} else {
 			s.skip("saved")
+			typed := time.Now()
 			if err := s.Console(plan.SaveLine); err != nil {
 				t.Errorf("typing the save line %q: %v", plan.SaveLine, err)
 			} else {
-				s.WaitEvent("saved", "", 10*time.Second)
+				s.WaitEvent("saved", "", saveWait(o.Real))
+				if took := time.Since(typed); took > appSaveWait {
+					t.Logf("gametest: the save line %q saved after %v, longer than the %v the app waits for it before it exits", plan.SaveLine, took.Round(100*time.Millisecond), appSaveWait)
+				}
 			}
 		}
 	}
@@ -163,7 +172,7 @@ func Conformance(t *testing.T, g game.Game, o Options) {
 
 	// After an app restart, the new copy's stop chain still ends it.
 	s.Takeover()
-	waitFor(t, 15*time.Second, "State().Ready after the takeover replayed the log", func() bool { return s.State().Ready })
+	waitFor(t, readyAfterTakeover(o.Real), "State().Ready after the takeover replayed the log", func() bool { return s.State().Ready })
 	s.Stop()
 	s.mu.Lock()
 	log := slices.Clone(s.stopLog)
@@ -312,14 +321,22 @@ func listed(st game.RunState, name string) bool {
 // checkPorts: each public port is in use while the server runs, by the
 // server itself. Binding the port says it's taken; platform.PortInUse,
 // once it can see ports on this system, must agree and name the server.
+//
+// A real server may open a port (a query port, say) a moment after its
+// log says it's online, so with one each port gets portGrace to show up in
+// the system's port table first. That wait only looks at the table: trying
+// to open the port again and again could take it from the server just as
+// it opens it. The ports are opened once, after it.
 func checkPorts(t *testing.T, s *Session) {
 	t.Helper()
 	saved := s.store.Get()
 	rec := s.Record()
+	real := s.o.Real
 	sees := platformSeesPorts()
 	if !sees {
 		t.Log("gametest: platform.PortInUse can't see ports here yet; the ports are checked by trying to open them")
 	}
+	deadline := time.Now().Add(portGrace(real))
 	for _, r := range s.info.Ports {
 		if !r.Public {
 			continue
@@ -330,13 +347,33 @@ func checkPorts(t *testing.T, s *Session) {
 			continue
 		}
 		for _, proto := range r.Protos {
-			if !bindTaken(proto, port, s.o.Real) {
+			if sees {
+				for {
+					if inUse, _ := platform.PortInUse(proto, port); inUse || !time.Now().Before(deadline) {
+						break
+					}
+					time.Sleep(500 * time.Millisecond)
+				}
+			}
+			taken := bindTaken(proto, port, real)
+			var inUse bool
+			var pid int
+			if sees {
+				inUse, pid = platform.PortInUse(proto, port)
+			}
+			switch {
+			case !taken && real && inUse:
+				// The system says it's held, though this process could still
+				// open it: a way of sharing a port bindTaken doesn't know.
+				// The table is the better witness; who holds it is checked
+				// below.
+				t.Logf("gametest: the %s port %d (%s) could still be opened here, but the system shows it held by process %d (the server is %d)", r.Role, port, proto, pid, rec.PID)
+			case !taken:
 				t.Errorf("the %s port %d (%s) is free while the server runs: the plan must give the server its ports", r.Role, port, proto)
 			}
 			if !sees {
 				continue
 			}
-			inUse, pid := platform.PortInUse(proto, port)
 			switch {
 			case !inUse:
 				t.Errorf("platform.PortInUse(%q, %d) says the %s port is free while the server runs", proto, port, r.Role)
@@ -496,6 +533,23 @@ func worldNames(t *testing.T, wl game.Worlds) []string {
 	}
 	slices.Sort(names)
 	return names
+}
+
+// probeUp asks the probe whether the server is up, again every 2 seconds
+// until it says so or probeTries' time is over (one try with the
+// stand-in). It gives the last answer and how many tries it took.
+func probeUp(p game.Prober, rec game.Record, real bool) (game.ProbeResult, int, error) {
+	total, each := probeTries(real)
+	deadline := time.Now().Add(total)
+	for tries := 1; ; tries++ {
+		ctx, cancel := context.WithTimeout(context.Background(), each)
+		res, err := p.Probe(ctx, rec)
+		cancel()
+		if (err == nil && res.Up) || !time.Now().Before(deadline) {
+			return res, tries, err
+		}
+		time.Sleep(2 * time.Second)
+	}
 }
 
 // waitFor polls cond until it holds, failing the test after within.
