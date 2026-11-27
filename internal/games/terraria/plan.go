@@ -97,9 +97,16 @@ func port(sv game.Saved) int {
 	return defaultPort
 }
 
-// args is the command line: the config file says everything else.
+// args is the command line: the config file says everything else, apart
+// from where the server keeps its own files. Without -savedirectory it
+// keeps them in the owner's own Terraria folder (Documents\My Games\Terraria
+// on Windows, ~/Library/Application Support/Terraria on a Mac): when it
+// makes a world it reads and rewrites favorites.json there, the list the
+// owner's own game keeps of its favourite worlds and characters
+// (FACTS.md, 4). So it is pointed at the server folder, beside the config
+// and the ban list.
 func (s *server) args() []string {
-	return []string{"-config", filepath.Join(s.env.Dirs.Server, configName)}
+	return []string{"-config", filepath.Join(s.env.Dirs.Server, configName), "-savedirectory", s.env.Dirs.Server}
 }
 
 // Fingerprint covers everything the server reads when it starts, so a

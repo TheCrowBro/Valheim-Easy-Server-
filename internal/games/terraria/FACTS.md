@@ -10,6 +10,13 @@ print joins, leaves and refusals, a small throwaway Terraria protocol client
 (connect request, player info, world request, spawn). The logs it printed
 are in `testdata/real/` (see the end of this file).
 
+"CI run" means the first real-server check on GitHub, run 45921304914 on
+`multigame` at f86a110 (2026-11-27): `windows-latest` (Windows Server 2025,
+10.0.26100) and `macos-15-intel`. What it showed, and what it got wrong, is
+section 11. "The program" means reading `TerrariaServer.exe` of the
+1.4.6.1 zip (the Windows build) with a .NET metadata and IL reader
+(2026-11-27), where a run couldn't show it.
+
 Every "verify" mark of spec 5.3 is settled in section 9.
 
 ## 1. Version and download
@@ -72,8 +79,32 @@ Every "verify" mark of spec 5.3 is settled in section 9.
   PE and CLI headers and its metadata strings, 2026-11-26.) .NET Framework 4
   comes with Windows 10 and 11.
 - Being a console program, a Ctrl+C sent to its own hidden console reaches
-  it (spec 2.7). What it then does on Windows is for the Windows real-server
-  cell to show (see 11); on Linux it ends at once without saving (6).
+  it (spec 2.7), but **it doesn't stop it** (the program): its entry
+  point, `WindowsLaunch.Main`, installs a console control handler
+  (`SetConsoleCtrlHandler(ConsoleCtrlCheck, true)`) before anything else,
+  and `ConsoleCtrlCheck` shuts the social (Steam) layer down for Ctrl+C,
+  Ctrl+Break, close, logoff and shutdown, then returns true for every
+  event. Returning true tells Windows the event was handled, so for Ctrl+C
+  and Ctrl+Break Windows' default handler, which would end the process, is
+  never called, and the server carries on (on a dedicated server the
+  social layer has nothing loaded, so even that does nothing). The Mac
+  and Linux builds have no such handler and end at once (6). So after a
+  takeover, when the app has no console to type `exit` on, nothing but
+  Force stop ends the Windows server (10, and the lead's question in 11).
+- **It reads its console as UTF-16** (the program, and the CI run's
+  silence: 11). `Program.InitializeConsoleOutput`, which `LaunchGame`
+  calls before the game starts, sets `Console.OutputEncoding` to UTF-8 and
+  `Console.InputEncoding` to `Encoding.Unicode` (UTF-16 little-endian) on
+  Windows, UTF-8 elsewhere. With a real console window that is just how
+  .NET reads typed keys; with standard input piped, as the app runs it,
+  .NET Framework then decodes the pipe's bytes as UTF-16LE. `save` and a
+  line feed as UTF-8 bytes (`73 61 76 65 0A`) become two meaningless
+  characters and half of a third, and no line ever ends, so the server
+  never sees a command. Its output stays UTF-8 (the CI run's log reads
+  like the Linux one). So on Windows every console line must be written
+  as UTF-16LE (`save` = `73 00 61 00 76 00 65 00`, then `0A 00` or
+  `0D 00 0A 00`); the game contract doesn't have a way to say so yet
+  (11).
 - **Microsoft XNA Framework 4.0 Redistributable**:
   `https://download.microsoft.com/download/A/C/2/AC2C903B-E6E8-42C2-9FD7-BEBAC362A930/xnafx40_redist.msi`,
   7,054,848 bytes, SHA-256 `47260420773a20443fb1e38a89b7f39c5237a80a842de598e6c8f7f90a3bbd6d`
@@ -100,8 +131,16 @@ Every "verify" mark of spec 5.3 is settled in section 9.
   entries, the shortcuts), then checks the key again. Without the key a
   repair is the usual install, since REINSTALL only reinstalls what is
   already there. A repair therefore asks for administrator rights once
-  more on Windows, whatever it was clicked for. Seen only in the docs so
-  far; the Windows real-server cell checks it (11).
+  more on Windows, whatever it was clicked for. The CI run did it: with
+  XNA's main file taken out of the global assembly cache
+  (`C:\Windows\Microsoft.NET\assembly\GAC_32\Microsoft.Xna.Framework\v4.0_4.0.0.0__842cf8be1de50553\Microsoft.Xna.Framework.dll`,
+  so the 32-bit cache, as for a 32-bit package), the repair downloaded
+  the package, reinstalled it without a prompt (the runner is an
+  administrator) and without an error, Windows still listed XNA, and the
+  file was back, all in 4.4 s.
+- **XNA on a fresh Windows**: in the CI run the server started after the
+  adapter's install, so XNA was there and worked (whether the runner image
+  had it already isn't in the log).
 - The Terraria wiki's Server page lists ".NET Framework 4.0" and "XNA
   Framework" as the Windows server's requirements
   (https://terraria.wiki.gg/wiki/Server, read 2026-11-26).
@@ -145,8 +184,11 @@ Every "verify" mark of spec 5.3 is settled in section 9.
   `libSDL3.0.dylib` and so on, and the program loads `GNS_Wrapper` the same
   way), and every path in the config absolute, `banlist=` included. A
   program started directly with DYLD_LIBRARY_PATH keeps it (it isn't a
-  system binary, and has no hardened runtime). Whether it all starts on a
-  real Mac is for the Mac real-server cell (11).
+  system binary, and has no hardened runtime). **It works** (CI run on
+  `macos-15-intel`): started that way, the server made a small world,
+  printed the same lines as on Linux, held its TCP and UDP port (the UDP
+  side is the GNS library's, so that loaded), answered a client on TCP,
+  saved on `save`, and ended on `exit` and on Ctrl+C as on Linux (6).
 - `fixDylibs.sh`, which the script runs first, isn't in the zip, so the
   script would print an error there and carry on; skipping the script
   loses nothing.
@@ -194,7 +236,26 @@ Every "verify" mark of spec 5.3 is settled in section 9.
   `-secure`, `-noupnp`, `-nogns`, `-lobby`, `-ip`, `-forcepriority`,
   `-seed`, `-lang`, `-language`, `-motd`, `-banlist`, `-worldrollbackstokeep`,
   `-disableannouncementbox`, `-announcementboxrange`, and others. The
-  adapter uses only `-config <absolute path>`.
+  adapter uses `-config <absolute path>` and `-savedirectory <server
+  folder>` (below).
+- **Where it keeps its own files** (the program, and Linux runs on
+  2026-11-27): `Program.LaunchGame` sets the save path to
+  `-savedirectory`, or else to the system's own place for Terraria, which
+  is the owner's own game's folder (`Documents\My Games\Terraria` on
+  Windows, `~/Library/Application Support/Terraria` on a Mac,
+  `~/.local/share/Terraria` on Linux). With `world`, `worldpath` and
+  `banlist` given, the only thing the server wrote there was
+  `favorites.json`, when it made a new world (not when it loaded one,
+  saved, or exited): it reads the file, adds `"<name>.wld": false` under
+  `World`, and writes it back. That file is the owner's own game's list of
+  favourite worlds and characters, so without `-savedirectory` every new
+  server world would rewrite it, perhaps while the owner's game has it
+  open. With `-savedirectory "<folder>"` (a path with spaces is fine:
+  arguments not starting with `-` are joined back with spaces) the file
+  went there instead and the default folder was untouched. The adapter
+  points it at the server folder, beside the config and the ban list. On
+  Linux the earlier real runs had left `~/.local/share/Terraria/favorites.json`
+  listing their worlds, which is how this was found.
 - The example config sets `priority=1` (high: "0:Realtime, 1:High, …
   3:Normal"). The adapter writes no `priority` line, so the server isn't
   asked to raise its priority above the other games'.
@@ -208,6 +269,25 @@ Every "verify" mark of spec 5.3 is settled in section 9.
   GameNetworkingSockets (an inference from the `gns=` key, the `-nogns`
   switch, the GNS libraries and 1.4.6's "Added Crossplay!"; not checked by
   turning it off). Either way the game role's Protos are `["tcp","udp"]`.
+- **The same on Windows and macOS** (CI run): `PortInUse("tcp", p)` and
+  `PortInUse("udp", p)` were true with the server's own PID on both, the
+  port being the one the Plan wrote as `port=` (`Listening on port p`),
+  and a client connecting to 127.0.0.1:p got an answer (`127.0.0.1:51630
+  is connecting...`, then `lost connection...` when it hung up).
+- **How it opens TCP** (the program): `TcpSocket.StartListening` makes a
+  `TcpListener` on `IPAddress.Any` (IPv4 0.0.0.0 only; `-ip` would name
+  one address) on the configured port, without exclusive use, before it
+  prints `Listening on port p`, and so before `Server started`.
+  That is why gametest's port check said the TCP port was "free" on
+  Windows and macOS though the server held it (11): opening 127.0.0.1:p,
+  or the IPv6 wildcard (Go's `:p`), next to another program's IPv4
+  wildcard is allowed on those systems (macOS: Go sets SO_REUSEADDR and
+  BSD lets a more specific address, or the other address family, share
+  the port; Windows: a socket opened without SO_EXCLUSIVEADDRUSE lets
+  another one open a more specific address on its port, and the run shows
+  the IPv6 wildcard didn't collide either). Linux refuses both, which is
+  why the check passed there (and passed again on 2026-11-27). Opening
+  0.0.0.0:p itself ("tcp4") is what collides with this server everywhere.
 - With the **TCP port** taken by another program, the server printed
   `Listening on port 17777`, `Type 'help' for a list of commands.`, the
   `: ` prompt, and **quit with code 0 without a word** (no "Server started").
@@ -220,6 +300,13 @@ Every "verify" mark of spec 5.3 is settled in section 9.
   port 7777 by default").
 
 ## 6. Console: what it prints and does (real runs)
+
+The lines below were seen on Linux; the CI run showed the same lines on
+Windows and macOS (world making, the banner, `Listening on port N`, the
+help hint, `: Server started`, `is connecting...`, `lost connection...`;
+and on the Mac the save and exit lines too). The Windows server's output
+is UTF-8 like the others', but **it reads its console as UTF-16** (3), so
+it only gets commands typed that way.
 
 - The first line is `Error Logging Enabled.` with four byte order marks
   (U+FEFF, the bytes `EF BB BF` four times) before it. Then
@@ -267,16 +354,28 @@ Every "verify" mark of spec 5.3 is settled in section 9.
   player leaves."
 - **`exit`**: prints `Saving before exit...`, saves silently (the world and
   its backups were rewritten) and ends with **code 0**. With a player on it
-  prints no `has left.` line for them.
+  prints no `has left.` line for them. On the Mac (CI run) a small world's
+  `exit` ended it with code 0 in 0.6 s.
 - **Ctrl+C** (SIGINT, Linux): ended at once with code 130, **no save** (the
-  world files kept their times), no output.
+  world files kept their times), no output. On the Mac (CI run) the same:
+  it ended 0.4 to 0.5 s after the Ctrl+C step, and the world loaded again
+  from its last save. **On Windows Ctrl+C doesn't end it** (the program,
+  3); the CI run never got that far (11).
+- **An unknown command** prints `Invalid command.`; an empty line prints
+  nothing (Linux, 2026-11-27).
 - `playing`: `Alex (127.0.0.1:56582)` per player, then `1 player connected.`
   / `No players connected.`; `version`: the banner; `port`: `Port: 17777`;
   `help`: the command list (help, playing, clear, exit, exit-nosave, save,
   kick, ban, password, version, time, port, maxplayers, say, motd, dawn,
   noon, dusk, midnight, settle, seed).
 - **A damaged world**: `Load failed!  No backup found.`, a blank line, a
-  `System.IO.EndOfStreamException` with its stack, and code 0.
+  `System.IO.EndOfStreamException` with its stack, and code 0. Then
+  (the program) it waits for a key with `Console.ReadKey` before it
+  quits; Mono let it go on to exit, while .NET Framework on Windows
+  refuses ReadKey on piped input with an InvalidOperationException, so
+  the Windows server should end there with that exception's stack and a
+  non-zero code rather than hang (not run yet). Either way the log has
+  `Load failed!`, which is what ExitHint looks for.
 - **A missing world without autocreate**: `Load failed!  No backup found.`
   and a `System.IO.FileNotFoundException`, code 0 (no interactive menu, so
   no hang). The adapter's Plan refuses this case itself with a clearer
@@ -329,10 +428,10 @@ Every "verify" mark of spec 5.3 is settled in section 9.
 | XNA registry key `HKLM\SOFTWARE\WOW6432Node\Microsoft\XNA\Framework\v4.0` `Installed`=1 (verify the key) | Right: from the MSI's own Registry and Component tables (3). |
 | version from the banner `Terraria Server v1.4.6.1` (verify its form) | Exactly that line (6). |
 | a real log still has to show the exact join and leave lines with names (2.6) | `Alex has joined.`, `Big Bob has left.` etc. in `testdata/real/` (6). |
-| Terraria on macOS: launched directly with the script's DYLD_LIBRARY_PATH (2.4, verify per game) | The script's content and the program's rpath and library loading (3). A real Mac start is the Mac cell's (11). |
-| SaveLine `save` (2.11) | `save` saves without stopping and prints the save lines (6). |
+| Terraria on macOS: launched directly with the script's DYLD_LIBRARY_PATH (2.4, verify per game) | The script's content and the program's rpath and library loading (3); it starts and runs that way on a real Intel Mac (CI run, 3 and 11). |
+| SaveLine `save` (2.11) | `save` saves without stopping and prints the save lines (6), on Linux and the Mac. On Windows only when typed as UTF-16 (3, 11). |
 | saves every 10 minutes and when the last player leaves (2.11, Say text) | Seen in real runs and in the changelog (6). |
-| Ctrl+C after a takeover (2.11) | Ends at once, no save (6); the world from the last save loads again (the local real-server check). |
+| Ctrl+C after a takeover (2.11) | Mac and Linux: ends at once, no save, and the world from the last save loads again (6; CI run on the Mac). Windows: doesn't end it at all (3); only Force stop does (10, 11). |
 
 ## 10. Where the adapter departs from the spec, and why
 
@@ -348,28 +447,113 @@ Every "verify" mark of spec 5.3 is settled in section 9.
 - **No "evil" new-world setting**: the server can't take one (4).
 - **`banlist=` in the config**, absolute, in `server/` (outside the folder an
   update replaces); the spec's list didn't have it (3, macOS).
+- **`-savedirectory <server folder>` on the command line** (the spec says
+  only `-config`): otherwise each new world rewrites the owner's own
+  game's `favorites.json` (4).
 - **A `server_full` event** (a game's own warning kind, like
   `wrong_password`) for "This server is full…".
 - **Join.Address is the bare IP**: Terraria asks for the port separately.
+- **The Windows Ctrl+C step waits 15 s, not a minute, and says what to do**:
+  the Windows server ignores Ctrl+C (3), so after a takeover that step
+  can't end it and the chain ends in the manager's Force stop question.
+  The step stays, because a console game's chain must not end at its
+  console step, but waiting a minute for nothing would only keep the
+  owner from Force stop, and its text says why it's needed: "Terraria's
+  Windows server stops only from its console, which is gone after the app
+  restarts, and it ignores Ctrl+C. If it keeps running, use Force stop:
+  Terraria saves every 10 minutes and when the last player leaves;
+  anything since then is lost." (The step also runs when `exit` didn't
+  stop it in time, so the text doesn't claim the app restarted.) The Mac
+  (and the stand-in, in fake mode, on every system) keep the spec's
+  minute and text.
 
-## 11. What only Windows and macOS CI can confirm
+## 11. The real-server check on Windows and macOS
 
 The realserver-tagged `TestRealServer` (run by the matrix from
-`realserver.json`) installs, makes a small world, checks the server answers
-on its TCP port and logs `PortInUse` for TCP and UDP ("FACTS:" lines), saves
-with the console, stops with `exit` (the world file newer), starts again,
-takes over and stops with Ctrl+C, and loads the world again. On Windows it
-then takes XNA's main file out of the global assembly cache and repairs XNA
-(the "XNA repair" step). It passed on Linux on 2026-11-26 against the real
-1.4.6.1 server (Linux build). Still to see on the runners:
+`realserver.json`) runs gametest's Conformance against the real server;
+then installs, makes a small world, checks that its `favorites.json` went
+to the server folder and the owner's own one wasn't touched, checks the
+server answers on its TCP port and logs `PortInUse` for TCP and UDP
+("FACTS:" lines), saves with the console, stops with `exit` (the world
+file newer), starts again, takes over and stops with Ctrl+C, and loads
+the world again; then, on Windows only,
+checks the console's encoding and Ctrl+C ("Windows console", "FACTS:"
+lines), and takes XNA's main file out of the global assembly cache and
+repairs XNA ("XNA repair"). It passed on Linux on 2026-11-26 and again on
+2026-11-27 (with "Windows console" and "XNA repair" skipped there).
 
-- Windows: XNA's silent install through `install.EnsurePrereq`, the server
-  starting with it, the Ctrl+C step ending it (and whether it saves), the
-  console lines being the same as on Linux, `PortInUse` for TCP and UDP,
-  and the repair's reinstall over an installed XNA (msiexec's exit code,
-  the key still there, the removed file back; "FACTS:" lines).
-- macOS (Intel): the program starting with Dir and DYLD_LIBRARY_PATH as
-  above, the GNS library loading, and `PortInUse` for TCP and UDP.
+### What the first CI run showed (run 45921304914, f86a110, 2026-11-27)
+
+Both cells failed; the server itself did what this file says everywhere
+it got to.
+
+- **macOS (`macos-15-intel`)**: conformance failed on one check only, "the
+  game port N (tcp) is free while the server runs". Everything else
+  passed: the start with Dir and DYLD_LIBRARY_PATH, the GNS library
+  (UDP held), `save` saving within 10 s, `exit` ending it with code 0 in
+  0.6 s, the takeover's Ctrl+C ending it in 0.4 s, a second start on the
+  same world. "console, takeover and Ctrl+C" passed (52 s): `PortInUse`
+  TCP and UDP true with the server's PID, the TCP answer, `save`, `exit`
+  (world newer each time), the stop after the takeover in 1 s, the world
+  loaded again.
+- **Windows (`windows-latest`)**: the install and the start worked (so
+  XNA was in place), with the same lines as on Linux, `PortInUse` TCP and
+  UDP true with the server's PID, and the TCP answer. Then the same "free" port
+  failure, and no "saved" after `save`, in 10 s (conformance) and in a
+  minute ("console, takeover and Ctrl+C"): the server printed nothing at
+  all after it, so it never read the line (it reads its console as
+  UTF-16, 3). Neither the `exit` stop nor Ctrl+C was reached. "XNA repair"
+  passed (3).
+
+### Whose failure each one is
+
+- **"The game port is free"** is gametest's port check, not the adapter:
+  the server opened exactly the port the Plan wrote (`Listening on port
+  N`, `PortInUse` naming the server's PID, the TCP answer), but its IPv4
+  wildcard listener can't be seen by opening 127.0.0.1:N or Go's `:N` on
+  Windows and macOS (5). gametest (stream RS-harness) needs to open
+  0.0.0.0:N ("tcp4"/"udp4") too, or trust `platform.PortInUse` where it
+  works.
+- **No "saved" on Windows** needs the game contract to say what encoding a
+  console game reads (3), so that the manager and gametest type
+  `save`/`exit` as UTF-16LE for Terraria on Windows. The adapter can't
+  say it with today's contract: a "console" step's `Line` and
+  `Plan.SaveLine` are typed as their bytes plus a line feed. Until then
+  the app can't save or stop the Windows server through its console
+  either: a stop would wait 3 minutes on `exit`, then on Ctrl+C, and end
+  at Force stop.
+- **After a takeover on Windows** nothing but Force stop ends the server
+  (3), so once the console works, conformance's and "console, takeover and
+  Ctrl+C"'s takeover stops will still fail there (gametest kills it and
+  says the chain ended with the server running). Keeping the console
+  across an app restart on Windows, or accepting Force stop there, is the
+  lead's decision.
+
+### What the next run should show
+
+With only this adapter's changes (no contract or gametest change yet):
+
+- macOS: the same single "free" port failure in conformance, everything
+  else green, with a new FACTS line saying the new world's
+  `favorites.json` is in the server folder and the owner's own
+  `~/Library/Application Support/Terraria/favorites.json` untouched; green
+  once gametest's port check is fixed.
+- Windows: the same two failures (port, no "saved") in conformance and the
+  "saved" failure in "console, takeover and Ctrl+C" (after the same
+  favorites.json FACTS line, for `Documents\My Games\Terraria`); "XNA
+  repair" green; and the new "Windows console" step green, with these
+  FACTS lines:
+  `"save" typed as UTF-8 bytes: no save within 15 s`, `"save" typed as
+  UTF-16LE: saved true`, `Ctrl+C (<nil>): the Windows server still runs
+  30 s later`, and `"exit" typed as UTF-16LE ended the Windows server with
+  code 0`, the world file newer. If instead the UTF-16 lines don't work,
+  or Ctrl+C ends it, that step fails and says which fact here is wrong.
+- Once the contract and gametest type UTF-16LE for it: the Windows
+  conformance and "console, takeover and Ctrl+C" get past `save` and
+  `exit` and fail only at the stop after the takeover (Force stop is the
+  only way), until the lead decides that; "Windows console" then logs
+  that `save` typed through gametest saved, and checks Ctrl+C and `exit`
+  the same way.
 
 ## 12. The logs in testdata/real
 

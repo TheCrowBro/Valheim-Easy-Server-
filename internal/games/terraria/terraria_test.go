@@ -209,7 +209,7 @@ func TestPlanGolden(t *testing.T) {
 	if plan.Fingerprint != s.Fingerprint(sv, "Forest") {
 		t.Error("the plan's fingerprint isn't Fingerprint's")
 	}
-	if want := []string{"-config", config}; !slices.Equal(plan.Args, want) || plan.Exe != s.Program() {
+	if want := []string{"-config", config, "-savedirectory", s.env.Dirs.Server}; !slices.Equal(plan.Args, want) || plan.Exe != s.Program() {
 		t.Errorf("command line %q %q", plan.Exe, plan.Args)
 	}
 
@@ -334,16 +334,41 @@ func TestFingerprint(t *testing.T) {
 }
 
 func TestStop(t *testing.T) {
+	for _, c := range []struct {
+		goos string
+		wait time.Duration
+		say  string
+	}{
+		{"darwin", time.Minute, "Terraria saves every 10 minutes and when the last player leaves; anything since then is lost."},
+		{"linux", time.Minute, "Terraria saves every 10 minutes and when the last player leaves; anything since then is lost."},
+		{"fake", time.Minute, "Terraria saves every 10 minutes and when the last player leaves; anything since then is lost."},
+		// The Windows server ignores Ctrl+C (FACTS.md): the step is
+		// short and says what to do instead.
+		{"windows", 15 * time.Second, "Terraria's Windows server stops only from its console, which is gone after the app restarts, and it ignores Ctrl+C. " +
+			"If it keeps running, use Force stop: Terraria saves every 10 minutes and when the last player leaves; anything since then is lost."},
+	} {
+		steps := stopSteps(c.goos)
+		if len(steps) != 2 || steps[0].Kind != "console" || steps[0].Line != "exit" || steps[1].Kind != "interrupt" {
+			t.Fatalf("%s: steps %+v", c.goos, steps)
+		}
+		if steps[0].Wait != 3*time.Minute || steps[1].Wait != c.wait {
+			t.Errorf("%s: waits %v, %v", c.goos, steps[0].Wait, steps[1].Wait)
+		}
+		if steps[1].Say != c.say {
+			t.Errorf("%s: Ctrl+C step says %q", c.goos, steps[1].Say)
+		}
+	}
+
+	// The real server's chain is this system's; in fake mode the stand-in,
+	// which ends on Ctrl+C everywhere, gets the Mac and Linux chain on
+	// every system.
 	s, _ := newTestServer(t)
-	steps := s.Stop(game.Record{})
-	if len(steps) != 2 || steps[0].Kind != "console" || steps[0].Line != "exit" || steps[1].Kind != "interrupt" {
-		t.Fatalf("steps %+v", steps)
+	if got, want := s.Stop(game.Record{}), stopSteps(runtime.GOOS); got[1].Say != want[1].Say || got[1].Wait != want[1].Wait {
+		t.Errorf("the real server's chain %+v, not this system's %+v", got, want)
 	}
-	if steps[0].Wait != 3*time.Minute || steps[1].Wait != time.Minute {
-		t.Errorf("waits %v, %v", steps[0].Wait, steps[1].Wait)
-	}
-	if steps[1].Say != "Terraria saves every 10 minutes and when the last player leaves; anything since then is lost." {
-		t.Errorf("Ctrl+C step says %q", steps[1].Say)
+	s.env.Fake = &game.Fake{}
+	if steps := s.Stop(game.Record{}); steps[1].Say != sayCtrlC || steps[1].Wait != time.Minute {
+		t.Errorf("the stand-in's chain %+v", steps)
 	}
 }
 
