@@ -13,6 +13,10 @@ import (
 // port of its own for friends. That needs a router that allows UPnP,
 // which the manual router steps mention.
 //
+// Public is false: Windrose has no public list of servers (in Valheim it
+// means the server is in the game's own list), and friends find this one
+// only by its invite code.
+//
 // The invite code is the one the running server printed (RunState.Code,
 // from its log), or else the one its settings file had when the app last
 // started it, kept in the run record and in the instance's settings. Join
@@ -32,7 +36,7 @@ func (s *server) Join(in game.JoinInput) game.Join {
 		password = in.Rec.Password
 	}
 	j := game.Join{How: "code", CodeLabel: "Invite code", Code: code, LAN: []string{}, Password: password,
-		Public: true, Router: false, Manual: "Your router must allow UPnP for NAT punch-through."}
+		Public: false, Router: false, Manual: "Your router must allow UPnP for NAT punch-through."}
 	if code == "" {
 		j.Steps = []string{
 			"Start the server once: its invite code shows here, and stays the same after that.",

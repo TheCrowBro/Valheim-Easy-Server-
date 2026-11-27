@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -25,7 +26,7 @@ func TestJoin(t *testing.T) {
 	sv := defaultSaved("W")
 
 	j := s.Join(game.JoinInput{Saved: sv})
-	if j.How != "code" || j.CodeLabel != "Invite code" || j.Code != "" || j.Router || !j.Public || len(j.Steps) == 0 || j.Manual == "" || j.LAN == nil {
+	if j.How != "code" || j.CodeLabel != "Invite code" || j.Code != "" || j.Router || j.Public || len(j.Steps) == 0 || j.Manual == "" || j.LAN == nil {
 		t.Errorf("never started: %+v", j)
 	}
 
@@ -96,19 +97,25 @@ func TestValidate(t *testing.T) {
 // The stop: one Ctrl+C, never sent again (Unreal takes a second one as
 // "force quit"), waiting long enough for a world that is still loading.
 // The Windows server gets it as a call that falls back to closing its
-// window; that path only runs on Windows (CI).
+// window (only Windows CI runs that path); elsewhere, and for the
+// stand-in on every system, it is the plain interrupt.
 func TestStop(t *testing.T) {
 	s := Game{}.New(testEnv(t)).(*server)
 	steps := s.Stop(game.Record{PID: 1})
 	if len(steps) != 1 || steps[0].Wait != stopWait || steps[0].Resend != 0 {
 		t.Fatalf("steps %+v", steps)
 	}
-	if steps[0].Kind != "interrupt" {
-		t.Errorf("on %s the step is %q", "this system", steps[0].Kind)
+	if runtime.GOOS == "windows" {
+		if steps[0].Kind != "call" || steps[0].Call == nil {
+			t.Errorf("on Windows the step is %q (call set: %v), want a call", steps[0].Kind, steps[0].Call != nil)
+		}
+	} else if steps[0].Kind != "interrupt" || steps[0].Call != nil {
+		t.Errorf("on %s the step is %q, want the interrupt", runtime.GOOS, steps[0].Kind)
 	}
 	s.env.Fake = &game.Fake{}
-	if steps := s.Stop(game.Record{}); steps[0].Kind != "interrupt" {
-		t.Errorf("fake mode: %q", steps[0].Kind)
+	steps = s.Stop(game.Record{})
+	if len(steps) != 1 || steps[0].Kind != "interrupt" || steps[0].Wait != stopWait || steps[0].Resend != 0 {
+		t.Errorf("fake mode: %+v", steps)
 	}
 }
 
@@ -185,9 +192,10 @@ type installerFunc func() error
 
 func (f installerFunc) Install(context.Context, bool, func(game.Progress)) error { return f() }
 
-// Worlds: named from State first, else WorldName, else the id; a world
-// the server has only in its backups is still one; the server's loaded
-// world isn't copied while it runs.
+// Worlds: named from State first, else WorldName, else a name made from
+// it and the id, never the id alone, so every world listed can be
+// started; a world the server has only in its backups is still one; the
+// server's loaded world isn't copied while it runs.
 func TestWorlds(t *testing.T) {
 	notRunning(t)
 	s := installed(t, "ServerDescription-publisher-example.json")
@@ -200,16 +208,32 @@ func TestWorlds(t *testing.T) {
 	os.RemoveAll(filepath.Join(s.savesDir(), liveRoot, "0.10.0", worldsFolder, d))
 	// A live folder with nothing in it isn't a world.
 	os.MkdirAll(filepath.Join(s.savesDir(), liveRoot, "0.10.0", worldsFolder, "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"), 0o755)
+	// Another world with the server's default WorldName, one whose name
+	// starts with a dash (which NameProblem refuses), and two with the same
+	// name as long as a name can be.
+	e, f := "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE", "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+	g1, g2 := strings.Repeat("1", 32), strings.Repeat("2", 32)
+	long := strings.Repeat("Sea", 13) + "s"
+	makeWorld(t, s, e, "The Archipelago")
+	makeWorld(t, s, f, "-Pirates")
+	makeWorld(t, s, g1, long)
+	makeWorld(t, s, g2, long)
 	s.store.Save(func(sv *game.Saved) error {
 		*sv = defaultSaved("Home")
 		sv.State[statePrefix+b] = "Home"
 		return nil
 	})
 	got := worldList(t, s)
-	want := []string{"Home", "The Archipelago", c, d}
+	want := []string{"Home", "The Archipelago", "World BBBBBBBB", "World CCCCCCCC",
+		"The Archipelago (EEEEEEEE)", "World FFFFFFFF", long, long[:29] + " (22222222)"}
 	slices.Sort(want)
 	if !slices.Equal(got, want) {
 		t.Errorf("worlds %q, want %q", got, want)
+	}
+	for _, name := range got {
+		if errs := s.Validate(s.store.Get(), name); errs["world"] != "" {
+			t.Errorf("the world listed as %q can't be started: %s", name, errs["world"])
+		}
 	}
 	if w, err := s.Worlds().Get("Home"); err != nil || w.Size == 0 {
 		t.Errorf("Get: %+v %v", w, err)
@@ -249,9 +273,27 @@ func TestWorlds(t *testing.T) {
 	}
 }
 
+// A world whose every other name the owner has given to other worlds is
+// still listed under one that can be started.
+func TestNamedWhenEveryNameIsTaken(t *testing.T) {
+	s := Game{}.New(testEnv(t)).(*server)
+	y := strings.Repeat("9", 32)
+	st := game.Values{}
+	worlds := map[string]*found{y: {id: y, name: "The Archipelago", live: true}}
+	for i, n := range fallbackNames(y, "The Archipelago") {
+		id := strings.Repeat(string(rune('A'+i)), 32)
+		worlds[id] = &found{id: id, live: true}
+		st[statePrefix+id] = n
+	}
+	if got := s.worlds.named(st, worlds, "")[y]; got != "World 99999999 2" {
+		t.Errorf("named %q", got)
+	}
+}
+
 // The stand-in's lists of accounts alone (no account lines) keep who is
 // on right through gametest, and a new world the server makes under an
-// id of its own keeps the owner's name.
+// id of its own keeps the owner's name, also once another new world is
+// made straight after it.
 func TestStandInOptions(t *testing.T) {
 	fake := gametest.BuildFakeserver(t)
 	s := gametest.Start(t, Game{}, gametest.Options{Fake: fake, World: "First"})
@@ -270,28 +312,45 @@ func TestStandInOptions(t *testing.T) {
 	}
 	s.Stop()
 
-	// A second world: the stand-in makes it under its own id.
-	srv.store.Save(func(sv *game.Saved) error { sv.World = "Second"; return nil })
-	plan, err := srv.Plan(t.Context(), game.PlanRequest{World: "Second", New: !srv.Worlds().Exists("Second"), Saved: srv.store.Get()})
-	if err != nil {
-		t.Fatal(err)
+	// A second world, then a third straight after: the stand-in makes each
+	// under an id of its own, as S15 #70 says the real server does.
+	start := func(world string) string {
+		t.Helper()
+		srv.store.Save(func(sv *game.Saved) error { sv.World = world; return nil })
+		plan, err := srv.Plan(t.Context(), game.PlanRequest{World: world, New: !srv.Worlds().Exists(world), Saved: srv.store.Get()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := runOnce(t, plan); err != nil {
+			t.Fatal(err)
+		}
+		d, _ := readDescription(srv.descriptionPath())
+		if d.str(keyWorld) == extraString(plan.Record, "worldId") && plan.ReadyWait == readyWaitNew {
+			t.Errorf("the stand-in didn't make %s under an id of its own", world)
+		}
+		return strings.ToUpper(d.str(keyWorld))
 	}
-	planned := extraString(plan.Record, "worldId")
-	if err := runOnce(t, plan); err != nil {
-		t.Fatal(err)
+	second := start("Second")
+	if got := worldList(t, srv); !slices.Equal(got, []string{"First", "Second"}) {
+		t.Fatalf("worlds %q", got)
 	}
-	if !srv.Worlds().Exists("Second") || !srv.Worlds().Exists("First") {
-		t.Fatalf("worlds %q", worldList(t, srv))
+	third := start("Third")
+	if got := worldList(t, srv); !slices.Equal(got, []string{"First", "Second", "Third"}) {
+		t.Fatalf("worlds %q", got)
 	}
-	d, _ := readDescription(srv.descriptionPath())
-	if d.str(keyWorld) == planned {
-		t.Errorf("the stand-in didn't use an id of its own")
+	if st := srv.store.Get().State; st[statePrefix+second] != "Second" {
+		t.Errorf("the second world's name wasn't kept: State %v", st)
 	}
-	if _, err := srv.Plan(t.Context(), game.PlanRequest{World: "Second", Saved: srv.store.Get()}); err != nil {
-		t.Fatal(err)
+	// Picking the second world again starts the one played on.
+	if got := start("Second"); got != second {
+		t.Errorf("the second world started as %s, want %s", got, second)
 	}
-	if st := srv.store.Get().State; st[statePrefix+strings.ToUpper(d.str(keyWorld))] != "Second" {
+	st := srv.store.Get().State
+	if st[statePrefix+second] != "Second" || st[statePrefix+third] != "Third" || st[statePlanned] != "" {
 		t.Errorf("State %v", st)
+	}
+	if got := worldList(t, srv); !slices.Equal(got, []string{"First", "Second", "Third"}) {
+		t.Errorf("worlds at the end %q", got)
 	}
 }
 

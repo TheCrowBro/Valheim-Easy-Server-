@@ -178,27 +178,35 @@ func (s *server) Plan(ctx context.Context, req game.PlanRequest) (game.Plan, err
 // make the world at this start.
 //
 // A new world is the first start's own world when this plan ran that
-// start (the server made it for nobody else), else the id an earlier start
-// gave it (one that stopped before the server made the world), else a new
-// id: the server makes a world when the one its file names isn't there
-// (FACTS.md, "Worlds").
+// start (the server made it for nobody else, so it is used even when an
+// earlier start gave the name an id), else the id an earlier start gave it
+// (one that stopped before the server made the world), else a new id: the
+// server makes a world when the one its file names isn't there (FACTS.md,
+// "Worlds").
 func (s *server) worldFor(isNew bool, world string, d *description, madeFirst bool) (string, bool, error) {
 	worlds, err := s.worlds.scan()
 	if err != nil {
 		return "", false, fmt.Errorf("couldn't read Windrose's saves folder: %w", err)
 	}
-	st := s.store.Get().State
 	current := strings.ToUpper(d.str(keyWorld))
-	names := named(st, worlds, current)
+	if !madeFirst {
+		if err := s.keepServerMadeName(worlds, current); err != nil {
+			return "", false, fmt.Errorf("couldn't keep the name of the last new world: %w", err)
+		}
+	}
+	st := s.store.Get().State
+	names := s.worlds.named(st, worlds, current)
 	known := stateNames(st)
 	for id, n := range names {
 		if n != world {
 			continue
 		}
 		if known[id] != n {
-			// Named by the rule for a new world the server made under its
-			// own id (named), or by its WorldName: keep that name, so the
-			// world stays the same one whatever happens to the file.
+			// Named by its WorldName or a name made from it
+			// (fallbackNames), or in a plan whose first start just made
+			// the file, by the rule for a new world the server made under
+			// its own id (named): keep that name, so the world stays the
+			// same one whatever happens to the file or to other worlds.
 			err := s.store.Save(func(sv *game.Saved) error {
 				if sv.State == nil {
 					sv.State = game.Values{}
@@ -219,15 +227,15 @@ func (s *server) worldFor(isNew bool, world string, d *description, madeFirst bo
 	if !isNew {
 		return "", false, fmt.Errorf("The world %q isn't in Windrose's saves folder any more. Restore one of its backups on the Worlds page, or make a new world.", world)
 	}
-	id := ""
-	for sid, n := range known {
-		if n == world && worlds[sid] == nil {
-			id = sid
-		}
-	}
-	made := true
-	if id == "" && madeFirst && current != "" && worlds[current] != nil && known[current] == "" {
+	id, made := "", true
+	if madeFirst && current != "" && worlds[current] != nil && known[current] == "" {
 		id, made = current, false
+	} else {
+		for sid, n := range known {
+			if n == world && worlds[sid] == nil {
+				id = sid
+			}
+		}
 	}
 	if id == "" {
 		id = newWorldID()
@@ -244,6 +252,38 @@ func (s *server) worldFor(isNew bool, world string, d *description, madeFirst bo
 		return "", false, fmt.Errorf("couldn't keep the new world's name: %w", err)
 	}
 	return id, made, nil
+}
+
+// keepServerMadeName keeps, for good, the name of a new world the server
+// made under an id of its own at the last start (madeUnderOwnID). It runs
+// before the plan looks at the world it starts, whichever that is: named
+// works the name out only while State's "planned" is that world's, and a
+// plan for another new world moves "planned" on. The world would then be
+// listed under its WorldName, and its name would be left on the planned
+// id, which isn't on disk: picking that name again would have the server
+// make yet another, empty, world.
+//
+// A plan whose first start has just made the settings file skips this:
+// the file then selects that start's own world, not one an earlier plan
+// planned.
+func (s *server) keepServerMadeName(worlds map[string]*found, current string) error {
+	if madeUnderOwnID(s.store.Get().State, worlds, current) == "" {
+		return nil
+	}
+	return s.store.Save(func(sv *game.Saved) error {
+		p := madeUnderOwnID(sv.State, worlds, current)
+		if p == "" {
+			return nil
+		}
+		sv.State[statePrefix+current] = stateNames(sv.State)[p]
+		for k := range sv.State {
+			if strings.EqualFold(k, statePrefix+p) {
+				delete(sv.State, k)
+			}
+		}
+		delete(sv.State, statePlanned)
+		return nil
+	})
 }
 
 // setLogAside renames the last run's R5.log the way the server itself does

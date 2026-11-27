@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -45,8 +46,8 @@ import (
 //
 // The names the app shows are kept in the instance's State, as
 // "world.<id>" = name. A world without one there (the owner's own, made
-// before the app) is listed under its WorldName, or its id when that
-// name is taken or can't be a file name.
+// before the app) is listed under its WorldName, or a name made from it
+// and its id when that one is taken or can't be used (fallbackNames).
 const (
 	statePrefix  = "world."
 	maxWorldName = 40
@@ -201,17 +202,35 @@ func stateNames(st game.Values) map[string]string {
 	return out
 }
 
-// named is the worlds on disk with the names the app shows, by id.
+// madeUnderOwnID is the id the latest new world was planned under, when
+// the server made that world under an id of its own instead and wrote its
+// id into ServerDescription.json (FACTS.md, "Worlds"): the planned id
+// isn't on disk, while the world the file selects (current, upper case,
+// "" when unknown) is there and has none of the app's names. It is ""
+// otherwise.
+//
+// Every plan gives the world it starts a name in State (worldFor), so the
+// selected world can only be without one when something other than the
+// app chose it since: the server, at the start that made the new world.
+func madeUnderOwnID(st game.Values, worlds map[string]*found, current string) string {
+	known := stateNames(st)
+	p := strings.ToUpper(st[statePlanned])
+	if p != "" && known[p] != "" && worlds[p] == nil && current != "" && worlds[current] != nil && known[current] == "" {
+		return p
+	}
+	return ""
+}
+
+// named is the worlds on disk with the names the app shows, by id. Each
+// name is one Validate accepts, so every world listed can be started.
 //
 // current is the world ServerDescription.json selects (upper case, "" when
-// unknown). When the latest new world's id isn't on disk but the selected
-// world is there and has no name, the server made the new world under an
-// id of its own and wrote it into the file: it is that new world.
-func named(st game.Values, worlds map[string]*found, current string) map[string]string {
+// unknown): a new world the server made under an id of its own has the
+// name the owner gave it (madeUnderOwnID).
+func (w *worldStore) named(st game.Values, worlds map[string]*found, current string) map[string]string {
 	known := stateNames(st)
-	if planned := strings.ToUpper(st[statePlanned]); planned != "" && worlds[planned] == nil &&
-		current != "" && worlds[current] != nil && known[current] == "" && known[planned] != "" {
-		known[current] = known[planned]
+	if p := madeUnderOwnID(st, worlds, current); p != "" {
+		known[current] = known[p]
 	}
 	ids := make([]string, 0, len(worlds))
 	for id := range worlds {
@@ -237,19 +256,44 @@ func named(st game.Values, worlds map[string]*found, current string) map[string]
 		if _, ok := out[id]; ok {
 			continue
 		}
-		if n := worlds[id].name; validName(n) && take(id, n) {
-			continue
+		for _, n := range fallbackNames(id, worlds[id].name) {
+			if w.NameProblem(n) == "" && take(id, n) {
+				break
+			}
 		}
-		take(id, worlds[id].id)
+		// Only when the owner has given other worlds all of those names.
+		for i := 2; out[id] == ""; i++ {
+			take(id, fmt.Sprintf("World %s %d", id[:8], i))
+		}
 	}
 	return out
 }
 
-// validName says whether a WorldName can be shown as an app world's name:
-// the world's backups are kept in a folder of that name.
-func validName(n string) bool {
-	return n != "" && len([]rune(n)) <= maxWorldName && lineSafe(n) && !strings.ContainsAny(n, `\/:*?"<>|`) &&
-		strings.TrimSpace(n) == n && !strings.HasSuffix(n, ".") && !reWorldID.MatchString(n)
+// fallbackNames are the names a world without one of the app's own can be
+// listed under, the first free one that NameProblem accepts. Never its id
+// alone: a name like an id is refused for a start (NameProblem), and the
+// world could then never be picked.
+//
+//   - Its WorldName.
+//   - That name with the start of the world's id, as the server's default
+//     WorldName is the same for every world: "The Archipelago (1A2B3C4D)".
+//   - "World" with the start of its id, for a WorldName the app can't use
+//     (its backups are kept in a folder of that name, so "Bad/Name" can't
+//     be one), then with the whole id.
+//
+// id is the world's id in upper case.
+func fallbackNames(id, worldName string) []string {
+	short := id[:8]
+	var out []string
+	if worldName != "" {
+		suffix := " (" + short + ")"
+		base := []rune(worldName)
+		if max := maxWorldName - len(suffix); len(base) > max {
+			base = base[:max]
+		}
+		out = append(out, worldName, strings.TrimRight(string(base), " .")+suffix)
+	}
+	return append(out, "World "+short, "World "+id)
 }
 
 // current is the world ServerDescription.json selects, in upper case.
@@ -267,7 +311,7 @@ func (w *worldStore) view() (map[string]*found, map[string]string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return worlds, named(w.s.store.Get().State, worlds, w.current()), nil
+	return worlds, w.named(w.s.store.Get().State, worlds, w.current()), nil
 }
 
 // list is the worlds on disk, under the names the app shows.
@@ -315,7 +359,7 @@ func (w *worldStore) files(name string) ([]string, error) {
 		return nil, err
 	}
 	current := w.current()
-	for id, n := range named(w.s.store.Get().State, worlds, current) {
+	for id, n := range w.named(w.s.store.Get().State, worlds, current) {
 		if n != name {
 			continue
 		}

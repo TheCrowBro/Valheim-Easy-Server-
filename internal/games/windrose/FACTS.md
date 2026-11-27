@@ -274,8 +274,11 @@ the stage goes to ready (spec 8.2).
   layout on Windows CI (the check logs the saves folder).
 - Names: the app keeps its own names in State (`world.<id>`), as the
   server's default WorldName is the same for every world; a world without
-  one shows its WorldName, else its id. Renaming isn't offered: the
-  publisher says to change WorldDescription.json only with the shipped
+  one shows its WorldName, else that name with the start of its id ("The
+  Archipelago (1A2B3C4D)"), else "World 1A2B3C4D". Never the id alone: a
+  name like an id is refused for a start, so such a world couldn't be
+  picked. Renaming isn't offered: the publisher says to change
+  WorldDescription.json only with the shipped
   `R5WorldDescriptionUpdater.exe` while stopped (S3), and the server
   rewrites the file from its database at every start (S15 #69, #74).
 - A new world: the first start makes the first one (S3). For another, the
@@ -283,8 +286,10 @@ the stage goes to ready (spec 8.2).
   fresh world and writes its own id into the file; S15 #41 (0.10.0.3) shows
   a server stopping with `Cannot load island` for an id it couldn't load.
   The adapter handles both the server using the app's id and the server
-  using its own (State's `planned`); verify which on Windows CI (the check
-  logs it).
+  using its own (State's `planned`): the next plan, whichever world it is
+  for, keeps the owner's name on the server's id for good, before a plan
+  for another new world moves `planned` on. Verify which the server does
+  on Windows CI (the check logs it).
 - Importing the owner's own worlds isn't offered: the publisher's transfer
   steps need the database and backups folders by hand (S4), and a world's
   link to the online service depends on the server that owns it (S12).

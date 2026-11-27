@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -190,6 +191,92 @@ func TestPlanNewWorldServerID(t *testing.T) {
 	}
 	if d, _ := readDescription(s.descriptionPath()); d.str(keyWorld) != own {
 		t.Errorf("WorldIslandId %q", d.str(keyWorld))
+	}
+}
+
+// The server made a new world under an id of its own, and the next plan is
+// for yet another new world: the first keeps its name for good, rather
+// than being listed under its WorldName once "planned" moves on, and
+// picking it again starts the world friends played on, not a fresh one.
+func TestPlanNewWorldServerIDThenAnother(t *testing.T) {
+	fixedIDs(t, newID, "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")
+	s, _, err := planned(t, nil, game.PlanRequest{World: "Second Sea", New: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// What the server does at a start for a new world: it makes it under
+	// an id of its own and writes that into the file.
+	serverMakes := func(own string) {
+		t.Helper()
+		makeWorld(t, s, own, "The Archipelago")
+		d, _ := readDescription(s.descriptionPath())
+		d.pers.set(keyWorld, own)
+		d.write(s.descriptionPath())
+	}
+	second, third := "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+	serverMakes(second)
+
+	if _, err := s.Plan(t.Context(), game.PlanRequest{World: "Third Sea", New: !s.Worlds().Exists("Third Sea"), Saved: s.store.Get()}); err != nil {
+		t.Fatal(err)
+	}
+	st := s.store.Get().State
+	if st[statePrefix+second] != "Second Sea" || st[statePrefix+newID] != "" || st[statePlanned] != "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF" {
+		t.Errorf("after planning the third world, State %v", st)
+	}
+	if got := worldList(t, s); !slices.Equal(got, []string{"Crow's Nest", "Second Sea"}) {
+		t.Errorf("worlds %q", got)
+	}
+	serverMakes(third)
+	if got := worldList(t, s); !slices.Equal(got, []string{"Crow's Nest", "Second Sea", "Third Sea"}) {
+		t.Errorf("worlds %q", got)
+	}
+
+	if !s.Worlds().Exists("Second Sea") {
+		t.Fatal("the second world isn't there any more")
+	}
+	if _, err := s.Plan(t.Context(), game.PlanRequest{World: "Second Sea", Saved: s.store.Get()}); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := readDescription(s.descriptionPath()); d.str(keyWorld) != second {
+		t.Errorf("WorldIslandId %q, want the second world's %s", d.str(keyWorld), second)
+	}
+	st = s.store.Get().State
+	for k, v := range st {
+		if id, ok := strings.CutPrefix(k, statePrefix); ok && id != exampleWorld && id != second && id != third {
+			t.Errorf("a name left on an id that isn't on disk: %s = %q", k, v)
+		}
+	}
+	if st[statePrefix+third] != "Third Sea" || st[statePlanned] != "" {
+		t.Errorf("State %v", st)
+	}
+}
+
+// A plan whose first start has just made the settings file uses that
+// start's world for a new world, even when an earlier start gave the
+// name an id the server never made a world under.
+func TestPlanFirstStartWorldWins(t *testing.T) {
+	fixedIDs(t, newID)
+	s := installed(t, "ServerDescription-publisher-example.json")
+	makeWorld(t, s, exampleWorld, "The Archipelago") // the first start's world
+	ghost := "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	s.store.Save(func(sv *game.Saved) error {
+		*sv = defaultSaved("W")
+		sv.State[statePrefix+ghost] = "W"
+		return nil
+	})
+	d, err := readDescription(s.descriptionPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, made, err := s.worldFor(true, "W", d, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != exampleWorld || made {
+		t.Errorf("worldFor = %s, made %v; want the first start's world %s", id, made, exampleWorld)
+	}
+	if st := s.store.Get().State; st[statePrefix+exampleWorld] != "W" || st[statePlanned] != exampleWorld {
+		t.Errorf("State %v", st)
 	}
 }
 
