@@ -3,6 +3,7 @@ package gametest
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"testing"
@@ -75,21 +76,65 @@ func TestInstallProgress(t *testing.T) {
 	}
 }
 
-// flakyProber says the server is down until its third question.
-type flakyProber struct{ asked int }
+// flakyProber says the server is down until its third question, and
+// notes the longest time a question was given.
+type flakyProber struct {
+	asked   int
+	longest time.Duration
+}
 
 func (f *flakyProber) Probe(ctx context.Context, rec game.Record) (game.ProbeResult, error) {
 	f.asked++
+	if d, ok := ctx.Deadline(); !ok {
+		f.longest = time.Hour // no limit at all
+	} else {
+		f.longest = max(f.longest, time.Until(d))
+	}
 	if f.asked < 3 {
 		return game.ProbeResult{}, errors.New("no answer yet")
 	}
 	return game.ProbeResult{Up: true, Count: 0}, nil
 }
 
+// TestTimedOut: a probe that ran out of time is told apart, so the real
+// check's message can say each try gets 3 s.
+func TestTimedOut(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	<-ctx.Done()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	c, err := net.Dial("tcp", l.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	c.SetReadDeadline(time.Now())
+	_, readErr := c.Read(make([]byte, 1))
+	for _, e := range []error{ctx.Err(), fmt.Errorf("rcon: %w", ctx.Err()), fmt.Errorf("query: %w", readErr)} {
+		if !timedOut(e) {
+			t.Errorf("timedOut(%v) = false", e)
+		}
+	}
+	for _, e := range []error{nil, errors.New("connection refused"), context.Canceled} {
+		if timedOut(e) {
+			t.Errorf("timedOut(%v) = true", e)
+		}
+	}
+}
+
 // TestProbeUp: the stand-in gets one try; a real server's probe is asked
 // again until it answers, as its query port may open a little after the
-// log says it's online.
+// log says it's online. Every try, real or not, gets at most the 3 s the
+// contract allows a Probe (spec 2.2), as in the app, so a probe too slow
+// for the app can't pass the real check.
 func TestProbeUp(t *testing.T) {
+	if probeLimit != 3*time.Second {
+		t.Errorf("probeLimit is %v; spec 2.2 allows a Probe 3 s", probeLimit)
+	}
 	once := &flakyProber{}
 	if res, tries, err := probeUp(once, game.Record{}, false); err == nil || res.Up || tries != 1 || once.asked != 1 {
 		t.Errorf("with the stand-in: %+v after %d tries (%v), asked %d times; want one failed try", res, tries, err, once.asked)
@@ -101,5 +146,10 @@ func TestProbeUp(t *testing.T) {
 	}
 	if took := time.Since(start); took > 30*time.Second {
 		t.Errorf("three tries took %v", took)
+	}
+	for _, f := range []*flakyProber{once, again} {
+		if f.longest > probeLimit {
+			t.Errorf("a try was given %v; a Probe may take at most %v", f.longest.Round(time.Millisecond), probeLimit)
+		}
 	}
 }

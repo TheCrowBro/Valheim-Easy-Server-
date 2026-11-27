@@ -70,6 +70,31 @@ func TestDataDirUnset(t *testing.T) {
 	}
 }
 
+// TestDataRoot: DataRoot names the folder DataDir's folders are made in,
+// set or not, so a real check's free-space note measures the drive its
+// install lands on (D: on a Windows runner, not the temporary folder's C:).
+func TestDataRoot(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv(DataEnv, "rel")
+	root := DataRoot()
+	if !filepath.IsAbs(root) {
+		t.Errorf("DataRoot with a relative %s = %q, not an absolute path", DataEnv, root)
+	}
+	if dir := DataDir(t); filepath.Dir(dir) != root {
+		t.Errorf("DataDir = %s, not in DataRoot %s", dir, root)
+	}
+
+	t.Setenv(DataEnv, "")
+	if root, want := DataRoot(), filepath.Clean(os.TempDir()); root != want {
+		t.Errorf("DataRoot without %s = %q; want the temporary folder %q", DataEnv, root, want)
+	}
+	// t.TempDir's folder is two levels down: its own folder for the
+	// test, then a numbered one.
+	if dir := DataDir(t); !strings.HasPrefix(dir, DataRoot()+string(filepath.Separator)) {
+		t.Errorf("DataDir without %s = %s, not under DataRoot %s", DataEnv, dir, DataRoot())
+	}
+}
+
 // TestLeftIn: a folder that couldn't be removed is described by what's in
 // it, at most ten entries.
 func TestLeftIn(t *testing.T) {

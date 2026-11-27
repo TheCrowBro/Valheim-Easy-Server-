@@ -38,13 +38,10 @@ const DataEnv = "EGS_TEST_DATA"
 // collected the same way.
 func DataDir(t testing.TB) string {
 	t.Helper()
-	root := os.Getenv(DataEnv)
-	if root == "" {
+	if os.Getenv(DataEnv) == "" {
 		return t.TempDir()
 	}
-	// Servers are started in folders of their own, so a relative path
-	// would point somewhere else for them.
-	root, err := filepath.Abs(root)
+	root, err := dataRoot()
 	if err != nil {
 		t.Fatalf("gametest: %s=%q: %v", DataEnv, os.Getenv(DataEnv), err)
 	}
@@ -69,6 +66,34 @@ func DataDir(t testing.TB) string {
 		removeFolder(t, dir)
 	})
 	return dir
+}
+
+// DataRoot is the folder DataDir makes data folders in: DataEnv's folder
+// when it is set, otherwise the system's temporary folder, where
+// t.TempDir makes them. A real check that notes the free disk space where
+// its install will land, before the install, measures this folder: on a
+// Windows runner DataEnv's folder is on D:, while the temporary folder is
+// on C:, which has much less room.
+func DataRoot() string {
+	root, err := dataRoot()
+	if err != nil {
+		// Only filepath.Abs failing, which needs the working folder to be
+		// gone; the folder as given is the best answer left.
+		return os.Getenv(DataEnv)
+	}
+	return root
+}
+
+// dataRoot is DataRoot with its error.
+func dataRoot() (string, error) {
+	root := os.Getenv(DataEnv)
+	if root == "" {
+		// Cleaned, as macOS's ends in a slash.
+		return filepath.Clean(os.TempDir()), nil
+	}
+	// Servers are started in folders of their own, so a relative path
+	// would point somewhere else for them.
+	return filepath.Abs(root)
 }
 
 // removeFolder removes a passed test's data folder. Windows can refuse for

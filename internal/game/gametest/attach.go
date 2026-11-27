@@ -269,7 +269,7 @@ func (a *attachment) probe(ctx context.Context, p game.Prober) {
 			return
 		case <-time.After(wait):
 		}
-		pctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		pctx, cancel := context.WithTimeout(ctx, probeLimit)
 		res, err := p.Probe(pctx, a.rec)
 		cancel()
 		if err != nil {

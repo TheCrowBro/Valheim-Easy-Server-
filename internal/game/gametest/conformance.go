@@ -90,7 +90,13 @@ func Conformance(t *testing.T, g game.Game, o Options) {
 			if tries > 1 {
 				again = fmt.Sprintf(" (asked %d times over %v)", tries, time.Since(asked).Round(time.Second))
 			}
-			t.Errorf("the probe of the running server%s: Up=%v, %v", again, res.Up, err)
+			slow := ""
+			if timedOut(err) {
+				// Say why a probe that would have answered given longer
+				// still fails: the app can't count on giving it longer.
+				slow = fmt.Sprintf(" (each try gets %v, the most a Probe may take, spec 2.2)", probeLimit)
+			}
+			t.Errorf("the probe of the running server%s: Up=%v, %v%s", again, res.Up, err, slow)
 		}
 	}
 	if plan.Console {
@@ -281,7 +287,7 @@ func checkPlayers(t *testing.T, s *Session, steps []scriptStep) {
 			}
 			if p, ok := s.Server().(game.Prober); ok && !probed && !leavesSoon(steps[i+1:], st) {
 				probed = true
-				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), probeLimit)
 				res, err := p.Probe(ctx, s.Record())
 				cancel()
 				switch {
@@ -550,6 +556,14 @@ func probeUp(p game.Prober, rec game.Record, real bool) (game.ProbeResult, int, 
 		}
 		time.Sleep(2 * time.Second)
 	}
+}
+
+// timedOut tells whether err says the probe ran out of time: its context's
+// deadline, or a network wait that timed out (as an RCON or HTTP client
+// reports it), wrapped with %w or not wrapped at all.
+func timedOut(err error) bool {
+	var te interface{ Timeout() bool }
+	return errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &te) && te.Timeout())
 }
 
 // waitFor polls cond until it holds, failing the test after within.
