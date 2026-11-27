@@ -214,8 +214,10 @@ func (s *server) ExitHint(tail []string) string {
 		return "The Enshrouded server refused its settings file (" + find(reConfigError)[1] + "). Check Enshrouded's settings, then start it again."
 	case find(reNoSteam) != nil:
 		return "The Enshrouded server couldn't connect to Steam. Check that this computer is online, then start it again."
-	case find(reLoadFailed) != nil:
+	case find(reLoadFailed) != nil, worldError(find(reWorld), true):
 		return "The Enshrouded server couldn't load the world. Restore one of its backups on the Worlds page, then start it again."
+	case worldError(find(reWorld), false):
+		return "The Enshrouded server's world stopped with an error. Start it again; if it stops again, restore one of the world's backups on the Worlds page."
 	case find(reSaveQuit) != nil || find(reSaveRetry) != nil:
 		// The server gives up after saves fail again and again; with
 		// nobody on, its retries are the only sign of it.
