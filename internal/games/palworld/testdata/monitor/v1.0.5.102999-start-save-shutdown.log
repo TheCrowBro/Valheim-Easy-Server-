@@ -1,0 +1,8 @@
+Setting breakpad minidump AppID = 2394010
+[S_API FAIL] Tried to access Steam interface SteamUser021 before SteamAPI_Init succeeded.
+Game version is v1.0.5.102999
+REST API started on port 8212
+Running Palworld dedicated server on :8211
+[LOG] REST accessed endpoint /v1/api/save OK
+[LOG] REST accessed endpoint /v1/api/shutdown OK
+REST API stopped
