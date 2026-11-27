@@ -22,16 +22,17 @@
 //     Terminated."), then its ports, RCON, settings files, saves, the stop
 //     by RCON and by Ctrl+C, and whether it starts from a folder with a
 //     short "8.3" name. If that first start fails, the check shows the
-//     server's whole log and starts the same install two other ways (the
-//     .bat as Steam runs it; the app's command line with a plain
-//     environment), so one run says where the trouble is, and keeps the
-//     logs in a Test* folder in TEMP for the workflow to upload;
+//     server's whole log and makes the same start again four times, each
+//     changing one thing (the .bat as Steam runs it; a plain environment;
+//     Steam mode off; bare settings files), so one run says where the
+//     trouble is, and keeps the logs in a Test* folder in TEMP for the
+//     workflow to upload;
 //   - "conformance": what every adapter must do, only once "facts" saw the
 //     server online (otherwise it would wait a quarter of an hour for the
 //     same failure).
 //
 // When everything works it takes about 15 minutes; when the server can't
-// start, about 10. It also runs on Linux (SteamCMD there needs the 32-bit
+// start, about 12. It also runs on Linux (SteamCMD there needs the 32-bit
 // C libraries), though Linux isn't a system the app is offered on and has
 // no cell; the .bat is tried on Windows only.
 
@@ -348,16 +349,26 @@ func realFacts(t *testing.T, g sharedGame, sh shared, online *bool) {
 	// Whether the server starts from folders named with short "8.3"
 	// names, as the first real check's were (TEMP on GitHub's runner is
 	// C:\Users\RUNNER~1\…). The app now gives it full names (longPath),
-	// so this only says whether that mattered.
-	if shortServer := shortPath(sh.server); shortServer != sh.server && runtime.GOOS == "windows" {
-		cache := filepath.Join(sh.root, "short-names")
-		os.MkdirAll(cache, 0o755)
-		result := tryStart(t, "the app's command line from folders with short names", sh, plainWorld(t, cache, "EgsShort"),
-			experimentArgs(plan.Args, shortPath(cache), "EgsShort"), shortServer, append(os.Environ(), plan.Env...),
-			programFor(shortServer, runtime.GOOS))
-		t.Logf("FACTS: started from %s with -cachedir=%s, the server %s", shortServer, shortPath(cache), result)
-	} else {
-		t.Logf("FACTS: the check's folder has no short names (%s), so starting from one wasn't tried", sh.server)
+	// so this only says whether that mattered: the app's start again, with
+	// the app's settings files, from the same folders named short.
+	//
+	// The short name is compared with the name spelt in full, not with
+	// sh.server: that is under TEMP, so on the runner it already holds
+	// RUNNER~1, and when Windows makes no short name for the check's own
+	// new folder the two would be equal and the start left out, though
+	// the folders it uses still carry RUNNER~1.
+	if runtime.GOOS == "windows" {
+		if shortServer, longServer := shortPath(sh.server), longPath(sh.server); shortServer != longServer {
+			cache := filepath.Join(sh.root, "short-names")
+			os.MkdirAll(cache, 0o755)
+			p := appWorld(t, s, cache, s.Record().World)
+			result := tryStart(t, "the app's start from folders with short names", sh, p,
+				experimentArgs(plan.Args, shortPath(cache), p), shortServer, append(os.Environ(), plan.Env...),
+				programFor(shortServer, runtime.GOOS))
+			t.Logf("FACTS: started from %s with -cachedir=%s (in full, %s), the server %s", shortServer, shortPath(cache), longServer, result)
+		} else {
+			t.Logf("FACTS: the check's server folder has no short name (%s), so a start from short names wasn't tried", longServer)
+		}
 	}
 }
 
@@ -416,13 +427,21 @@ func gaveUp(path string) string {
 
 // startFailed explains a start that never came online: the server's whole
 // log (without its long list of log settings), what it left in its saves
-// folder, and then, after stopping it, the same install started two other
-// ways, so the run says whether the trouble is in the app's command line,
-// in the computer's environment, or in the server itself.
+// folder, and then, after stopping it, the same start made again four
+// times, each changing one thing, so the run says which of them the
+// trouble is in: the app's way of launching the server, this computer's
+// environment, Steam mode, or the settings files the app writes.
+//
+// Apart from the one thing, each repeats the start that failed: the same
+// install, a new world of the same name (as the first start's was) in a
+// data folder of its own, with the settings files the app writes from
+// the same settings (appWorld), on new free ports. Changing two things at
+// once would leave a start that comes online pointing at either.
 func startFailed(t *testing.T, s *gametest.Session, sh shared) {
 	t.Helper()
 	plan := s.Plan()
 	saves := s.Env().Dirs.Saves
+	world := s.Record().World
 	showLog(t, "the server's log", plan.LogPath)
 	t.Logf("the saves folder (-cachedir) holds %s", listDir(saves, 2))
 	// The server's own copy of its console (FACTS.md); the part's cleanup
@@ -438,35 +457,78 @@ func startFailed(t *testing.T, s *gametest.Session, sh shared) {
 			time.Sleep(200 * time.Millisecond)
 		}
 	}
+	// The environment the failed start had: gametest's, which is the
+	// manager's (this computer's, with the plan's on top).
+	appEnv := append(os.Environ(), plan.Env...)
+	folder := func(name string) string {
+		cache := filepath.Join(sh.root, name)
+		os.MkdirAll(cache, 0o755)
+		return cache
+	}
 
-	// 1. As Steam starts it: StartServer64.bat itself (a copy that passes
-	// on all its arguments and asks for less memory than its 16 GB), by
-	// its full name, so its own folder (%~dp0) has no short names either.
+	// 1. Steam's way of launching it instead of the app's:
+	// StartServer64.bat itself through cmd.exe (a copy that passes on all
+	// its arguments and asks for the app's memory rather than its 16 GB),
+	// so the server gets the .bat's own Java options and this computer's
+	// environment as it is, without the app's options or its emptied Java
+	// option variables. The .bat is given by its full name, so its own
+	// folder (%~dp0) has no short names either.
 	if runtime.GOOS == "windows" {
 		if bat, err := batCopy(sh.server); err != nil {
 			t.Logf("FACTS: the .bat couldn't be tried: %v", err)
 		} else {
 			bat = longPath(bat)
-			cache := filepath.Join(sh.root, "bat")
-			os.MkdirAll(cache, 0o755)
-			p := plainWorld(t, cache, "EgsBat")
-			args := []string{"/c", bat, "-cachedir=" + longPath(cache), "-servername", "EgsBat", "-adminusername", "admin", "-adminpassword", "egscheck1",
+			cache := folder("bat")
+			p := appWorld(t, s, cache, world)
+			args := []string{"/c", bat, "-cachedir=" + longPath(cache), "-servername", world, "-adminusername", adminUser, "-adminpassword", "egscheck1",
 				"-port", strconv.Itoa(p), "-udpport", strconv.Itoa(p + 1)}
 			result := tryStart(t, "StartServer64.bat, as Steam runs it", sh, p, args, longPath(sh.server), os.Environ(), "cmd.exe")
-			t.Logf("FACTS: through the .bat (cmd.exe /c %s) the server %s", strings.Join(args[1:], " "), result)
+			t.Logf("FACTS: through the .bat (cmd.exe /c %s), with the app's settings files, the server %s", strings.Join(args[1:], " "), result)
 			os.Remove(bat)
 		}
 	}
-	// 2. The app's own command line, with only Windows' own folders on
-	// PATH and no Java settings from the environment (GitHub's runner
-	// has many programs and their libraries on PATH).
-	cache := filepath.Join(sh.root, "plain")
-	os.MkdirAll(cache, 0o755)
-	result := tryStart(t, "the app's command line with a plain environment", sh, plainWorld(t, cache, "EgsPlain"),
-		experimentArgs(plan.Args, longPath(cache), "EgsPlain"), plan.Dir, append(plainEnv(), plan.Env...), "")
-	t.Logf("FACTS: with the app's command line and a plain environment the server %s", result)
+
+	// 2. A plain environment: only Windows' own folders on PATH and no
+	// Java settings from the environment (GitHub's runner has many
+	// programs and their libraries on PATH).
+	cache := folder("plain")
+	p := appWorld(t, s, cache, world)
+	result := tryStart(t, "the app's start with a plain environment", sh, p,
+		experimentArgs(plan.Args, longPath(cache), p), plan.Dir, append(plainEnv(), plan.Env...), "")
+	t.Logf("FACTS: with a plain environment (otherwise the app's start) the server %s", result)
+
+	// 3. Steam mode off. The app runs the server in Steam mode, as the .bat
+	// does (Steam friends can join only then), but the one published
+	// Build 42 first start whose log is in testdata ran without Steam
+	// ("Loading ZNetNoSteam64...", FACTS.md).
+	if args, ok := swapArg(plan.Args, steamOn, steamOff); !ok {
+		t.Logf("FACTS: the app's command line has no %s, so a start without Steam wasn't tried", steamOn)
+	} else {
+		cache := folder("nosteam")
+		p := appWorld(t, s, cache, world)
+		result := tryStart(t, "the app's start without Steam", sh, p, experimentArgs(args, longPath(cache), p), plan.Dir, appEnv, "")
+		t.Logf("FACTS: with %s (otherwise the app's start) the server %s", steamOff, result)
+	}
+
+	// 4. Bare settings files instead of the app's: an .ini with only the
+	// keys that keep a start from hanging or reaching outside, and no
+	// SandboxVars file, so the server uses its own defaults for the rest
+	// (the second error in the first real check came from the world's
+	// Lua).
+	cache = folder("bare")
+	p = bareWorld(t, cache, world)
+	result = tryStart(t, "the app's start with bare settings files", sh, p,
+		experimentArgs(plan.Args, longPath(cache), p), plan.Dir, appEnv, "")
+	t.Logf("FACTS: with bare settings files (an .ini with UPnP, Public, the ports and RCON off; no SandboxVars; otherwise the app's start) the server %s", result)
 	t.Errorf("the server didn't come online; its log, and how it did when started the other ways, are above")
 }
+
+// Steam mode as the .bat (and so the app) gives it, and the same option
+// with Steam off, as StartServer64_nosteam.bat has it.
+const (
+	steamOn  = "-Dzomboid.steam=1"
+	steamOff = "-Dzomboid.steam=0"
+)
 
 // batCopy writes a copy of StartServer64.bat beside it that passes on all
 // its arguments (%*, where the .bat has "%1 %2") and gives Java 6 GB, as
@@ -482,11 +544,36 @@ func batCopy(serverDir string) (string, error) {
 	return path, os.WriteFile(path, []byte(text), 0o644)
 }
 
-// plainWorld writes the settings file of a world the other ways of
-// starting use, in its own data folder: the app's keys that keep a start
-// from hanging or reaching outside (UPnP off, not public), on two free
-// UDP ports, with RCON off. It returns the game port.
-func plainWorld(t *testing.T, cache, world string) int {
+// appWorld writes, into the data folder cache, the settings files the app
+// writes for a new world from the session's settings: the adapter's own
+// iniSettings and writeSettings, as Plan uses them (with no seed, as the
+// check gives none). Only the ports are new, free ones, and so is the
+// RCON password, which is new at every start anyway. It returns the game
+// port; the direct port is the one after it.
+func appWorld(t *testing.T, s *gametest.Session, cache, world string) int {
+	t.Helper()
+	env := s.Env()
+	env.Dirs.Saves = cache
+	srv := Game{}.New(env).(*server)
+	sv := env.Store.Get()
+	p := freeUDPPair(t)
+	sv.Ports = map[string]int{roleGame: p, roleDirect: p + 1, roleRCON: freeTCPPort(t)}
+	rconPW, err := secret()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.writeSettings(world, srv.iniSettings(sv, rconPW), sv); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// bareWorld writes, into the data folder cache, a world's settings file
+// with only the app's keys that keep a start from hanging or reaching
+// outside (UPnP off, not public), on two free UDP ports, with RCON off,
+// and no SandboxVars file: the server gives every other setting its own
+// default. It returns the game port; the direct port is the one after it.
+func bareWorld(t *testing.T, cache, world string) int {
 	p := freeUDPPair(t)
 	ini := iniSet("", []setting{{"UPnP", "false"}, {"Public", "false"}, {"DefaultPort", strconv.Itoa(p)}, {"UDPPort", strconv.Itoa(p + 1)},
 		{"RCONPassword", ""}}, newline())
@@ -516,25 +603,47 @@ func freeUDPPair(t *testing.T) int {
 	return 0
 }
 
-// experimentArgs is the plan's command line for another world in another
-// data folder, on the ports plainWorld chose (which the settings file
-// gives, so -port and -udpport are left out).
-func experimentArgs(args []string, cache, world string) []string {
-	var out []string
-	for i := 0; i < len(args); i++ {
-		switch a := args[i]; {
+// freeTCPPort is a TCP port that is free, for RCON.
+func freeTCPPort(t *testing.T) int {
+	l, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port
+}
+
+// experimentArgs is the plan's command line args for another start of the
+// same world: its data folder is cache, and its ports the ones that
+// start's settings files were written with (port, and the one after it
+// for -udpport). Everything else is left as it is.
+func experimentArgs(args []string, cache string, port int) []string {
+	out := slices.Clone(args)
+	for i := 0; i < len(out); i++ {
+		switch a := out[i]; {
 		case strings.HasPrefix(a, "-cachedir="):
-			out = append(out, "-cachedir="+cache)
-		case a == "-servername" && i+1 < len(args):
-			out = append(out, a, world)
+			out[i] = "-cachedir=" + cache
+		case a == "-port" && i+1 < len(out):
 			i++
-		case (a == "-port" || a == "-udpport") && i+1 < len(args):
+			out[i] = strconv.Itoa(port)
+		case a == "-udpport" && i+1 < len(out):
 			i++
-		default:
-			out = append(out, a)
+			out[i] = strconv.Itoa(port + 1)
 		}
 	}
 	return out
+}
+
+// swapArg is args with the argument from changed to to, and whether args
+// had it.
+func swapArg(args []string, from, to string) ([]string, bool) {
+	i := slices.Index(args, from)
+	if i < 0 {
+		return args, false
+	}
+	out := slices.Clone(args)
+	out[i] = to
+	return out, true
 }
 
 // plainEnv is this computer's environment with PATH cut down to Windows'
