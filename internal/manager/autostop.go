@@ -105,8 +105,12 @@ func (m *Manager) autoStopTickLocked(now time.Time) {
 		if run == nil {
 			return
 		}
-		if inst.emptySince.IsZero() || inUse(run) || !run.ready {
-			inst.emptySince = now // in use, or not counting yet
+		switch {
+		case inUse(run) || inst.emptySince.IsZero() && run.ready:
+			m.seenInUseLocked(inst, now) // in use, or a ready game whose clock wasn't started
+			return
+		case !run.ready:
+			inst.emptySince = now // not counting yet: it is starting
 			return
 		}
 		at, ok := m.autoStopAtLocked(inst)
@@ -152,23 +156,36 @@ func (m *Manager) autoStopGame(inst *instance, why stopReason) error {
 	}
 	run.autoStopped, run.autoReason, run.autoMinutes = true, why, minutes
 	m.mu.Unlock()
-	undo := func() {
+	// undo takes the marks off a stop that didn't happen and starts the
+	// auto-stop clock again. It leaves the idle clock alone, and so does
+	// the end of the stop job that failed (job, through autoFailed and
+	// onJob): nobody did anything, and a server that won't stop mustn't
+	// keep the computer awake by failing every hour. Going to sleep then
+	// tries to stop it once more, and sleeps anyway if it still won't
+	// (stopForRest), as before auto-stop existed.
+	undo := func(job *Job) {
 		m.mu.Lock()
 		if inst.run == run {
 			run.autoStopped, run.autoReason, run.autoMinutes = false, stopStopped, 0
 			inst.emptySince = m.clock().Now()
+		}
+		if job != nil {
+			if m.life.autoFailed == nil {
+				m.life.autoFailed = map[string]*Job{}
+			}
+			m.life.autoFailed[inst.id] = job
 		}
 		m.mu.Unlock()
 	}
 	err := m.runQuietJob(inst, "stop", "Stopping the server", func(ctx context.Context, j *jobCtl) error {
 		err := m.doStop(ctx, j, inst)
 		if err != nil {
-			undo()
+			undo(j.job)
 		}
 		return err
 	})
 	if err != nil {
-		undo()
+		undo(nil) // no job started: another one runs, and its end restarts both clocks
 	}
 	return err
 }
@@ -203,6 +220,39 @@ func (m *Manager) autoStopActivityLocked(run *serverRun) string {
 	return fmt.Sprintf("%s stopped: nobody played for %s.", name, autoStopText(run.autoMinutes))
 }
 
+// seenInUseLocked restarts the instance's auto-stop clock (emptySince) at
+// now, because the game was just seen in use, and keeps the idle-sleep
+// clock (machineIdleSince) from being behind it.
+//
+// The two clocks must not fight (spec 4.5): with both at 60 minutes, the
+// game has to be stopped by auto-stop first, so the computer sleeps right
+// after with nothing to start again when it wakes. Auto-stop is decided
+// before idle sleep in each tick, so that holds whenever the auto-stop
+// clock started no later than the idle one. But the auto-stop clock also
+// restarts at moments the idle clock doesn't: when the game becomes ready
+// (the idle clock started when its start began, a minute or more before),
+// when the last player leaves (the idle clock last moved at the tick
+// before), when one of its jobs ends (the idle clock moved when it began).
+// Then the idle clock ran out first, up to a few minutes early, and going
+// to sleep stopped the game and kept it to start again on the next wake,
+// though nobody had played it for an hour. So each time the auto-stop
+// clock of a game auto-stop watches restarts, the idle clock moves on to
+// the same moment if it is behind: the computer stays awake at most those
+// few minutes longer, and auto-stop always comes first. A game being
+// stopped by auto-stop or the "still playing?" rule (autoStopped) moves
+// nothing: its stop isn't someone doing something, and neither is one of
+// those stops failing (autoStopGame restarts only the auto-stop clock).
+func (m *Manager) seenInUseLocked(inst *instance, now time.Time) {
+	inst.emptySince = now
+	run := inst.run
+	if run == nil || run.autoStopped || m.autoStopMinutesLocked(inst) <= 0 || !m.presenceKnownLocked(inst) {
+		return // auto-stop doesn't watch it: its clock can't race the idle one
+	}
+	if m.machineIdleSince.Before(now) {
+		m.machineIdleSince = now
+	}
+}
+
 // lifecycleObserver is stream A's observer (hooks.go): auto-stop's clock
 // (emptySince), the resume set and idle sleep. Every method runs with m.mu
 // held and must not block.
@@ -211,13 +261,14 @@ type lifecycleObserver struct{ m *Manager }
 // The auto-stop clock starts again whenever the game is seen in use: it
 // became ready (or was taken over), someone joined or left (they were
 // playing until then), the server counted players, or one of its jobs
-// started or ended.
-func (o lifecycleObserver) onReady(inst *instance) { inst.emptySince = o.m.clock().Now() }
+// started or ended. Each time, the idle clock is kept in step with it
+// (seenInUseLocked).
+func (o lifecycleObserver) onReady(inst *instance) { o.m.seenInUseLocked(inst, o.m.clock().Now()) }
 
 func (o lifecycleObserver) onEvent(inst *instance, ev game.Event) {
 	switch {
 	case ev.Kind == game.KindJoin, ev.Kind == game.KindLeave, ev.Kind == game.KindCount && ev.Count > 0:
-		inst.emptySince = o.m.clock().Now()
+		o.m.seenInUseLocked(inst, o.m.clock().Now())
 	}
 }
 
@@ -227,13 +278,23 @@ func (o lifecycleObserver) onExit(inst *instance, run *serverRun, exit *ExitInfo
 
 func (o lifecycleObserver) onTick(now time.Time) { o.m.autoStopTickLocked(now) }
 
+// onJob: the end of an auto-stop's job whose server didn't stop restarts
+// only the auto-stop clock (see autoStopGame's undo); every other job's
+// start and end is the game seen in use.
 func (o lifecycleObserver) onJob(inst *instance, job *Job) {
-	if inst != nil {
-		inst.emptySince = o.m.clock().Now()
+	if inst == nil {
+		return
 	}
+	m := o.m
+	if failed := m.life.autoFailed[inst.id]; failed != nil && failed == job {
+		delete(m.life.autoFailed, inst.id)
+		inst.emptySince = m.clock().Now()
+		return
+	}
+	m.seenInUseLocked(inst, m.clock().Now())
 }
 
-func (o lifecycleObserver) onTakeover(inst *instance) { inst.emptySince = o.m.clock().Now() }
+func (o lifecycleObserver) onTakeover(inst *instance) { o.m.seenInUseLocked(inst, o.m.clock().Now()) }
 
 // onWake: a Discord request's packet (tagged) means that request starts
 // only its own game, so the resume after waking is called off; a packet

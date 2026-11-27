@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -52,6 +53,8 @@ type resumeRun struct {
 	skip     context.Context
 	skipNow  context.CancelFunc
 	starting bool // it has begun starting the games
+	next     int  // how many of ids it has taken (started, or found it couldn't)
+	held     bool // called off because the computer went to sleep (holdResumeLocked)
 }
 
 // startFromWake starts the game a Discord request's wake packet asks for
@@ -282,15 +285,21 @@ func (m *Manager) runResume(r *resumeRun) {
 	r.starting = true
 	m.resumeSet = nil // taken: going to sleep again records afresh
 	m.mu.Unlock()
-	for _, id := range r.ids {
-		if r.ctx.Err() != nil {
-			return // a Discord request came: the games not started yet stay off
-		}
+	for i, id := range r.ids {
 		inst, err := m.instanceByID(id)
+		m.mu.Lock()
+		if r.ctx.Err() != nil {
+			// Called off: by a Discord request, and the games not started
+			// yet stay off; or by going to sleep, and they stay owed
+			// (holdResumeLocked put them back).
+			m.mu.Unlock()
+			return
+		}
+		r.next = i + 1 // taken: a sleep from now on leaves it to this loop
 		if err != nil {
+			m.mu.Unlock()
 			continue // removed meanwhile
 		}
-		m.mu.Lock()
 		up := inst.run != nil
 		why := m.cantStartLocked(inst)
 		m.mu.Unlock()
@@ -301,6 +310,25 @@ func (m *Manager) runResume(r *resumeRun) {
 			why = m.startGameWith(inst, StartOptions{Source: SourceResume})
 		}
 		if why != nil {
+			// Going to sleep began just as this start was asked for, so it
+			// was refused as busy (its job is the app's): this game and the
+			// ones after it stay owed for the next wake, with no warning.
+			// The sleep job may not have called the resume off yet
+			// (holdResumeLocked), so this puts them back itself.
+			m.mu.Lock()
+			held := r.held || running(m.appJob) && m.appJob.Kind == "hibernate"
+			if held {
+				for _, later := range r.ids[i:] {
+					if !slices.Contains(m.resumeSet, later) {
+						m.resumeSet = append(m.resumeSet, later)
+					}
+				}
+				r.next = len(r.ids)
+			}
+			m.mu.Unlock()
+			if held {
+				return
+			}
 			m.addGameActivity(inst, "warning", "", inst.short()+" wasn't started again after waking: "+resumeWhy(why))
 			continue
 		}
@@ -348,6 +376,34 @@ func (m *Manager) waitStartJob(ctx context.Context, inst *instance) {
 		case <-tick.C:
 		}
 	}
+}
+
+// holdResumeLocked calls off the resume in progress, if any, because the
+// computer is going to sleep (Hibernate) or has slept since the resume
+// began (onWake): the owner pressed Sleep while it waited for the
+// network, say, or closed the lid. Left alone, its timers would carry on
+// after the next wake of any kind (on Windows they count through sleep, on
+// a Mac they pick up where they were), so a wake timer or a Mac's dark
+// wake would start games nobody asked for, and those would then keep the
+// computer awake for their hour; and while it was pending, no wake on
+// purpose would schedule a fresh one. The games it hadn't taken yet stay
+// owed (resumeSet), so the next wake on purpose starts them, after its
+// own wait for the network. A Discord request calls a resume off for good
+// instead (cancelResumeLocked).
+func (m *Manager) holdResumeLocked() {
+	r := m.life.resume
+	if r == nil {
+		return
+	}
+	r.held = true
+	r.cancel()
+	m.life.resume = nil
+	for _, id := range r.ids[r.next:] {
+		if !slices.Contains(m.resumeSet, id) {
+			m.resumeSet = append(m.resumeSet, id)
+		}
+	}
+	m.log.Printf("resume after waking: called off, the computer is resting; %d game(s) stay owed", len(m.resumeSet))
 }
 
 // cancelResumeLocked stops a resume that hasn't started its games yet; the

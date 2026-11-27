@@ -9,6 +9,7 @@ package manager
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -215,7 +216,9 @@ type AddedGame struct {
 // settings pass the game's own checks, the licence is accepted, the ports
 // are picked, and an imported world is copied in. Only then is the game
 // written into servers.json (starred only if the owner ticked "Star it",
-// decided 10.2 Q3) and its install job started.
+// decided 10.2 Q3) and its install job started. The imported world is the
+// one thing written before that, as its name goes into servers.json; if
+// a later step fails, it is taken out again (undoFirstWorld).
 func (m *Manager) AddGame(in AddGameRequest) (AddedGame, error) {
 	g, ok := game.Get(in.Game)
 	if !ok {
@@ -256,10 +259,25 @@ func (m *Manager) AddGame(in AddGameRequest) (AddedGame, error) {
 	}()
 	saved.Ports = ports
 
+	// fail answers a step that went wrong after the import began, taking
+	// back what it wrote. It runs while the ports lock is held, which
+	// keeps a second add of the same game from importing meanwhile.
+	undo := func() {}
+	fail := func(err error) (AddedGame, error) {
+		undo()
+		return AddedGame{}, err
+	}
 	if in.World.Mode == "import" {
-		name, err := m.importFirstWorld(id, srv, in.World)
+		// A game removed earlier keeps its worlds in its folder, so the
+		// folder may be there already (remove.go).
+		root := m.gameDirs(id).Root
+		_, statErr := os.Stat(root)
+		fresh := errors.Is(statErr, fs.ErrNotExist)
+		name := ""
+		undo = func() { m.undoFirstWorld(id, srv, name, fresh) }
+		name, err = m.importFirstWorld(id, srv, in.World)
 		if err != nil {
-			return AddedGame{}, err
+			return fail(err)
 		}
 		saved.World = name
 		saved.Worlds = map[string]game.Values{name: worldDefaults(srv.Schema(), nil, false)}
@@ -269,7 +287,7 @@ func (m *Manager) AddGame(in AddGameRequest) (AddedGame, error) {
 		Worlds: saved.Worlds, Ports: saved.Ports, State: saved.State}
 	inst, err = m.newGameInstance(entry)
 	if err != nil {
-		return AddedGame{}, err
+		return fail(err)
 	}
 	err = m.updateServers(func(f *servers.File) error {
 		if f.Instance(id) != nil {
@@ -281,11 +299,11 @@ func (m *Manager) AddGame(in AddGameRequest) (AddedGame, error) {
 		}
 		return nil
 	})
+	if err != nil {
+		return fail(err) // the deferred unlock lets the next pick go after the undo
+	}
 	unlock() // the ports are written: another pick now sees them
 	unlock = nil
-	if err != nil {
-		return AddedGame{}, err
-	}
 	m.mu.Lock()
 	m.addInstanceLocked(inst)
 	delete(m.life.scratch, id)
@@ -482,6 +500,31 @@ func (m *Manager) importFirstWorld(id string, srv game.Server, w AddWorld) (stri
 		return "", errors.New("Nothing was copied from your own game.")
 	}
 	return placed[0].Name, nil
+}
+
+// undoFirstWorld takes back what importing the first world wrote, when
+// adding the game fails after the import began (the instance can't be
+// made, or servers.json can't be written). Left there, the copy would be
+// imported a second time by a retry, and a games/<id> folder is what
+// rebuilding a lost servers.json (spec 3.4) takes for an added game. So
+// when this add made the game's folder (fresh), all of it goes; else (the
+// worlds of a game removed earlier are there) only the copied world goes,
+// through the game's own Delete, which keeps a backup of it as every
+// delete does. The owner's own game still has the world either way: an
+// import only ever copies.
+func (m *Manager) undoFirstWorld(id string, srv game.Server, name string, fresh bool) {
+	if fresh {
+		if err := os.RemoveAll(m.gameDirs(id).Root); err != nil {
+			m.log.Printf("adding %s failed, and its folder couldn't be removed: %v", id, err)
+		}
+		return
+	}
+	if name == "" {
+		return // nothing was copied: an import that fails puts everything back itself
+	}
+	if err := srv.Worlds().Delete(name); err != nil && !errors.Is(err, worlds.ErrNotFound) {
+		m.log.Printf("adding %s failed, and the world %q copied for it couldn't be removed: %v", id, name, err)
+	}
 }
 
 // showLegacy puts the hidden legacy game back in the panel: everything it

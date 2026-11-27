@@ -66,6 +66,9 @@ func (m *Manager) Hibernate(reason string) error {
 			return &ActionError{Msg: detail, Action: "enable_hibernate"}
 		}
 		m.mu.Lock()
+		// A resume still waiting for the network after the last wake is
+		// called off, and what it would have started stays owed.
+		m.holdResumeLocked()
 		now := m.clock().Now()
 		var running []*instance
 		var owed []string
@@ -505,6 +508,10 @@ func (m *Manager) onWake(gap time.Duration) {
 	m.wakeHold = time.Time{}     // a hold from before it slept doesn't count any more
 	m.net.publicAt = time.Time{} // the address may have changed
 	m.life.wokeAt = m.clock().Now()
+	// A resume from the wake before is still waiting: the computer slept
+	// some other way meanwhile (its lid, its power button). This wake
+	// decides afresh whether to resume (wokenOnPurpose).
+	m.holdResumeLocked()
 	m.mu.Unlock()
 	m.updateAwake()
 	m.log.Printf("woke up after %s", gap.Round(time.Second))
@@ -680,9 +687,12 @@ func (m *Manager) idleDeadlineLocked() time.Time {
 // time. It runs on every sample tick, after auto-stop (onTick), so a game
 // auto-stop stops at T+60 lets the computer sleep right after, not an
 // hour later: neither its stop job nor its exit counts as someone doing
-// something (spec 4.5). A game whose players can't be seen holds the
-// computer awake without moving the clock, so once its own rule turns it
-// off, nothing more holds it.
+// something (spec 4.5). The idle clock is never behind a watched game's
+// auto-stop clock (seenInUseLocked, autostop.go), so with both at the
+// same minutes auto-stop is decided first, never one tick after going to
+// sleep has stopped the game. A game whose players can't be seen holds
+// the computer awake without moving the clock, so once its own rule turns
+// it off, nothing more holds it.
 func (m *Manager) checkIdle(now time.Time) {
 	m.mu.Lock()
 	if !m.settings.IdleHibernate || m.someonePlayingLocked() || len(m.foreign) > 0 {
@@ -756,9 +766,12 @@ type lifeState struct {
 	// Start.
 	clock    lifeClock
 	autoBusy map[string]bool // instances auto-stop has begun stopping
-	wokeAt   time.Time       // when the app last noticed the computer waking up
-	taggedAt time.Time       // when a Discord request's wake packet was last heard
-	resume   *resumeRun      // the resume after waking, waiting or under way; nil when none
+	// autoFailed is, by instance, the stop job of an auto-stop whose
+	// server didn't stop: its end mustn't move the idle clock (onJob).
+	autoFailed map[string]*Job
+	wokeAt     time.Time  // when the app last noticed the computer waking up
+	taggedAt   time.Time  // when a Discord request's wake packet was last heard
+	resume     *resumeRun // the resume after waking, waiting or under way; nil when none
 	// Add a game asks a game not added yet about itself through a server
 	// made only for that (scratch, by game id), and imports its first world
 	// from the list of the owner's own worlds CatalogLocal last showed

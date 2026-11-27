@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -592,40 +593,165 @@ func TestAutoStopAfterMinutes(t *testing.T) {
 	}
 }
 
+// lifeTick is a sample tick's part for auto-stop and idle sleep, exactly
+// as sampleLoop runs it, at the fake clock's time. The tests that need a
+// tick at a given moment run with a sample loop that never ticks by
+// itself (sample: time.Hour) and tick by hand.
+func lifeTick(m *Manager, clk *lifeFakeClock) {
+	at := clk.Now()
+	m.mu.Lock()
+	m.observeLocked(func(o observer) { o.onTick(at) })
+	m.mu.Unlock()
+	m.checkIdle(at)
+}
+
 // The last player leaves at T: the game stops at T+60 and the computer
 // sleeps right after, not an hour later, with nothing to start again when
-// it wakes (spec 4.5).
+// it wakes (spec 4.5). The same for a game nobody joins after its start.
+// The clock goes across T+60 in steps much shorter than a sample tick, so
+// a tick lands wherever the two clocks could disagree: when the auto-stop
+// clock restarted after the idle clock (she left a moment after the last
+// tick; the game became ready, and its start job ended, after the idle
+// clock started with the start), going to sleep came first, stopped the
+// game itself and kept it to start again on the next wake.
 func TestLastPlayerLeavesSleepRightAfter(t *testing.T) {
+	for _, tc := range []struct{ name, script string }{
+		{"the last player leaves", "join:Astrid@0.3,leave:Astrid@1.5"},
+		{"nobody joins", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeUser(t)
+			noNetwork(t)
+			t.Setenv("FAKE_VALHEIM_SCRIPT", tc.script)
+			clk := &lifeFakeClock{}
+			env, _ := setupLife(t, lifeOpts{clock: clk, sample: time.Hour, idle: 60})
+			m := env.m
+			v := m.legacy()
+			install(t, m)
+			if err := m.StartServer(); err != nil {
+				t.Fatal(err)
+			}
+			if job := waitJob(t, m, currentJobID(m)); job.Error != "" {
+				t.Fatalf("start job: %+v", job)
+			}
+			if tc.script != "" {
+				// A tick while she plays, as the sample loop's every 2 s,
+				// and she leaves a second later.
+				waitFor(t, "Astrid to join", 30*time.Second, func() bool { return hasActivity(m, "join", "Astrid") })
+				lifeTick(m, clk)
+				waitFor(t, "Astrid to leave", 30*time.Second, func() bool { return hasActivity(m, "leave", "Astrid") })
+			}
+			m.mu.Lock()
+			from := v.emptySince
+			if m.machineIdleSince.Before(from) {
+				from = m.machineIdleSince
+			}
+			m.mu.Unlock()
+			if from.IsZero() {
+				t.Fatal("the auto-stop clock never started")
+			}
+
+			clk.Advance(from.Add(59 * time.Minute).Sub(clk.Now()))
+			lifeTick(m, clk)
+			if !lifeOnline(m, v) || env.slept.Load()+env.hibernated.Load() != 0 {
+				t.Fatal("stopped or slept before the hour was up")
+			}
+			clk.Advance(time.Minute - 3*time.Second)
+			for {
+				lifeTick(m, clk)
+				m.mu.Lock()
+				stopping := v.run == nil || v.run.autoStopped
+				resting := m.appJob != nil && m.appJob.Kind == "hibernate"
+				m.mu.Unlock()
+				if resting {
+					t.Fatalf("going to sleep came before auto-stop, %s after the clock started", clk.Now().Sub(from))
+				}
+				if stopping {
+					break
+				}
+				if clk.Now().Sub(from) > 61*time.Minute {
+					t.Fatal("no auto-stop a minute after the hour")
+				}
+				clk.Advance(10 * time.Millisecond)
+			}
+			waitFor(t, "auto-stop", 30*time.Second, func() bool { return lifeExit(m, v) != nil })
+			waitFor(t, "the stop job", 10*time.Second, func() bool {
+				m.mu.Lock()
+				defer m.mu.Unlock()
+				return !m.anyJobLocked()
+			})
+			if env.slept.Load()+env.hibernated.Load() != 0 {
+				t.Fatal("slept while the game was being stopped")
+			}
+
+			// The next tick: nothing holds the computer awake any more.
+			clk.Advance(2 * time.Second)
+			lifeTick(m, clk)
+			waitFor(t, "the computer to sleep", 30*time.Second, func() bool { return env.slept.Load()+env.hibernated.Load() == 1 })
+			m.mu.Lock()
+			owed := append([]string(nil), m.resumeSet...)
+			m.mu.Unlock()
+			if len(owed) != 0 {
+				t.Fatalf("resume set = %v, want empty: auto-stop stopped the game", owed)
+			}
+			if !lifeHasText(m, "Valheim stopped: nobody played for an hour.") || !lifeHasText(m, "Nobody has played for 60 minutes.") {
+				t.Fatal("missing the auto-stop or the sleep activity")
+			}
+		})
+	}
+}
+
+// An auto-stop whose server doesn't stop restarts only the auto-stop
+// clock: neither it nor the end of its job is someone doing something, so
+// a server that won't stop doesn't keep the computer awake by failing
+// every hour (going to sleep tries once more, and sleeps anyway). Any
+// other job of the game is it seen in use, and keeps the idle clock from
+// being behind the auto-stop one.
+func TestFailedAutoStopLeavesTheIdleClock(t *testing.T) {
 	fakeUser(t)
 	noNetwork(t)
-	t.Setenv("FAKE_VALHEIM_SCRIPT", "join:Astrid@0.3,leave:Astrid@1.0")
 	clk := &lifeFakeClock{}
-	env, _ := setupLife(t, lifeOpts{clock: clk, idle: 60})
+	env, _ := setupLife(t, lifeOpts{clock: clk, sample: time.Hour, idle: 60})
 	m := env.m
 	v := m.legacy()
 	install(t, m)
 	if err := m.StartServer(); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, "Astrid to come and go", 30*time.Second, func() bool { return hasActivity(m, "leave", "Astrid") })
-	time.Sleep(500 * time.Millisecond) // the ticks after she left
+	if job := waitJob(t, m, currentJobID(m)); job.Error != "" {
+		t.Fatalf("start job: %+v", job)
+	}
 
-	clk.Advance(59 * time.Minute)
-	time.Sleep(time.Second)
-	if !lifeOnline(m, v) || env.slept.Load()+env.hibernated.Load() != 0 {
-		t.Fatal("stopped or slept before the hour was up")
-	}
-	clk.Advance(time.Minute + time.Second) // T+60
-	waitFor(t, "auto-stop", 30*time.Second, func() bool { return lifeExit(m, v) != nil })
-	waitFor(t, "the computer to sleep", 30*time.Second, func() bool { return env.slept.Load()+env.hibernated.Load() == 1 })
+	// The observer's calls, as jobs.go makes them, around a stop job that
+	// autoStopGame's undo marked as failed while it ran.
+	o := lifecycleObserver{m}
 	m.mu.Lock()
-	owed := append([]string(nil), m.resumeSet...)
-	m.mu.Unlock()
-	if len(owed) != 0 {
-		t.Fatalf("resume set = %v, want empty: auto-stop stopped the game", owed)
+	defer m.mu.Unlock()
+	if v.run == nil || !m.presenceKnownLocked(v) {
+		t.Fatal("Valheim isn't running with its players seen")
 	}
-	if !lifeHasText(m, "Valheim stopped: nobody played for an hour.") || !lifeHasText(m, "Nobody has played for 60 minutes.") {
-		t.Fatal("missing the auto-stop or the sleep activity")
+	past := clk.Now().Add(-time.Hour)
+	m.machineIdleSince = past
+	failed := &Job{ID: 1000, Kind: "stop", Title: "Stopping the server"}
+	m.life.autoFailed = map[string]*Job{v.id: failed}
+	clk.Advance(time.Second)
+	ended := time.Now()
+	failed.Finished = &ended
+	o.onJob(v, failed)
+	if !m.machineIdleSince.Equal(past) {
+		t.Fatalf("the end of a failed auto-stop moved the idle clock to %s", m.machineIdleSince)
+	}
+	if v.emptySince.Before(clk.Now().Add(-time.Second)) {
+		t.Fatalf("the auto-stop clock didn't start again: %s", v.emptySince)
+	}
+	if m.life.autoFailed[v.id] != nil {
+		t.Fatal("the failed job is still noted")
+	}
+
+	other := &Job{ID: 1001, Kind: "backup", Title: "Backing up the world", Finished: &ended}
+	o.onJob(v, other)
+	if m.machineIdleSince.Before(v.emptySince) {
+		t.Fatalf("after a backup job: idle clock %s is behind the auto-stop clock %s", m.machineIdleSince, v.emptySince)
 	}
 }
 
@@ -893,6 +1019,125 @@ func TestResumeWaitsForNetwork(t *testing.T) {
 			t.Fatalf("a repeat: %v, jobs %d → %d", err, before, currentJobID(m))
 		}
 	})
+}
+
+// Going to sleep while the resume after the last wake still waits for the
+// network calls it off: its timers would carry on after the next wake of
+// any kind (a wake timer, a Mac's dark wake) and start games nobody asked
+// for. What it would have started stays owed, and the next wake on
+// purpose resumes it afresh. The same when the computer slept some other
+// way (its lid) and the app only notices the wake (spec 4.7).
+func TestSleepHoldsAWaitingResume(t *testing.T) {
+	clk := &lifeFakeClock{}
+	var network atomic.Bool
+	set(t, &gatewayAnswers, func(context.Context) bool { return network.Load() })
+	env, insts := setupLife(t, lifeOpts{clock: clk, sample: time.Hour, demos: []lifeDemo{{id: "demo"}}})
+	m := env.m
+	d := insts["demo"]
+	lifeInstall(t, m, d)
+	owed := func() []string {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return append([]string(nil), m.resumeSet...)
+	}
+	pending := func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return m.life.resume != nil
+	}
+	wake := func() {
+		m.onWake(time.Hour)
+		m.wokenOnPurpose()
+		waitFor(t, "the resume to wait on the clock", 5*time.Second, func() bool { return clk.waiting() > 0 })
+	}
+
+	m.mu.Lock()
+	m.resumeSet = []string{d.id}
+	m.mu.Unlock()
+	wake()
+	if !pending() {
+		t.Fatal("no resume after the wake")
+	}
+	if err := m.Hibernate(""); err != nil {
+		t.Fatal(err)
+	}
+	if job := waitJob(t, m, currentJobID(m)); job.Error != "" {
+		t.Fatalf("sleep job: %+v", job)
+	}
+	if pending() || !slices.Equal(owed(), []string{d.id}) {
+		t.Fatalf("after Sleep: resume pending %v, owed %v; want none pending and %s owed", pending(), owed(), d.id)
+	}
+	// The computer wakes by itself, with the network back: the old resume
+	// would now go ahead, past its wait for the network and the 30 s after.
+	before := currentJobID(m)
+	network.Store(true)
+	for range 3 {
+		clk.Advance(5 * time.Minute)
+		time.Sleep(200 * time.Millisecond)
+	}
+	if currentJobID(m) != before || lifeRuns(m, d) {
+		t.Fatal("a resume called off by going to sleep started the game")
+	}
+
+	// The lid: the app only notices the wake, with a resume still waiting.
+	network.Store(false)
+	wake()
+	m.onWake(time.Hour)
+	if pending() || !slices.Equal(owed(), []string{d.id}) {
+		t.Fatalf("after a sleep the app didn't start: resume pending %v, owed %v", pending(), owed())
+	}
+
+	// The next wake on purpose resumes afresh, once the network is back.
+	// (Fire the called-off resume's timer first, so wake waits for the new
+	// one's.)
+	clk.Advance(networkMax)
+	network.Store(true)
+	wake()
+	clk.Advance(resumeSettle + time.Second)
+	waitFor(t, "Demo online", 30*time.Second, func() bool { return lifeOnline(m, d) })
+	if len(owed()) != 0 {
+		t.Fatalf("still owed after the resume: %v", owed())
+	}
+}
+
+// A resume that comes to a game just as going to sleep begins, before the
+// sleep job has called it off, finds the start refused as busy: that game
+// and the ones after it stay owed for the next wake, with no warning that
+// they weren't started again.
+func TestResumeMeetsSleep(t *testing.T) {
+	noNetwork(t)
+	env, insts := setupLife(t, lifeOpts{sample: time.Hour, demos: []lifeDemo{{id: "demo"}, {id: "other"}}})
+	m := env.m
+	d, o := insts["demo"], insts["other"]
+	lifeInstall(t, m, d)
+	lifeInstall(t, m, o)
+
+	// The sleep job holds the app's slot and hasn't got to the resume yet.
+	resting := &Job{ID: 1000, Kind: "hibernate", Title: "Putting the computer to sleep", Started: time.Now()}
+	m.mu.Lock()
+	m.appJob = resting
+	m.resumeSet = []string{d.id, o.id}
+	m.mu.Unlock()
+	m.resumeNow() // goes at once: no wait for the network
+	waitFor(t, "the resume to end", 10*time.Second, func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return m.life.resume == nil
+	})
+	m.mu.Lock()
+	owed := append([]string(nil), m.resumeSet...)
+	ended := time.Now()
+	resting.Finished = &ended
+	m.mu.Unlock()
+	if !slices.Equal(owed, []string{d.id, o.id}) {
+		t.Fatalf("owed after meeting the sleep = %v, want both", owed)
+	}
+	if lifeHasText(m, "wasn't started again") {
+		t.Fatal("a warning for a game that stays owed")
+	}
+	if lifeRuns(m, d) || lifeRuns(m, o) {
+		t.Fatal("a game started while the computer was going to sleep")
+	}
 }
 
 // The KVM's own Wake-on-LAN button (a packet without a request) starts
@@ -1226,6 +1471,86 @@ func TestRemoveKeepsWorlds(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(d.dirs.Saves, "Demo")); err != nil {
 		t.Fatalf("the world itself is gone: %v", err)
+	}
+}
+
+// An import-mode add that fails after the world was copied takes the copy
+// back: a retry would import it a second time, and a games/<id> folder is
+// what rebuilding a lost servers.json reads as an added game (spec 3.4).
+// A folder that was there before (the worlds a removed game keeps) stays,
+// without the copy.
+func TestFailedAddTakesBackTheImport(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("EGS_DEV_FAKE_SERVERS", "1")
+	own := filepath.Join(home, ".local", "share", "Terraria", "Worlds") // Terraria's own worlds (terraria/worlds.go)
+	switch runtime.GOOS {
+	case "windows":
+		own = filepath.Join(home, "Documents", "My Games", "Terraria", "Worlds")
+	case "darwin":
+		own = filepath.Join(home, "Library", "Application Support", "Terraria", "Worlds")
+	}
+	if err := os.MkdirAll(own, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(own, "Forest.wld"), []byte("a Terraria world"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env := &testEnv{data: t.TempDir()}
+	m := newTestManager(t, env.data, env)
+	root := m.gameDirs("terraria").Root
+	add := func() error {
+		t.Helper()
+		cands, err := m.CatalogLocal("terraria")
+		if err != nil {
+			t.Fatal(err)
+		}
+		i := slices.IndexFunc(cands, func(c worlds.Candidate) bool { return c.Name == "Forest" })
+		if i < 0 {
+			t.Fatalf("the owner's world isn't found: %+v", cands)
+		}
+		_, err = m.AddGame(AddGameRequest{Game: "terraria", ServerName: "Friends", Password: "secret12",
+			World: AddWorld{Mode: "import", Candidate: cands[i].ID}})
+		return err
+	}
+	copied := func() bool {
+		_, err := os.Stat(filepath.Join(root, "saves", "Forest.wld"))
+		return err == nil
+	}
+
+	// Until M3's instance store is here, every add fails after the import.
+	if err := add(); err != nil {
+		if _, serr := os.Stat(root); serr == nil {
+			t.Fatalf("a failed add (%v) left the game's folder", err)
+		}
+	} else if !copied() {
+		t.Fatal("the game was added without its world")
+	}
+	if _, err := os.Stat(filepath.Join(own, "Forest.wld")); err != nil {
+		t.Fatalf("the owner's own world is gone: %v", err)
+	}
+
+	// The worlds of a game removed earlier are kept.
+	m2 := newTestManager(t, t.TempDir(), env)
+	root = m2.gameDirs("terraria").Root
+	kept := filepath.Join(root, "saves", "Old.wld")
+	if err := os.MkdirAll(filepath.Dir(kept), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(kept, []byte("a world kept from before"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m = m2
+	if err := add(); err != nil {
+		if copied() {
+			t.Fatalf("a failed add (%v) left the copied world", err)
+		}
+		if _, serr := os.Stat(kept); serr != nil {
+			t.Fatalf("a failed add removed a world that was there before: %v", serr)
+		}
+	} else if !copied() {
+		t.Fatal("the game was added without its world")
 	}
 }
 
