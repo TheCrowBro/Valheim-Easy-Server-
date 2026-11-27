@@ -198,6 +198,18 @@ func (m *Manager) Records(period string) (records.Summary, error) {
 	return m.recordsBetween(m.legacy(), from, to, now), nil
 }
 
+// RecordsGame works out a game's records for "today", "week" or "all"
+// (GET /api/games/{id}/records). Phase 0' made it with the legacy game's
+// records; stream D makes it work for every game (6.3).
+func (m *Manager) RecordsGame(id, period string) (sum records.Summary, err error) {
+	err = m.legacyOnly(id, func() error {
+		var e error
+		sum, e = m.Records(period)
+		return e
+	})
+	return sum, err
+}
+
 func (m *Manager) recordsBetween(inst *instance, from, to, now time.Time) records.Summary {
 	m.mu.Lock()
 	var events []records.Event

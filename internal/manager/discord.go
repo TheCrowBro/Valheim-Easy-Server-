@@ -45,6 +45,9 @@ const (
 	stopRest
 	stopCrash
 	stopCrashRestart
+	// R3 (spec 6.3); onExit picks them from serverRun.autoReason.
+	stopIdle  // auto-stop: "nobody played for an hour" (A sets it; autoStopText(run.autoMinutes))
+	stopAsked // the "still playing?" rule: its "Turning … off" line is the only stopped post (D)
 )
 
 // announceLocked returns the online message once the running server is
@@ -321,4 +324,88 @@ func (m *Manager) TestDiscord(link string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	return discord.Post(ctx, nil, m.webhookURL(link), text)
+}
+
+// --- R3 (stream D) ------------------------------------------------------------
+//
+// Phase 0' made what follows with its signatures and empty bodies; stream
+// D fills it in (spec 6.3): a channel per game, one queue per webhook link,
+// daily posts per game.
+
+// discordState is stream D's own app-wide state (Manager.disc), guarded by
+// m.mu: the queues by webhook link (each with its own goroutine, 32 posts,
+// order kept per link) and whatever else D needs. D adds its fields here.
+type discordState struct{}
+
+// GameDiscordStatus is a game's "discord" in Status (4.9): whether its
+// online post made it.
+type GameDiscordStatus struct {
+	Posted *time.Time `json:"posted,omitempty"`
+	Error  string     `json:"error,omitempty"`
+}
+
+// discordStatusLocked is the instance's Discord status, or nil when it
+// doesn't post.
+func (m *Manager) discordStatusLocked(inst *instance) *GameDiscordStatus {
+	return nil
+}
+
+// gameLinkLocked is the webhook link a game posts in: its own channel's,
+// else the main channel's (settings.json discordWebhook); "" when it has
+// neither. Every post of a game goes there, and its slash command works
+// only in that channel (6.4).
+func (m *Manager) gameLinkLocked(inst *instance) string {
+	return ""
+}
+
+// GameDiscordSettings is a game's Discord settings on its Settings tab and
+// the Discord page. For the legacy game, On, Stopped, Daily and Password
+// are settings.json's discord, discordStopped, discordDaily and
+// discordPassword (same meanings); its own channel is servers.json's.
+type GameDiscordSettings struct {
+	On       bool   `json:"on"`
+	Webhook  string `json:"webhook"` // "" = the main channel
+	Stopped  bool   `json:"stopped"`
+	Daily    bool   `json:"daily"`
+	Password bool   `json:"password"`
+	GuildOK  bool   `json:"guildOK"` // the channel is in the main channel's Discord server, so its command works there
+}
+
+// GameDiscordChange is what a settings save changes in a game's Discord
+// settings: only the parts that are set.
+type GameDiscordChange struct {
+	On       *bool   `json:"on,omitempty"`
+	Webhook  *string `json:"webhook,omitempty"`
+	Stopped  *bool   `json:"stopped,omitempty"`
+	Daily    *bool   `json:"daily,omitempty"`
+	Password *bool   `json:"password,omitempty"`
+}
+
+// gameDiscordLocked is the instance's Discord settings (M3's GameSettings
+// shows them).
+func (m *Manager) gameDiscordLocked(inst *instance) GameDiscordSettings {
+	return GameDiscordSettings{}
+}
+
+// setGameDiscord saves a change to the instance's Discord settings (M3's
+// UpdateGameSettings calls it, without m.mu).
+func (m *Manager) setGameDiscord(inst *instance, ch GameDiscordChange) error {
+	return errNotYet
+}
+
+// SetMainDiscord saves the main channel (settings.json discordWebhook,
+// checked with discord.Problem; POST /api/discord/main).
+func (m *Manager) SetMainDiscord(link string) error {
+	return errNotYet
+}
+
+// TestGameDiscord posts a test message through link, which doesn't have
+// to be saved yet, worded for the game id ("" for the main channel; POST
+// /api/discord/test with {webhook, game}). The legacy body {webhook} keeps
+// TestDiscord's message.
+func (m *Manager) TestGameDiscord(link, id string) error {
+	if id == "" {
+		return m.TestDiscord(link)
+	}
+	return m.legacyOnly(id, func() error { return m.TestDiscord(link) })
 }

@@ -31,8 +31,21 @@ func errNotInstalled(inst *instance) error {
 // setting is on).
 func (m *Manager) StartServer() error { return m.startGame(m.legacy()) }
 
-// startGame starts an instance's server as a job.
+// startGame starts an instance's server as a job: R2's start, which
+// StartServer (the old route, the tray, start-with-app, the resume and the
+// wake packet) and a crash restart still use. startGameWith (games.go), the
+// R3 path, is the same checks and job with 4.3's memory step between them.
 func (m *Manager) startGame(inst *instance) error {
+	if err := m.startChecks(inst); err != nil {
+		return err
+	}
+	return m.runStartJob(inst, nil)
+}
+
+// startChecks refuses a start that can't work: the server is already
+// running, isn't installed, or its settings need fixing (spec 4.3's steps 1
+// and 2 as R2 has them; M3 adds the rest of step 1).
+func (m *Manager) startChecks(inst *instance) error {
 	m.mu.Lock()
 	running := inst.run != nil
 	installed := m.installedLocked(inst)
@@ -46,7 +59,21 @@ func (m *Manager) startGame(inst *instance) error {
 	case errs != nil:
 		return fieldErrors(errs) // the panel shows these next to the settings
 	}
+	return nil
+}
+
+// runStartJob runs the start as the instance's job "start" (4.3's step 4).
+// first, when not nil, runs inside the job before the server is started,
+// and an error from it ends the job: that is where the memory dialog's
+// "Stop Valheim and start" stops the other game (stream A's
+// memoryInStartJob), so the two never look like separate actions.
+func (m *Manager) runStartJob(inst *instance, first func(context.Context, *jobCtl) error) error {
 	return m.runInstJob(inst, "start", "Starting the server", true, func(ctx context.Context, j *jobCtl) error {
+		if first != nil {
+			if err := first(ctx, j); err != nil {
+				return err
+			}
+		}
 		return m.doStart(ctx, j, inst, "")
 	})
 }
@@ -93,8 +120,9 @@ func (m *Manager) endStartWait(inst *instance) {
 }
 
 // RestartServer stops and starts the legacy game's server again.
-func (m *Manager) RestartServer() error {
-	inst := m.legacy()
+func (m *Manager) RestartServer() error { return m.restartGame(m.legacy()) }
+
+func (m *Manager) restartGame(inst *instance) error {
 	return m.runInstJob(inst, "restart", "Restarting the server", false, func(ctx context.Context, j *jobCtl) error {
 		if err := m.doStop(ctx, j, inst); err != nil {
 			return err
@@ -105,8 +133,9 @@ func (m *Manager) RestartServer() error {
 
 // ForceStop ends the legacy game's server process immediately, without
 // saving.
-func (m *Manager) ForceStop() error {
-	inst := m.legacy()
+func (m *Manager) ForceStop() error { return m.forceStopGame(m.legacy()) }
+
+func (m *Manager) forceStopGame(inst *instance) error {
 	m.mu.Lock()
 	run := inst.run
 	var stopping, forced bool
@@ -138,8 +167,9 @@ func (m *Manager) ForceStop() error {
 
 // InstallServer installs or updates the legacy game's server. repair
 // re-checks all files.
-func (m *Manager) InstallServer(repair bool) error {
-	inst := m.legacy()
+func (m *Manager) InstallServer(repair bool) error { return m.installGame(m.legacy(), repair) }
+
+func (m *Manager) installGame(inst *instance, repair bool) error {
 	m.mu.Lock()
 	running := inst.run != nil
 	installed := m.installedLocked(inst)
@@ -213,6 +243,13 @@ func (m *Manager) doStart(ctx context.Context, j *jobCtl, inst *instance, world 
 	}
 	if err != nil {
 		return actionOf(err)
+	}
+	// The ports check (spec 2.5, stream A's ports.go) for every game but the
+	// legacy one, which keeps today's check inside its Plan.
+	if !inst.legacy {
+		if err := m.checkPorts(inst); err != nil {
+			return err
+		}
 	}
 	j.setCancellable(false)
 	j.step(fmt.Sprintf("Starting the %s server…", inst.short()), -1)
@@ -465,12 +502,13 @@ func (m *Manager) attach(inst *instance, proc *platform.Proc, rec game.Record, a
 // replayer is a Monitor that reads a log back differently while the app
 // catches up with a server it took over (games/valheim's Monitor: a line
 // then counts at its own time when that is earlier). The manager tells it
-// before each line whether it is catching up.
-type replayer interface{ Replaying(on bool) }
+// before each line whether it is catching up. It is the contract's
+// game.Replayer, so every game can offer it.
+type replayer = game.Replayer
 
 // fromLogReader is a Monitor that can read a finished run's log for the
-// records, by the log's own clock.
-type fromLogReader interface{ FromLog() }
+// records, by the log's own clock (game.LogReader).
+type fromLogReader = game.LogReader
 
 // runAfter runs the game's work after launch, then lets the online post go
 // out, with what it made (the mods code) if anything.
@@ -583,7 +621,11 @@ func (m *Manager) onExit(run *serverRun, code int) {
 	noteEventsLocked(run, run.mon.End(now))
 	archived := m.archiveRunLocked(run)
 	inst.run = nil
-	m.machineIdleSince = now
+	// An exit caused by auto-stop or the "still playing?" rule isn't someone
+	// doing something, so the computer may sleep right after it (spec 4.5).
+	if !run.autoStopped {
+		m.machineIdleSince = now
+	}
 	exit := &ExitInfo{At: now, Code: code, Expected: expected, World: run.rec.World,
 		Uptime: now.Sub(run.rec.Launched).Seconds()}
 	autoRestart := false
@@ -611,6 +653,8 @@ func (m *Manager) onExit(run *serverRun, code int) {
 		why = stopCrashRestart
 	case !expected:
 		why = stopCrash
+	case run.autoStopped:
+		why = run.autoReason // stopIdle or stopAsked
 	case job != nil && job.Finished == nil && job.Kind == "restart":
 		why = stopRestart
 	case app != nil && app.Finished == nil && app.Kind == "hibernate":
@@ -621,13 +665,22 @@ func (m *Manager) onExit(run *serverRun, code int) {
 	if post, ok := m.stoppedPostLocked(run, why); ok {
 		m.queueDiscord(post)
 	}
+	// The observers get the run that ended (inst.run is nil now): its ports,
+	// router mappings and why auto-stop stopped it.
+	m.observeLocked(func(o observer) { o.onExit(inst, run, exit) }) // hooks.go
+	// The activity entry says why, as the stopped post does: auto-stop's
+	// text comes from the run (stream A's autostop.go).
+	stopped := "The server stopped."
+	if run.autoStopped {
+		stopped = m.autoStopActivityLocked(run)
+	}
 	m.mu.Unlock()
 
 	run.proc.Close()
 	os.Remove(runtimePath)
 	m.updateAwake() // still awake if it has just woken up
 	if expected {
-		m.addActivity("stopped", "", "The server stopped.")
+		m.addActivity("stopped", "", stopped)
 	} else {
 		m.addActivity("crashed", "", fmt.Sprintf("The server stopped unexpectedly (exit code %d). %s", code, m.exitHintFor(inst)))
 	}
@@ -725,6 +778,9 @@ func (m *Manager) caughtUp(run *serverRun) {
 			m.notePlayerLocked(inst, game.Event{Kind: "join", Time: p.Since, Name: p.Name, Account: p.Account}, time.Time{})
 		}
 	}
+	if inst.run == run {
+		m.observeLocked(func(o observer) { o.onTakeover(inst) }) // hooks.go
+	}
 	// Post the online message if the app that started the server didn't.
 	post, announce := m.announceLocked(run)
 	m.mu.Unlock()
@@ -796,9 +852,11 @@ func (m *Manager) handleEvents(run *serverRun, evs []game.Event, sinceByName map
 		return
 	}
 	noteEventsLocked(run, evs)
+	becameReady := false
 	if !run.ready && (hasKind(evs, "online") || run.state().Ready) {
 		run.ready, run.readyAt = true, time.Now()
 		close(run.readyCh)
+		becameReady = true
 	}
 	post, announce := m.announceLocked(run)
 	replaying := run.replaying
@@ -824,6 +882,14 @@ func (m *Manager) handleEvents(run *serverRun, evs []game.Event, sinceByName map
 					m.keepAwakeUntil = hold
 				}
 			}
+		}
+		// hooks.go: what happened, once the manager has noted it. A run
+		// read back after a takeover gets onTakeover from caughtUp instead.
+		if becameReady {
+			m.observeLocked(func(o observer) { o.onReady(inst) })
+		}
+		for _, ev := range evs {
+			m.observeLocked(func(o observer) { o.onEvent(inst, ev) })
 		}
 	}
 	m.mu.Unlock()

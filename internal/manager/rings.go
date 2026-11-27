@@ -19,6 +19,10 @@ type Activity struct {
 	Kind string    `json:"kind"`
 	Name string    `json:"name,omitempty"`
 	Text string    `json:"text"`
+	// Game is the instance the entry is about (R3, spec 1.3): "" for the
+	// app's own entries and for every entry older builds wrote, which
+	// ignore the key.
+	Game string `json:"game,omitempty"`
 }
 
 // ring is a fixed-size buffer that hands out increasing sequence numbers,

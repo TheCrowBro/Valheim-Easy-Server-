@@ -96,6 +96,11 @@ func (m *Manager) wakeSignal(tag string) {
 	inst := m.legacy()
 	m.mu.Lock()
 	m.machineIdleSince = time.Now() // someone wants to play
+	cause := wakeTagged
+	if tag == "" {
+		cause = wakeUntagged
+	}
+	m.observeLocked(func(o observer) { o.onWake(cause) }) // hooks.go
 	fresh := tag != m.wakeTag
 	if tag == "" {
 		fresh = time.Since(m.wakeStart) > time.Minute
