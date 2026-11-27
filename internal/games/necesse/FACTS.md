@@ -14,6 +14,14 @@ Windows' code page"). The Windows and macOS downloads of the same build
 were fetched with SteamCMD (`+@sSteamCmdForcePlatformType`) and their files
 inspected, not run.
 
+The real-server cells then ran the same build on GitHub's `windows-latest`
+and `macos-15-intel` (macOS 15.7, Intel) runners on 2026-11-27: run
+45921304914 of real-server.yml, `multigame` at f86a110, attempts 1 and 2.
+Their results are under "What the Windows and Mac cells showed" below and
+in the sections they settle. In short: every Necesse check passed on both
+systems; the Mac cell failed only because Go couldn't remove one subtest's
+temporary folder afterwards ("The Mac cell's temporary folder").
+
 Spec section 5.4's "verify" marks are settled in the section that names them
 below ("Settled" headings). Where this file and the spec disagree, the code
 follows this file, and the "Departures from the spec" section lists each case.
@@ -25,7 +33,23 @@ follows this file, and the "Departures from the spec" section lists each case.
   build 24926481. SteamCMD's `+login anonymous +app_update 1169370 validate`
   installed it here (first attempt on a fresh SteamCMD: "ERROR! Failed to
   install app '1169370' (Missing configuration)", the second succeeded;
-  internal/steamcmd already retries).
+  internal/steamcmd already retries). The Windows and Mac runners saw the
+  same first-attempt error on 2026-11-27 now and then, and the retry
+  installed it each time. Steam's totals there: 247,924,686 bytes on
+  Windows, 163,110,641 on the Mac.
+- **SteamCMD on the Mac runner (macOS 15.7) is noisy**: each run printed
+  about 3,800 lines "Assertion Failed: Missing String for EOSType (-N)"
+  (N from 2 to 49, each twice) before it started, plus "PosixFileOpen:
+  RESOLVE_BENEATH unsupported, falling back to plain open()". They are
+  harmless (the install went on and succeeded), but the adapter passes
+  every SteamCMD line to the instance's log (`Installer`), so on a Mac each
+  install, and each start's update check, adds them there. On the Mac,
+  SteamCMD also keeps its own logs in `~/Library/Application
+  Support/Steam/logs`, not in the app's SteamCMD folder. And the Mac cells
+  that ran SteamCMD (Necesse's, both attempts, one Finder per subtest, and
+  Valheim's first attempt) ended with Finder processes that GitHub's runner
+  stopped as left over from the job; the Mac cell without SteamCMD whose
+  log was read (Terraria) had none.
 - **Sizes** (depots of build 24926481, app info; download is compressed):
   Windows: depot 1169373 72.7 MB download / 180.1 MB installed, plus Steam's
   shared libraries (depot 1004 from app 1007: steamclient*.dll, 24.3 MB /
@@ -52,7 +76,8 @@ follows this file, and the "Departures from the spec" section lists each case.
   `file`: "PE32+ executable (console) x86-64"); `javaw.exe` is the windowed
   ("GUI") one. Spec 2.7 needs a console program for Ctrl+C, so the app runs
   java.exe. The Windows real-server cell checks the subsystem again
-  (`javaFacts`).
+  (`javaFacts`): on `windows-latest` (2026-11-27) `jre\bin\java.exe` read
+  "subsystem 3 (3 is a console program)", and Ctrl+C reached it (below).
 - **The start scripts** (`StartServer-nogui.bat/.command/.sh`) only change to
   the server folder and run Java with G1 settings: `-XX:+UnlockExperimentalVMOptions
   -XX:+UseG1GC -XX:+ExplicitGCInvokesConcurrent -XX:G1NewSizePercent=20
@@ -70,6 +95,13 @@ follows this file, and the "Departures from the spec" section lists each case.
 - Hence `OS: darwin/amd64 yes, darwin/arm64 no ("Needs an Intel Mac")`. The
   Mac real-server cell logs `file` and the minimum macOS, and fails if the
   Java stops being x86_64.
+- **The Mac cell confirmed it on a real Mac** (`macos-15-intel`, macOS 15.7,
+  2026-11-27, both attempts): SteamCMD put the Java at
+  `server/jre/Contents/Home/bin/java` (the path `Program()` gives); `file`
+  said "Mach-O 64-bit executable x86_64"; Go's `debug/macho` read CPU
+  amd64, minimum macOS 11.0.0. That Java ran the server through every step
+  of the check: a new world, the console's `save` and `stop`, a password, a
+  takeover and Ctrl+C, and loading the saved world again.
 
 ## The command line
 
@@ -96,7 +128,10 @@ follows this file, and the "Departures from the spec" section lists each case.
 - **An empty value works**: `-password ""` started a server with no password.
   Spaces inside a value work (`-motd "Necesse at home"`, world "My World's
   #1"). The Windows real-server cell starts with a password containing a
-  space and checks the server took it.
+  space and checks the server took it. On both runners (2026-11-27) the
+  first start, with the empty password, said no "with password", and the
+  second said `with password "two words"`: both values reached Java whole
+  on Windows and on the Mac.
 - **`server.cfg` is never rewritten from the command line** (after a start
   with `-port 14159 -motd …` it still held its defaults), and the server falls
   back to it for anything not given. Its defaults (written on the first
@@ -154,6 +189,14 @@ follows this file, and the "Departures from the spec" section lists each case.
   rule refuses names that work and can go); on the Mac it fails if the file
   doesn't appear. The Windows unit test `TestArgRuneFitsHere` checks the
   call into Windows on the runner's own code page.
+- **What they showed (2026-11-27).** `windows-latest`, code page 1252: the
+  check said the name doesn't get through, and it didn't: the server got
+  "Code page ? ??" (one "?" for "✓", two for "🏡", which is two UTF-16
+  units), said "(ERR) Invalid world path: Code page ? ??", and made no
+  world file. `macos-15-intel`: the check said it gets through (UTF-8), and
+  the server made `saves/worlds/Code page ✓ 🏡.zip` ("Creating new world at
+  …/Code page ✓ 🏡.zip"), the name whole. So the rule in charset.go is
+  right on both, and Validate's refusal on Windows is needed.
 
 ### Settled: the data folder, and the "APPDATA" question (spec 5.4)
 
@@ -187,10 +230,13 @@ follows this file, and the "Departures from the spec" section lists each case.
   (0.0.0.0) nothing listened on TCP; `/proc/net/udp` showed the game port and
   the LAN socket. The real-server check logs `PortInUse("udp")` true with the
   server's pid and `PortInUse("tcp")` false. Wiki: "Protocol: UDP. Default
-  port: 14159".
+  port: 14159". Both CI cells (2026-11-27) logged exactly that: on Windows
+  and on the Mac the game port was UDP, held by the Java the test started
+  (`PortInUse` gave its PID), and nothing listened on TCP.
 - **The LAN socket** ("Started lan socket at port 55169") is UDP 55169, or
   another free port when that one is taken (two servers at once: 55169 and
-  51868). It only answers LAN discovery, so it isn't a public port.
+  51868). It only answers LAN discovery, so it isn't a public port. It was
+  55169 on the Windows and Mac runners too.
 - **With the game port taken** the server prints the BindException
   (`(ERR) java.net.BindException: Address already in use`), then still prints
   "Started server using port …" and "Type help for list of commands.", then
@@ -230,6 +276,22 @@ follows this file, and the "Departures from the spec" section lists each case.
   (`testdata/real/first-launch-exit-no-save.log`); three more `exit` runs and
   every `stop` and `quit` run saved. So the stop types `stop`, and the Monitor
   counts a save only on a "Completed…" line.
+- **`stop` can cut its save short too, on a world made moments before**:
+  once, with the server slowed down under `strace -f` (2026-11-27, Linux),
+  `stop` typed 12 s after a new world was ready printed "Starting world
+  save" and then at once "Stopped server … with code: SERVER_STOPPED", with
+  no "Completed…" line; the world zip held only its settings, `world.dat`
+  and a 417-byte `levels/surface.dat`. The same world name without strace,
+  stopped 20 s after ready, saved in full ("Completed world save before
+  stopping server", 32 KB). So a stop right after a new world is made may
+  keep only part of it; the Monitor then counts no save, which is the truth.
+- **On the Windows and Mac runners** (2026-11-27) `stop` ended the server
+  with exit code 0, 5.5 s after it was typed on a world made in the same
+  run (right after a `save`) and 3.0 s (Windows) or 3.3 to 3.7 s (Mac) on a
+  loaded world. The check found the world zip rewritten by the console's
+  `save` (the server kept running) and again by `stop`, and the next start
+  loaded that zip ("Loading existing world"). So the app's console pipe
+  reaches Java's standard input on both systems.
 - **Autosave**: with the world running (`-pausewhenempty 0`), "Running an auto
   save with backup...", "Starting world save", "Reloaded file system in 438.70
   us", "Copying backup to path: …/saves/worlds/LATEST_BACKUP1.zip", "Finished
@@ -266,6 +328,13 @@ follows this file, and the "Departures from the spec" section lists each case.
   dedicated server does not save on SIGTERM", send `stop` and wait for the
   save instead. The real-server check's takeover, whose stop goes to Ctrl+C, logs
   "Ctrl+C left the world file as it was (no save)" and took 1.2 s here.
+- **The same on the runners** (2026-11-27), after a takeover (no console,
+  so the stop's console step gave way to Ctrl+C at once): on Windows Java
+  ended 0.5 s after the Ctrl+C was sent, with exit code 130 (sending it
+  through the game's console takes Windows about a second), 1.2 s in all;
+  on the Mac it ended 1.5 s after SIGINT, 2.2 s in all (the exit code of a
+  process the test only took over can't be read there; gametest shows -1).
+  Neither saved: the world zip kept its time.
 - So after a takeover what was played since the last autosave (at most about
   a minute, as the world autosaves every minute while anyone is on) is lost;
   the stop step's `Say` text says so.
@@ -377,13 +446,79 @@ lines come from real logs players posted, and from the 1.3.3 server itself:
   return `worlds.Candidate`, and adapters may not import internal/worlds
   (TestImportRules), so there is none for now.
 
+## What the Windows and Mac cells showed (2026-11-27)
+
+Run 45921304914 (real-server.yml on `multigame` at f86a110), the cells
+"necesse on windows-latest" and "necesse on macos-15-intel":
+
+- **Windows: passed** (conformance 59 s, the Necesse subtest 74 s).
+- **Mac: every Necesse check passed, twice** (attempt 1: conformance 66 s,
+  the Necesse subtest 97 s; attempt 2: 81 s and 120 s), and the cell still
+  failed both times on the same line, after the last check of the subtest
+  "console, password, takeover and Ctrl+C": `testing.go:1464: TempDir
+  RemoveAll cleanup: unlinkat
+  /var/folders/…/T/TestRealServerconsole,_password,_takeover_and_Ctrl+C…:
+  directory not empty`. See the next section.
+- Both: Steam build 24926481, Necesse 1.3.3; the owner's own Necesse folder
+  (`%APPDATA%\Necesse`, `~/Library/Application Support/Necesse`) was not
+  touched. The rest is in the sections above: the Mac Java, the code page
+  check, the ports and LAN socket, the password with a space, `save` and
+  `stop` through the console, and Ctrl+C after a takeover.
+
+### The Mac cell's temporary folder
+
+What the log shows: Go's `t.TempDir` removal, which runs when the subtest
+ends, emptied the subtest's folder (it named no file inside it, so
+everything it found there it removed) and then couldn't remove the folder
+itself, because something had put a new entry in it meanwhile. The CI step
+that collects a failed test's logs then found no `.log` or `.txt` file in
+it, so what was left was neither a server log nor a copy of either data
+folder. The same removal after "conformance", which runs the same SteamCMD,
+the same server and the same takeover in the same kind of folder, worked
+both times. By the time it failed, every server the subtest started had
+ended: gametest's three runs (exit 0 after `stop`, Ctrl+C, exit 0 after
+`stop`) and the code-page check's own run, which the test waits for.
+
+What the subtest does that "conformance" doesn't: on the Mac only (on
+Windows the server ends at once on the mangled name), the code-page check
+ran a whole server, world and `stop` included, with its data folder
+directly in the subtest's folder (`t.TempDir()` made it there as "002",
+beside gametest's "001"). On Linux the same server, watched with `strace
+-f` with that world name (2026-11-27), wrote only under its `-datadir`
+(and Java's own `/tmp/hsperfdata_<user>`), all of it before it exited,
+and the programs it ran (`getconf`, `lscpu`, for its system report) ended
+at once; so nothing the test starts should still write there once it has
+waited for the server to end.
+
+What changed (realserver_test.go, 2026-11-27):
+
+- The code-page check's server now gets a temporary folder of its own,
+  outside the subtest's (`TestRealServer-codepage-…` in the temporary
+  folder), and the test removes it itself. If that removal fails, the log
+  says what the folder held and which programs had it open (`lsof +D`),
+  and the test tries again for 10 seconds before failing on it. The
+  subtest's folder now holds only what gametest made, as in
+  "conformance".
+- After the subtest's last stop, the test logs any program that still has
+  a file open in the subtest's folder (`lsof +D`, Mac and Linux).
+- If the subtest fails, the test lists what is still in its folder (every
+  entry, hidden ones included, with size, mode and the time it last
+  changed) and which programs have it open.
+
+What the next Mac run should show: the cell green, with the two subtests
+passing and no "FACTS: removing …" or "programs still had files open"
+line. If it fails again on the same removal, the new lines name what was
+left and who held it: a file written by something that isn't the server
+(Finder writes `.DS_Store` files, for one, and SteamCMD runs leave a Finder
+behind, above) is gametest's or SteamCMD's to deal with, not the
+adapter's.
+
 ## Not settled here (only the CI cells or the owner can)
 
-- That the Windows and Mac servers behave as the Linux one did (the same
-  Server.jar; the real-server cells run the same checks on each).
 - The Windows firewall: the server also listens on the LAN socket (UDP 55169
   or another port) besides the game port; whether Windows asks about it when
   the app's rule for java.exe covers only the game port.
-- That Java on Windows gets a value outside the code page mangled, as the
-  JDK's launcher source says: the Windows real-server cell's `codePageFacts`
-  checks it on the runner's code page (above).
+- Why the Mac cell's subtest folder couldn't be removed, if the next run
+  still can't (above).
+- A real join and leave of the current version, and a player's death line
+  (above), which need the Necesse game.
