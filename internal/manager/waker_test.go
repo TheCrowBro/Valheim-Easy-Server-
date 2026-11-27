@@ -125,8 +125,25 @@ func TestWakerInstall(t *testing.T) {
 		return c
 	}
 	want := waker.Config{Token: "secret", MAC: "3C:07:54:5A:21:9F", Query: net.JoinHostPort("192.168.1.20", strconv.Itoa(s.Port+1)), Name: s.ServerName, Guild: "g1"}
+	m.mu.Lock()
+	r2 := m.wakerR2Locked()
+	m.mu.Unlock()
+	if !r2 {
+		// With servers.json (R3), Valheim starred: its command, in the
+		// join-code channel, which is the main one.
+		want = waker.Config{Token: "secret", MAC: "3C:07:54:5A:21:9F", Guild: "g1", Games: &[]waker.GameCommand{{
+			ID: m.legacyID, Command: "valheim", Description: "Wake the server computer and start Valheim",
+			Name: s.ServerName, Channel: "2", Query: want.Query}}}
+	}
 	if c := readCfg(); !reflect.DeepEqual(c, want) {
 		t.Fatalf("the waker's settings = %+v, want %+v", c, want)
+	}
+	// The server's name as the waker has it, in either kind of settings.
+	nameIn := func(c waker.Config) string {
+		if c.Games != nil && len(*c.Games) > 0 {
+			return (*c.Games)[0].Name
+		}
+		return c.Name
 	}
 	m.mu.Lock()
 	listening := m.wakeConn != nil
@@ -163,7 +180,7 @@ func TestWakerInstall(t *testing.T) {
 	waitFor(t, "the waker to get the new name", 20*time.Second, func() bool {
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		return readCfg().Name == "Odin's Rest" && m.wk.file.Setup.Name == "Odin's Rest" && !m.wk.busy
+		return nameIn(readCfg()) == "Odin's Rest" && (!r2 || m.wk.file.Setup.Name == "Odin's Rest") && !m.wk.busy
 	})
 
 	// Links to open on another computer are posted in the join-code channel.

@@ -56,6 +56,18 @@ func TestSend(t *testing.T) {
 	if err := Send(mac, nil, []string{"203.0.113.1:not-a-port"}); err == nil {
 		t.Fatal("no error when nothing was sent")
 	}
+	// A packet that names a game goes out as it was made.
+	game := PacketFor(mac, []byte("abcdef"), "minecraft")
+	if err := SendPacket(game, []string{conn.LocalAddr().String()}); err != nil {
+		t.Fatal(err)
+	}
+	n, _, err = conn.ReadFrom(buf)
+	if err != nil || !bytes.Equal(buf[:n], game) || GameOf(buf[:n]) != "minecraft" {
+		t.Fatalf("received %x (%v), want %x", buf[:n], err, game)
+	}
+	if err := SendPacket(game, []string{"203.0.113.1:not-a-port"}); err == nil {
+		t.Fatal("no error when the game's packet was sent nowhere")
+	}
 	if b := Broadcasts(); len(b) == 0 || b[0] != "255.255.255.255:9" {
 		t.Fatalf("broadcasts = %v", b)
 	}

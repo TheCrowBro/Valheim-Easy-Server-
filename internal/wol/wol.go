@@ -50,7 +50,13 @@ func Target(b []byte) (mac net.HardwareAddr, tag []byte, ok bool) {
 // Send sends the magic packet for mac to each address (host:port). It
 // fails only if it couldn't be sent anywhere.
 func Send(mac net.HardwareAddr, tag []byte, addrs []string) error {
-	p := Packet(mac, tag)
+	return SendPacket(Packet(mac, tag), addrs)
+}
+
+// SendPacket sends a magic packet that is already made, such as one that
+// names a game (PacketFor), to each address (host:port). It fails only if
+// it couldn't be sent anywhere.
+func SendPacket(p []byte, addrs []string) error {
 	var errs []error
 	sent := false
 	for _, a := range addrs {

@@ -1,7 +1,9 @@
 // Command valheim-waker runs on the IP KVM next to the server computer (a
 // JetKVM, which is always on). It stays in Discord, and when someone types
-// /valheim it wakes the server computer with Wake-on-LAN; Valheim Easy
-// Server there then starts the server. The app installs and sets it up.
+// a game's command (/valheim, /minecraft…) in that game's channel it wakes
+// the server computer with Wake-on-LAN; the app there then starts that
+// game. The app installs and sets it up, commands included. Its name and
+// files keep "valheim-waker", which every copy of the app looks for.
 package main
 
 import (

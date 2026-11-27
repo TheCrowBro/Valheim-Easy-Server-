@@ -22,7 +22,7 @@ import (
 // Waker stands in for the waker program: it checks the bot token ("bad"
 // isn't accepted), and runs until it's stopped, saying it's in Discord.
 // Like the real one, it says nothing for a moment while it starts, then
-// that it's in Discord, and only a little later that /valheim is set up in
+// that it's in Discord, and only a little later that its commands are set up in
 // the Discord server it's in.
 const Waker = `#!/bin/sh
 while [ $# -gt 0 ]; do
