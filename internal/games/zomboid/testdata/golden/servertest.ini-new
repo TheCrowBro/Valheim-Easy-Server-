@@ -1,0 +1,25 @@
+PublicName=Friday night — Ñandú
+
+Password=two words
+
+MaxPlayers=16
+
+PVP=true
+
+PauseEmpty=false
+
+Open=true
+
+Public=false
+
+UPnP=false
+
+DefaultPort=16261
+
+UDPPort=16262
+
+RCONPort=27015
+
+RCONPassword=RCONPASSWORD
+
+Seed=Abc123

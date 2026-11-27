@@ -1,0 +1,96 @@
+SandboxVars = {
+    VERSION = 6,
+    -- Changing this also sets the "Population Multiplier" in Advanced Zombie Options. Default = Normal
+    -- 1 = Insane
+    -- 2 = Very High
+    -- 3 = High
+    -- 4 = Normal
+    -- 5 = Low
+    -- 6 = None
+    Zombies = 3,
+    -- How zombies are distributed across the map. Default = Urban Focused
+    -- 1 = Urban Focused
+    -- 2 = Uniform
+    Distribution = 1,
+    -- Controls whether some randomization is applied to zombie distribution.
+    ZombieVoronoiNoise = true,
+    -- How frequently new zombies are added to the world. Default = None
+    -- 1 = High
+    -- 2 = Normal
+    -- 3 = Low
+    -- 4 = None
+    ZombieRespawn = 4,
+    -- Zombie allowed to migrate to empty cells.
+    ZombieMigrate = true,
+    -- Default = 1 Hour, 30 Minutes
+    -- 1 = 15 Minutes
+    -- 2 = 30 Minutes
+    -- 3 = 1 Hour
+    -- 4 = 1 Hour, 30 Minutes
+    -- 5 = 2 Hours
+    -- 6 = 3 Hours
+    -- 7 = 4 Hours
+    -- 8 = 5 Hours
+    -- 9 = 6 Hours
+    -- 10 = 7 Hours
+    -- 11 = 8 Hours
+    -- 12 = 9 Hours
+    -- 13 = 10 Hours
+    -- 14 = 11 Hours
+    -- 15 = 12 Hours
+    -- 16 = 13 Hours
+    -- 17 = 14 Hours
+    -- 18 = 15 Hours
+    -- 19 = 16 Hours
+    -- 20 = 17 Hours
+    -- 21 = 18 Hours
+    -- 22 = 19 Hours
+    -- 23 = 20 Hours
+    -- 24 = 21 Hours
+    -- 25 = 22 Hours
+    -- 26 = 23 Hours
+    -- 27 = Real-time
+    DayLength = 3,
+    Map = {
+        -- If enabled, a mini-map window will be available.
+        AllowMiniMap = false,
+        -- If enabled, the world map can be accessed.
+        AllowWorldMap = true,
+        -- If enabled, the world map will be completely filled in on starting the game.
+        MapAllKnown = false,
+        -- If enabled, maps can't be read unless there's a source of light available.
+        MapNeedsLight = true,
+    },
+    ZombieConfig = {
+        -- Set by the "Zombie Count" population option, or by a custom number here. Insane = 2.5, Very High = 1.6, High = 1.2, Normal = 0.65, Low = 0.15, None = 0.0. Min: 0.00 Max: 4.00 Default: 0.65
+        PopulationMultiplier = 0.65,
+        -- A multiplier for the desired zombie population at the start of the game. Insane = 3.0, Very High = 2.0, High = 1.5, Normal = 1.0, Low = 0.5, None = 0.0. Min: 0.00 Max: 4.00 Default: 1.00
+        PopulationStartMultiplier = 1.0,
+        -- A multiplier for the desired zombie population on the peak day. Insane = 3.0, Very High = 2.0, High = 1.5, Normal = 1.0, Low = 0.5, None = 0.0. Min: 0.00 Max: 4.00 Default: 1.50
+        PopulationPeakMultiplier = 1.5,
+        -- The day when the population reaches its peak. Min: 1 Max: 365 Default: 28
+        PopulationPeakDay = 28,
+        -- The number of hours that must pass before zombies may respawn in a cell. If 0, spawning is disabled. Min: 0.00 Max: 8760.00 Default: 0.00
+        RespawnHours = 0.0,
+        -- The number of hours that a chunk must be unseen before zombies may respawn in it. Min: 0.00 Max: 8760.00 Default: 0.00
+        RespawnUnseenHours = 0.0,
+        -- The fraction of a cell's desired population that may respawn every RespawnHours. Min: 0.00 Max: 1.00 Default: 0.00
+        RespawnMultiplier = 0.0,
+        -- The number of hours that must pass before zombies migrate  to empty parts of the same cell. If 0, migration is disabled. Min: 0.00 Max: 8760.00 Default: 12.00
+        RedistributeHours = 12.0,
+        -- The distance a zombie will try to walk towards the last sound it heard. Min: 10 Max: 1000 Default: 100
+        FollowSoundDistance = 100,
+        -- The size of groups real zombies form when idle. 0 means zombies don't form groups. Groups don't form inside buildings or forest zones. Min: 0 Max: 1000 Default: 20
+        RallyGroupSize = 20,
+        -- The amount, as a percentage, that zombie groups can vary in size from the default (both larger and smaller).   For example, at 50% variance with a default group size of 20, groups will vary in size from 10-30. Min: 0 Max: 100 Default: 50
+        RallyGroupSizeVariance = 50,
+        -- The distance real zombies travel to form groups when idle. Min: 5 Max: 50 Default: 20
+        RallyTravelDistance = 20,
+        -- The distance between zombie groups. Min: 5 Max: 25 Default: 15
+        RallyGroupSeparation = 15,
+        -- How close members of a zombie group stay to the group's "leader". Min: 1 Max: 10 Default: 3
+        RallyGroupRadius = 3,
+        -- Controls the maximum number of zombies tracked before cleanup occurs. 0 means zombies will not be cleaned up. The default value (300) is strongly recommended. Increasing this value or setting to 0 may cause severe performance problems. For troubleshooting and bug-report purposes, please reproduce any issue with the default setting before submitting a report. Min: 0 Max: 5000 Default: 300
+        ZombiesCountBeforeDelete = 300,
+    },
+}

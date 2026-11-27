@@ -1,0 +1,7 @@
+SandboxVars = {
+    VERSION = 6,
+    Zombies = 2,
+    ZombieConfig = {
+        PopulationMultiplier = 1.6,
+    },
+}
