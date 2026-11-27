@@ -6,6 +6,8 @@ package manager
 // like Windrose.
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -15,18 +17,61 @@ import (
 	"valheim-easy-server/internal/servers"
 )
 
-// stopsSeen records the stops the rule asks for, in place of A's
-// autoStopGame.
+// stopsSeen stands in for A's autoStopGame and records the stops the rule
+// asks for. Like the real one, it marks the run auto-stopped and runs the
+// stop as a quiet job in the game's slot, which marks the run stopping. A
+// stop that works leaves it stopping until the test ends the run (as the
+// server's exit would); with fail set, the stop gives up and the server
+// stays on, as the stop chain does when a server doesn't exit in time (it
+// never forces one off). With hold set, the job waits for it to be closed.
 type stopsSeen struct {
 	mu   sync.Mutex
+	m    *Manager
 	whys []stopReason
+	fail bool
+	hold chan struct{}
 }
 
 func (s *stopsSeen) stop(inst *instance, why stopReason) error {
 	s.mu.Lock()
 	s.whys = append(s.whys, why)
+	fail, hold := s.fail, s.hold
 	s.mu.Unlock()
-	return nil
+	m := s.m
+	m.mu.Lock()
+	run := inst.run
+	if run != nil {
+		run.autoStopped, run.autoReason = true, why
+	}
+	m.mu.Unlock()
+	return m.runQuietJob(inst, "stop", "Stopping "+inst.short(), func(ctx context.Context, j *jobCtl) error {
+		m.mu.Lock()
+		if run != nil {
+			run.stopping = true
+		}
+		m.mu.Unlock()
+		if hold != nil {
+			select {
+			case <-hold:
+			case <-ctx.Done():
+			}
+		}
+		if !fail {
+			return nil
+		}
+		m.mu.Lock()
+		if run != nil {
+			run.stopping = false
+		}
+		m.mu.Unlock()
+		return errors.New("The server is taking unusually long to stop.")
+	})
+}
+
+func (s *stopsSeen) set(fail bool, hold chan struct{}) {
+	s.mu.Lock()
+	s.fail, s.hold = fail, hold
+	s.mu.Unlock()
 }
 
 func (s *stopsSeen) all() []stopReason {
@@ -44,7 +89,7 @@ func askGame(t *testing.T, api *standIn, clock *fakeClock, token string, d *serv
 	m := gamesManager(t, api, func(m *Manager) {
 		m.settings.DiscordWebhook = hookLink(1)
 		m.settings.DiscordBotToken = token
-		m.disc.now, m.disc.stop = clock.Now, stops.stop
+		m.disc.now, m.disc.stop, stops.m = clock.Now, stops.stop, m
 		inst = addTestGame(t, m, seafarer, d)
 	})
 	return m, inst, stops
@@ -258,7 +303,7 @@ func TestStillPlayingNoChannel(t *testing.T) {
 	var inst *instance
 	m := gamesManager(t, api, func(m *Manager) {
 		m.settings.DiscordBotToken = "tok"
-		m.disc.now, m.disc.stop = clock.Now, stops.stop
+		m.disc.now, m.disc.stop, stops.m = clock.Now, stops.stop, m
 		inst = addTestGame(t, m, seafarer, nil)
 	})
 	fakeRun(m, inst, "Sea Crew")
@@ -324,4 +369,113 @@ func TestStillPlayingJoinRestarts(t *testing.T) {
 	if a == nil || a.Asked != nil || !a.Since.Equal(clock.Now()) {
 		t.Fatalf("after a join: %+v", a)
 	}
+}
+
+// A stop that runs but leaves the server on (it didn't exit in time, and
+// the stop chain never forces a server off) doesn't leave the rule stuck:
+// while the stop is under way nothing keeps the game on, then the app
+// tries again every 10 minutes without posting again, and until then Keep
+// it on or a join keeps it on after all, and the clock starts again.
+func TestStillPlayingStopLeftOn(t *testing.T) {
+	clock := newFakeClock()
+	api := newStandIn(t, clock.Now)
+	m, inst, stops := askGame(t, api, clock, "", &servers.Discord{On: true, Webhook: hookLink(2)})
+	hold := make(chan struct{})
+	stops.set(true, hold)
+	run := fakeRun(m, inst, "Sea Crew")
+	waitAsk(t, m, inst, "the clock", func(a *AskStatus) bool { return true })
+	clock.Add(4 * time.Hour)
+	waitAsk(t, m, inst, "the question", func(a *AskStatus) bool { return a.Asked != nil })
+	clock.Add(2 * time.Hour)
+	waitFor(t, "the stop", 10*time.Second, func() bool { return len(stops.all()) == 1 })
+	off := clock.Now()
+
+	// While the stop is under way, Keep it on can't keep it on.
+	if err := m.KeepOn(inst.id); err == nil || !strings.Contains(err.Error(), "is already being turned off") {
+		t.Fatalf("Keep it on during the stop: %v", err)
+	}
+	close(hold)
+	waitFor(t, "the failed stop to be noticed", 10*time.Second, func() bool {
+		return hasText(m, "warning", "Seafarer didn't stop when the app tried to turn it off.")
+	})
+	a := askStatus(t, m, inst)
+	if a == nil || a.StopAt == nil || !a.StopAt.Equal(off.Add(10*time.Minute)) {
+		t.Fatalf("waiting to try again: %+v (turned off at %v)", a, off)
+	}
+
+	// 10 minutes later: tried again, with no second post; it fails again,
+	// with no second warning.
+	stops.set(true, nil)
+	clock.Add(9 * time.Minute)
+	time.Sleep(300 * time.Millisecond)
+	if n := len(stops.all()); n != 1 {
+		t.Fatalf("tried again after 9 minutes: %d stops", n)
+	}
+	clock.Add(time.Minute)
+	waitFor(t, "the second stop", 10*time.Second, func() bool { return len(stops.all()) == 2 })
+	waitAsk(t, m, inst, "the second stop to fail", func(a *AskStatus) bool {
+		return a.StopAt != nil && a.StopAt.After(clock.Now())
+	})
+	if n := api.count("Turning **Sea Crew** off"); n != 1 {
+		t.Fatalf("%d Turning off posts", n)
+	}
+	if n := countText(m, "didn't stop when the app tried to turn it off"); n != 1 {
+		t.Fatalf("%d warnings about the stop", n)
+	}
+
+	// Keep it on now works: the clock starts again, and the run is no
+	// longer being stopped by the rule.
+	if err := m.KeepOn(inst.id); err != nil {
+		t.Fatal(err)
+	}
+	a = askStatus(t, m, inst)
+	if a == nil || a.Asked != nil || a.StopAt != nil || !a.Since.Equal(clock.Now()) {
+		t.Fatalf("after Keep it on: %+v", a)
+	}
+	m.mu.Lock()
+	auto := run.autoStopped
+	m.mu.Unlock()
+	if auto {
+		t.Fatal("the run is still marked as stopped by the rule")
+	}
+	clock.Add(30 * time.Minute)
+	time.Sleep(300 * time.Millisecond)
+	if n := len(stops.all()); n != 2 {
+		t.Fatalf("stopped after Keep it on: %d stops", n)
+	}
+
+	// 4 hours on it asks again; 2 hours after that it's turned off again,
+	// that stop leaves it on too, and a join keeps it on.
+	clock.Add(3*time.Hour + 30*time.Minute)
+	waitPosts(t, api, otherHook, 4) // online, question, Turning off, question
+	clock.Add(2 * time.Hour)
+	waitFor(t, "the third stop", 10*time.Second, func() bool { return len(stops.all()) == 3 })
+	waitAsk(t, m, inst, "the third stop to fail", func(a *AskStatus) bool {
+		return a.StopAt != nil && a.StopAt.After(clock.Now())
+	})
+	m.handleEvents(run, []game.Event{{Kind: game.KindJoin, Name: "Alex", Time: time.Now()}}, nil)
+	a = askStatus(t, m, inst)
+	if a == nil || a.Asked != nil || !a.Since.Equal(clock.Now()) {
+		t.Fatalf("after a join: %+v", a)
+	}
+	if !hasText(m, "info", "Seafarer stays on: someone joined.") {
+		t.Fatal("no activity about the join")
+	}
+	clock.Add(20 * time.Minute)
+	time.Sleep(300 * time.Millisecond)
+	if n := len(stops.all()); n != 3 {
+		t.Fatalf("stopped after a join: %d stops", n)
+	}
+}
+
+// countText counts the activity entries that say text.
+func countText(m *Manager, text string) int {
+	acts, _ := m.Activity(0, 0)
+	n := 0
+	for _, a := range acts {
+		if strings.Contains(a.Text, text) {
+			n++
+		}
+	}
+	return n
 }

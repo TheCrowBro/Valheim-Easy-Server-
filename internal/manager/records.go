@@ -32,32 +32,108 @@ type recordsData struct {
 	Posted string                     `json:"posted"` // the last day summed up in Discord (2006-01-02)
 }
 
+// loadRecords reads the instance's records file at once. New does this for
+// the legacy game only, exactly as it always has; every other game's file
+// is read the first time it's needed (ensureRecords), because New must not
+// read other games' files (invariant I5).
 func (m *Manager) loadRecords(inst *instance) {
-	inst.recs = recordsData{Runs: map[string][]records.Event{}}
+	inst.recs, _ = m.readRecords(inst)
+	m.markRecordsRead(inst)
+}
+
+// markRecordsRead notes that the instance's records came from its file,
+// so they may be saved over it. m.mu must be held, or the app not started.
+func (m *Manager) markRecordsRead(inst *instance) {
+	if m.disc.recsRead == nil {
+		m.disc.recsRead = map[*instance]bool{}
+	}
+	m.disc.recsRead[inst] = true
+}
+
+// readRecords reads the instance's records file. ok is false when the file
+// is there but couldn't be read (another program has it open, say): then
+// nothing may be saved over it yet.
+func (m *Manager) readRecords(inst *instance) (d recordsData, ok bool) {
+	d = recordsData{Runs: map[string][]records.Event{}}
 	path := m.instFile(inst, recordsFile)
 	b, err := os.ReadFile(path)
 	if err == nil {
-		if json.Unmarshal(b, &inst.recs) == nil {
-			if inst.recs.Runs == nil {
-				inst.recs.Runs = map[string][]records.Event{}
+		if json.Unmarshal(b, &d) == nil {
+			if d.Runs == nil {
+				d.Runs = map[string][]records.Event{}
 			}
-			return
+			return d, true
 		}
 		// Damaged: keep it for a look and start again from the logs.
-		inst.recs = recordsData{Runs: map[string][]records.Event{}}
+		d = recordsData{Runs: map[string][]records.Event{}}
 		broken := path + ".damaged-" + time.Now().Format("20060102-150405")
 		os.Rename(path, broken)
 		m.log.Printf("records were damaged; saved as %s", broken)
 	}
+	ok = err == nil || errors.Is(err, os.ErrNotExist)
 	// The first time: the daily Discord post starts tonight, not with
 	// yesterday's.
-	inst.recs.Posted = records.Midnight(time.Now()).AddDate(0, 0, -1).Format("2006-01-02")
+	d.Posted = records.Midnight(time.Now()).AddDate(0, 0, -1).Format("2006-01-02")
+	return d, ok
+}
+
+// recordsReadLocked says whether the instance's records came from its file
+// (always so for the legacy game, which New reads).
+func (m *Manager) recordsReadLocked(inst *instance) bool {
+	return inst.legacy || m.disc.recsRead[inst]
+}
+
+// ensureRecords reads a game's records file the first time its records are
+// needed: the first daily check, the first look at its records, the first
+// save. It reports whether they have been read, so they may be saved.
+//
+// Whatever was kept before the file was read (a run that ended first) is
+// newer than the file, so it's kept with what the file has, and of the two
+// days posted the later one counts: the file is added to, never replaced.
+// It runs without m.mu.
+func (m *Manager) ensureRecords(inst *instance) bool {
+	m.mu.Lock()
+	done := m.recordsReadLocked(inst)
+	m.mu.Unlock()
+	if done {
+		return true
+	}
+	m.disc.recsLoad.Lock()
+	defer m.disc.recsLoad.Unlock()
+	m.mu.Lock()
+	done = m.recordsReadLocked(inst) // read by another caller meanwhile
+	m.mu.Unlock()
+	if done {
+		return true
+	}
+	d, ok := m.readRecords(inst)
+	if !ok {
+		return false // tried again next time
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for name, evs := range inst.recs.Runs {
+		d.Runs[name] = evs
+	}
+	if inst.recs.Posted > d.Posted {
+		d.Posted = inst.recs.Posted
+	}
+	inst.recs = d
+	m.markRecordsRead(inst)
+	return true
 }
 
 // saveRecords saves the legacy game's records.
 func (m *Manager) saveRecords() { m.saveRecordsFor(m.legacy()) }
 
+// saveRecordsFor saves the instance's records, once its file has been read:
+// saving records that never came from the file would wipe the runs and the
+// day posted that it holds.
 func (m *Manager) saveRecordsFor(inst *instance) {
+	if !m.ensureRecords(inst) {
+		m.log.Printf("records: not saving %s's yet: its records file couldn't be read", inst.id)
+		return
+	}
 	m.mu.Lock()
 	b, err := json.Marshal(inst.recs)
 	m.mu.Unlock()
@@ -96,7 +172,9 @@ func (m *Manager) archiveRunLocked(run *serverRun) bool {
 	if run.rec.LogPath == "" || len(run.events) == 0 {
 		return false
 	}
-	if run.inst.recs.Runs == nil { // records that were never loaded still keep this run
+	// A game whose records file hasn't been read yet keeps the run here
+	// meanwhile: saveRecordsFor reads the file first and keeps both.
+	if run.inst.recs.Runs == nil {
 		run.inst.recs.Runs = map[string][]records.Event{}
 	}
 	run.inst.recs.Runs[name] = run.events
@@ -105,11 +183,18 @@ func (m *Manager) archiveRunLocked(run *serverRun) bool {
 
 // backfillRecords reads the logs of runs that aren't in records.json yet:
 // those from before records existed, or that ended while the app was closed.
+// It runs in the background once the app has started, so it is also where
+// each game's own records and what its players last played with are first
+// read (New reads only the legacy game's files, invariant I5).
 func (m *Manager) backfillRecords() { m.eachInstance(m.backfillRecordsFor) }
 
 func (m *Manager) backfillRecordsFor(inst *instance) {
 	if inst.srv == nil {
 		return // a game this version doesn't run: its records are left as they are
+	}
+	m.ensurePlayed(inst)
+	if !m.ensureRecords(inst) {
+		return // its file can't be read now: the next start of the app tries again
 	}
 	m.mu.Lock()
 	dir := inst.dirs.Logs
@@ -217,6 +302,7 @@ func (m *Manager) RecordsGame(id, period string) (records.Summary, error) {
 	if !ok {
 		return records.Summary{}, fmt.Errorf("unknown period %q", period)
 	}
+	m.ensureRecords(inst) // if its file can't be read now, what's known so far
 	return m.recordsBetween(inst, from, to, now), nil
 }
 
@@ -268,6 +354,9 @@ func (m *Manager) checkDaily(now time.Time) {
 func (m *Manager) checkDailyFor(inst *instance, day time.Time, when string, now time.Time) {
 	if inst.srv == nil {
 		return // a game this version doesn't run
+	}
+	if !m.ensureRecords(inst) {
+		return // which day it last posted is in its file: the next check tries again
 	}
 	key := day.Format("2006-01-02")
 	m.mu.Lock()

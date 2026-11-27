@@ -562,6 +562,19 @@ type discordState struct {
 	// stop turns a game off for the "still playing?" rule: A's autoStopGame
 	// when nil. Tests set their own to see it called.
 	stop func(inst *instance, why stopReason) error
+	// saveServers saves a change to servers.json for a game's Discord
+	// settings: M3's updateServers when nil. Tests set their own, to see
+	// what happens when it works and when it's refused.
+	saveServers func(change func(*servers.File) error) error
+	// recsRead lists the games whose records file has been read (records.go:
+	// the daily posts come from it). New reads only the legacy game's, so
+	// every other game's is read the first time it's needed, and until then
+	// nothing is saved over it.
+	recsRead map[*instance]bool
+
+	// recsLoad lets one caller at a time read a game's records file for the
+	// first time (taken before m.mu, never while holding it).
+	recsLoad sync.Mutex
 }
 
 // hookInfo is what Discord said about a webhook link: the Discord server
@@ -738,6 +751,14 @@ func (m *Manager) guildOKLocked(own string) bool {
 // its online message again when its posts were turned on, moved to another
 // channel, or should now include the password, as the legacy game always
 // has, so friends see it where they look.
+//
+// For the legacy game a change can touch two files: its own channel is in
+// servers.json, the rest in settings.json. Everything is checked before
+// either is written, and servers.json is written first, so that when the
+// settings.json save posts the online message again (it does when Valheim's
+// posts are turned on), the message goes to the channel just chosen, not
+// the one before; and so that a refused servers.json (the app's list of
+// games can't be changed now) leaves both files as they were.
 func (m *Manager) setGameDiscord(inst *instance, ch GameDiscordChange) error {
 	if ch.Webhook != nil {
 		link := strings.TrimSpace(*ch.Webhook)
@@ -748,59 +769,85 @@ func (m *Manager) setGameDiscord(inst *instance, ch GameDiscordChange) error {
 		}
 		ch.Webhook = &link
 	}
-	if inst.legacy && (ch.On != nil || ch.Stopped != nil || ch.Daily != nil || ch.Password != nil) {
-		// settings.json, saved as the old Settings page saves it (which also
-		// posts again in the main channel when that's needed).
-		s := m.Settings()
-		setIf(&s.Discord, ch.On)
-		setIf(&s.DiscordStopped, ch.Stopped)
-		setIf(&s.DiscordDaily, ch.Daily)
-		setIf(&s.DiscordPassword, ch.Password)
-		if err := m.UpdateSettings(s); err != nil {
-			var fe config.FieldErrors
-			if errors.As(err, &fe) {
-				if msg, ok := fe["discordWebhook"]; ok && len(fe) == 1 {
-					// Valheim's posts need the main channel: settings.json
-					// can't say "on" without its link.
-					return game.FieldErrors{"discord.on": "Add the main Discord channel first. " + msg}
-				}
-			}
-			return err
-		}
-		if ch.Webhook == nil {
-			return nil
+	legacySettings := inst.legacy && (ch.On != nil || ch.Stopped != nil || ch.Daily != nil || ch.Password != nil)
+	var next config.Settings
+	if legacySettings {
+		// settings.json, saved as the old Settings page saves it.
+		next = m.Settings()
+		setIf(&next.Discord, ch.On)
+		setIf(&next.DiscordStopped, ch.Stopped)
+		setIf(&next.DiscordDaily, ch.Daily)
+		setIf(&next.DiscordPassword, ch.Password)
+		check := next.Clone()
+		check.Normalize()
+		if errs := check.Validate(); errs != nil {
+			return legacyDiscordError(errs)
 		}
 	}
 	m.mu.Lock()
 	before := m.discordRulesLocked(inst)
+	oldOwn := ""
+	if in := m.servers.Instance(inst.id); in != nil {
+		oldOwn = strings.TrimSpace(in.DiscordRules().Webhook)
+	}
 	m.mu.Unlock()
-	err := m.updateServers(func(f *servers.File) error {
-		in := f.Instance(inst.id)
-		if in == nil {
-			return errNoGame(inst.id)
+	// Only the legacy game's own channel is in servers.json, so a change
+	// that keeps it writes nothing there.
+	writeServers := !inst.legacy || ch.Webhook != nil && *ch.Webhook != oldOwn
+	if writeServers {
+		err := m.saveDiscordServers(func(f *servers.File) error {
+			in := f.Instance(inst.id)
+			if in == nil {
+				return errNoGame(inst.id)
+			}
+			if in.Discord == nil {
+				d := servers.DefaultDiscord()
+				in.Discord = &d
+			}
+			d := in.Discord
+			if ch.Webhook != nil {
+				d.Webhook = *ch.Webhook
+			}
+			if !inst.legacy { // the legacy game's are in settings.json (below)
+				setIf(&d.On, ch.On)
+				setIf(&d.Stopped, ch.Stopped)
+				setIf(&d.Daily, ch.Daily)
+				setIf(&d.Password, ch.Password)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
 		}
-		if in.Discord == nil {
-			d := servers.DefaultDiscord()
-			in.Discord = &d
+	}
+	if legacySettings {
+		if err := m.UpdateSettings(next); err != nil {
+			if writeServers { // put its channel back, so the failed save changes nothing
+				if rerr := m.saveDiscordServers(func(f *servers.File) error {
+					if in := f.Instance(inst.id); in != nil && in.Discord != nil {
+						in.Discord.Webhook = oldOwn
+					}
+					return nil
+				}); rerr != nil {
+					m.log.Printf("discord: couldn't put %s's channel back: %v", inst.id, rerr)
+				}
+			}
+			var fe config.FieldErrors
+			if errors.As(err, &fe) {
+				return legacyDiscordError(fe)
+			}
+			return err
 		}
-		d := in.Discord
-		if ch.Webhook != nil {
-			d.Webhook = *ch.Webhook
-		}
-		if !inst.legacy { // the legacy game's are in settings.json (above)
-			setIf(&d.On, ch.On)
-			setIf(&d.Stopped, ch.Stopped)
-			setIf(&d.Daily, ch.Daily)
-			setIf(&d.Password, ch.Password)
-		}
-		return nil
-	})
-	if err != nil {
-		return err
 	}
 	m.mu.Lock()
 	after := m.discordRulesLocked(inst)
-	if after.posts() && (!before.posts() || before.link != after.link || after.password && !before.password) {
+	again := after.posts() && (!before.posts() || before.link != after.link || after.password && !before.password)
+	if legacySettings && after.on && (!before.on || after.password && !before.password) {
+		// UpdateSettings has just posted it again, in after.link (servers.json
+		// was already saved): once is enough.
+		again = false
+	}
+	if again {
 		m.reannounceLocked(inst)
 	}
 	if after.link != "" {
@@ -814,6 +861,24 @@ func (m *Manager) setGameDiscord(inst *instance, ch GameDiscordChange) error {
 	}
 	go m.notify()
 	return nil
+}
+
+// saveDiscordServers saves a change to servers.json (saveServers in tests).
+func (m *Manager) saveDiscordServers(change func(*servers.File) error) error {
+	if save := m.disc.saveServers; save != nil {
+		return save(change)
+	}
+	return m.updateServers(change)
+}
+
+// legacyDiscordError is a refused settings.json change as the game's
+// Discord settings say it: Valheim's posts need the main channel, because
+// settings.json can't say "on" without its link.
+func legacyDiscordError(fe config.FieldErrors) error {
+	if msg, ok := fe["discordWebhook"]; ok && len(fe) == 1 {
+		return game.FieldErrors{"discord.on": "Add the main Discord channel first. " + msg}
+	}
+	return fe
 }
 
 func setIf(dst *bool, v *bool) {

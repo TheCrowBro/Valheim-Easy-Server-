@@ -301,8 +301,9 @@ var (
 
 // addTestGame adds a stand-in game's instance, as Add a game will, with
 // its servers.json entry (d nil: the game's Discord settings were never
-// changed). It must be called before Start: the instances aren't guarded
-// in this release.
+// changed). Like New, it reads none of the game's files: its records are
+// read the first time they're needed. It must be called before Start: the
+// instances aren't guarded in this release.
 func addTestGame(t *testing.T, m *Manager, info game.Info, d *servers.Discord) *instance {
 	t.Helper()
 	g := testGame{info}
@@ -312,7 +313,6 @@ func addTestGame(t *testing.T, m *Manager, info game.Info, d *servers.Discord) *
 	inst := &instance{id: info.ID, g: g, info: info, dirs: dirs, known: map[string]*KnownPlayer{},
 		uploads: map[string]*worlds.Upload{}, logs: newRing[LogLine](100)}
 	inst.srv = g.New(game.Env{Instance: info.ID, Data: m.opt.DataDir, Dirs: dirs, Log: m.log})
-	m.loadRecords(inst)
 	m.instances[inst.id] = inst
 	m.order = append(m.order, inst.id)
 	m.servers.Instances = append(m.servers.Instances, servers.Instance{ID: info.ID, Game: info.ID, Added: time.Now(), Discord: d})
@@ -573,6 +573,11 @@ func TestDailyPostsPerGame(t *testing.T) {
 	day := func(d, h, min int) time.Time { return time.Date(2099, 3, 10+d, h, min, 0, 0, time.Local) }
 	ev := func(at time.Time, kind, name string) records.Event {
 		return records.Event{T: at.Unix(), Kind: kind, Name: name}
+	}
+	for _, inst := range []*instance{bl, tu} {
+		if !m.ensureRecords(inst) {
+			t.Fatalf("%s: records not read", inst.id)
+		}
 	}
 	m.mu.Lock()
 	for _, inst := range []*instance{m.legacy(), bl, tu} {
@@ -862,6 +867,7 @@ func TestRecordsGame(t *testing.T) {
 	m := newTestManager(t, env.data, env)
 	inst := addTestGame(t, m, blockland, nil)
 	now := time.Now()
+	m.ensureRecords(inst)
 	m.mu.Lock()
 	inst.recs.Runs["blockland-1.log"] = []records.Event{
 		{T: now.Add(-2 * time.Hour).Unix(), Kind: records.Join, Name: "Alex"},
@@ -879,5 +885,218 @@ func TestRecordsGame(t *testing.T) {
 	}
 	if _, err := m.RecordsGame("nosuchgame", "all"); err == nil {
 		t.Fatal("a game that isn't there has records")
+	}
+}
+
+// A game's records file is read before anything is saved over it: New
+// doesn't read it (I5), and the first daily check, or a run that ends
+// first, adds to what the file has instead of replacing it. A file that is
+// there but can't be read is left alone until it can be.
+func TestRecordsReadBeforeSaving(t *testing.T) {
+	env := &testEnv{data: t.TempDir()}
+	m := newTestManager(t, env.data, env)
+	bl := addTestGame(t, m, blockland, nil)
+	tu := addTestGame(t, m, tundra, nil)
+	sf := addTestGame(t, m, seafarer, nil)
+	put := func(inst *instance, d recordsData) {
+		t.Helper()
+		b, _ := json.Marshal(d)
+		path := m.instFile(inst, recordsFile)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	saved := func(inst *instance) recordsData {
+		t.Helper()
+		var d recordsData
+		b, err := os.ReadFile(m.instFile(inst, recordsFile))
+		if err != nil || json.Unmarshal(b, &d) != nil {
+			t.Fatalf("%s: records file: %v %s", inst.id, err, b)
+		}
+		return d
+	}
+	oldRun := []records.Event{{T: 100, Kind: records.Join, Name: "Alex"}, {T: 200, Kind: records.Leave, Name: "Alex"}}
+	put(bl, recordsData{Runs: map[string][]records.Event{"blockland-old.log": oldRun}, Posted: "2026-01-01"})
+	put(tu, recordsData{Runs: map[string][]records.Event{"tundra-old.log": oldRun}, Posted: "2026-01-01"})
+	if err := os.MkdirAll(m.instFile(sf, recordsFile), 0o755); err != nil { // in the way of the file
+		t.Fatal(err)
+	}
+
+	// A Tundra run ends before anything read its records: the file keeps
+	// its run and the day it posted, and gains the new run.
+	run := &serverRun{inst: tu, rec: game.Record{LogPath: filepath.Join(tu.dirs.Logs, "tundra-new.log")},
+		events: []records.Event{{T: 300, Kind: records.Join, Name: "Kai"}, {T: 400, Kind: records.Leave, Name: "Kai"}}}
+	m.mu.Lock()
+	archived := m.archiveRunLocked(run)
+	m.mu.Unlock()
+	if !archived {
+		t.Fatal("the run wasn't kept")
+	}
+	m.saveRecordsFor(tu)
+	if d := saved(tu); len(d.Runs["tundra-old.log"]) != 2 || len(d.Runs["tundra-new.log"]) != 2 || d.Posted != "2026-01-01" {
+		t.Fatalf("Tundra's records after a run ended: %+v", d)
+	}
+
+	// The daily check is the first to need Blockland's: it reads the file,
+	// then saves the day it got to, with the old run still there.
+	m.checkDaily(time.Date(2026, 11, 27, 9, 0, 0, 0, time.Local))
+	if d := saved(bl); len(d.Runs["blockland-old.log"]) != 2 || d.Posted != "2026-11-26" {
+		t.Fatalf("Blockland's records after the daily check: %+v", d)
+	}
+
+	// Seafarer's can't be read: nothing counts as read, and the daily check
+	// doesn't note a day it couldn't compare.
+	if m.ensureRecords(sf) {
+		t.Fatal("records that couldn't be read count as read")
+	}
+	m.mu.Lock()
+	posted := sf.recs.Posted
+	m.mu.Unlock()
+	if posted != "" {
+		t.Fatalf("Seafarer's day posted = %q", posted)
+	}
+	if fi, err := os.Stat(m.instFile(sf, recordsFile)); err != nil || !fi.IsDir() {
+		t.Fatalf("what was in the file's place was changed: %v", err)
+	}
+}
+
+// What a game's players last played with is read once the app has started
+// (New reads only Valheim's), so its reminders compare with it.
+func TestPlayedReadAfterStart(t *testing.T) {
+	api := newStandIn(t, time.Now)
+	var inst *instance
+	m := gamesManager(t, api, func(m *Manager) {
+		inst = addTestGame(t, m, blockland, nil)
+		b, _ := json.Marshal(played{Game: "1.4.5", Mods: map[string]string{}, Password: hashPassword("secret")})
+		path := m.instFile(inst, "lastplayed.json")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if inst.lastPlayed != nil {
+			t.Fatal("read before the app started")
+		}
+	})
+	waitFor(t, "lastplayed.json to be read", 10*time.Second, func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return inst.lastPlayed != nil && inst.lastPlayed.Game == "1.4.5"
+	})
+}
+
+// Valheim's own channel and its posts turned on in one save: servers.json
+// (its channel) is written before settings.json (its posts), so the online
+// message goes out once, in the channel just chosen; a refused servers.json
+// leaves settings.json as it was, and a refused settings.json puts the
+// channel back.
+func TestSetGameDiscordLegacyChannel(t *testing.T) {
+	api := newStandIn(t, time.Now)
+	env := setup(t)
+	m := env.m
+	m.opt.DiscordURL, m.opt.DiscordAPI = api.URL, api.URL+"/bot"
+	install(t, m)
+	s := m.Settings()
+	s.DiscordWebhook = hookLink(1) // the main channel; Valheim's posts are off
+	if err := m.UpdateSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	legacy := m.legacy()
+	var refuse error
+	m.mu.Lock()
+	m.servers.Instances = []servers.Instance{{ID: legacy.id, Game: legacy.id, Legacy: true, Added: time.Now()}}
+	m.mu.Unlock()
+	m.disc.saveServers = func(change func(*servers.File) error) error {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if refuse != nil {
+			return refuse
+		}
+		return change(&m.servers)
+	}
+	code := startOnline(t, m)
+	on, own := true, hookLink(2)
+	ownWebhook := func() string {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return m.gameDiscordLocked(legacy).Webhook
+	}
+
+	// servers.json refused: nothing changes, nothing is posted.
+	m.mu.Lock()
+	refuse = errors.New("The list of games can't be changed now.")
+	m.mu.Unlock()
+	if err := m.setGameDiscord(legacy, GameDiscordChange{On: &on, Webhook: &own}); err == nil || err.Error() != "The list of games can't be changed now." {
+		t.Fatalf("refused: %v", err)
+	}
+	if m.Settings().Discord || ownWebhook() != "" {
+		t.Fatalf("half saved: posts on %v, own channel %q", m.Settings().Discord, ownWebhook())
+	}
+
+	// settings.json refused (something is in its way): the channel is put
+	// back.
+	m.mu.Lock()
+	refuse = nil
+	settingsPath := m.paths.Settings
+	m.mu.Unlock()
+	keep, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(settingsPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(settingsPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.setGameDiscord(legacy, GameDiscordChange{On: &on, Webhook: &own}); err == nil {
+		t.Fatal("saved with settings.json in the way")
+	}
+	if m.Settings().Discord || ownWebhook() != "" {
+		t.Fatalf("half saved: posts on %v, own channel %q", m.Settings().Discord, ownWebhook())
+	}
+	if err := os.Remove(settingsPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(settingsPath, keep, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if posts := api.all(); len(posts) != 0 {
+		t.Fatalf("posted after refused saves: %+v", posts)
+	}
+
+	// Both saved: one online post, in its own channel only.
+	if err := m.setGameDiscord(legacy, GameDiscordChange{On: &on, Webhook: &own}); err != nil {
+		t.Fatal(err)
+	}
+	waitPosts(t, api, otherHook, 1)
+	waitFor(t, "nothing left to post", 5*time.Second, func() bool { return m.discordPending.Load() == 0 })
+	time.Sleep(300 * time.Millisecond)
+	if posts := api.postsIn(otherHook); len(posts) != 1 || !strings.Contains(posts[0], "Join code: **"+code+"**") {
+		t.Fatalf("in its own channel: %q", posts)
+	}
+	if main := api.postsIn(mainHook); len(main) != 0 {
+		t.Fatalf("in the main channel: %q", main)
+	}
+	if !m.Settings().Discord || ownWebhook() != own {
+		t.Fatalf("saved: posts on %v, own channel %q", m.Settings().Discord, ownWebhook())
+	}
+
+	// Moved back to the main channel with its posts already on: posted
+	// again there, once.
+	none := ""
+	if err := m.setGameDiscord(legacy, GameDiscordChange{On: &on, Webhook: &none}); err != nil {
+		t.Fatal(err)
+	}
+	waitPosts(t, api, mainHook, 1)
+	waitFor(t, "nothing left to post", 5*time.Second, func() bool { return m.discordPending.Load() == 0 })
+	time.Sleep(300 * time.Millisecond)
+	if n, o := len(api.postsIn(mainHook)), len(api.postsIn(otherHook)); n != 1 || o != 1 {
+		t.Fatalf("after moving back: %d in the main channel, %d in its own", n, o)
 	}
 }

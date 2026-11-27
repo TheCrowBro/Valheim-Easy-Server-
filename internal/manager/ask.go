@@ -17,6 +17,10 @@ package manager
 //   - 2 hours after the question with no answer, the app posts "Turning …
 //     off" and stops it (stopAsked, through A's autoStopGame). That line is
 //     its only stopped post.
+//   - The stop chain never forces a server off, so a stop can end with the
+//     server still on (it didn't exit in time). Then the app tries again
+//     every 10 minutes, without posting again, and until it does, Keep it
+//     on or a join keeps the game on after all.
 //
 // askObserver is D's observer (hooks.go): the one place this rule hears
 // about readiness, joins, exits and the ticks that move its clock.
@@ -36,6 +40,10 @@ const (
 	askWait  = 2 * time.Hour   // how long the question waits for an answer
 	askEvery = 2 * time.Minute // how often the channel is read
 	askRetry = time.Minute     // how soon a stop that couldn't start is tried again
+	// askAgain is how soon a stop that ran but left the server on is tried
+	// again. The stop chain waits minutes for a server to save and exit, so
+	// trying at once would keep the game's job slot busy all the time.
+	askAgain = 10 * time.Minute
 )
 
 // askState is one instance's "still playing?" clock (instance.ask), guarded
@@ -46,9 +54,15 @@ type askState struct {
 	asked time.Time  // when the question went out; zero before
 	askID string     // the question's message id in Discord, once posted
 
-	off         time.Time // when the app decided to turn the game off; zero before
-	stopTried   time.Time // when it last asked for the stop
-	stopStarted bool      // the stop was accepted (a job is stopping it)
+	off       time.Time // when the app decided to turn the game off; zero before
+	stopTried time.Time // when it last asked for the stop
+	// stopping: a stop is under way, from when it's asked for until it's
+	// seen to have ended. While it is, nothing can keep the game on.
+	stopping bool
+	// stopStarted: the stop was accepted, so a job in the game's slot is
+	// running it (or has, if that job is no longer running).
+	stopStarted bool
+	stopFails   int // stops that ran but left the server on
 
 	// The channel the question goes to: the game's own, else the main one,
 	// "" when it has none or its Discord posts are off.
@@ -147,11 +161,7 @@ func (m *Manager) askTickLocked(inst *instance, now time.Time) {
 		return // someone is stopping it already
 	}
 	if !a.off.IsZero() {
-		// Being turned off. A stop that couldn't start (another job was
-		// running, say) is tried again; one that started is the job's.
-		if !a.stopStarted && !run.stopping && now.Sub(a.stopTried) >= askRetry {
-			m.askStopLocked(inst, now)
-		}
+		m.askOffTickLocked(inst, now)
 		return
 	}
 	token := m.settings.DiscordBotToken
@@ -175,6 +185,56 @@ func (m *Manager) askTickLocked(inst *instance, now time.Time) {
 		}
 		m.askTurnOffLocked(inst, now, r)
 	}
+}
+
+// askOffTickLocked follows a game the rule is turning off. A stop that
+// couldn't start (another job was running, say) is tried again a minute
+// later. One that started is the job's until the job ends; if the server is
+// still on then, not stopping and not stopped, the stop chain gave up on it
+// (it never forces a server off), so the app tries again 10 minutes later.
+func (m *Manager) askOffTickLocked(inst *instance, now time.Time) {
+	a, run := &inst.ask, inst.run
+	if a.stopping && a.stopStarted && !run.stopping && !running(inst.job) {
+		a.stopping, a.stopStarted, a.stopTried = false, false, now
+		a.stopFails++
+		m.log.Printf("still playing? %s: the stop ended with the server still on (%d)", inst.id, a.stopFails)
+		if a.stopFails == 1 {
+			m.addGameActivity(inst, "warning", "", fmt.Sprintf("%s didn't stop when the app tried to turn it off. The app tries again every 10 minutes. To keep it on, press Keep it on.", inst.short()))
+		}
+		go m.notify()
+	}
+	if !a.stopping && !run.stopping && now.Sub(a.stopTried) >= m.askRetryLocked(inst) {
+		m.askStopLocked(inst, now)
+	}
+}
+
+// askRetryLocked is how long after the last try the stop is tried again.
+func (m *Manager) askRetryLocked(inst *instance) time.Duration {
+	if inst.ask.stopFails > 0 {
+		return askAgain
+	}
+	return askRetry
+}
+
+// askKeepLocked keeps a game on that the rule decided to turn off, when
+// someone shows they want it after all (Keep it on, a join) before the
+// stop is under way: the clock starts again. The run is no longer being
+// stopped by the rule, so a later stop is an ordinary one, with its own
+// stopped post.
+func (m *Manager) askKeepLocked(inst *instance, now time.Time) {
+	a := &inst.ask
+	a.off, a.stopTried, a.stopping, a.stopStarted, a.stopFails = time.Time{}, time.Time{}, false, false, 0
+	if run := a.run; run != nil && run.autoStopped && run.autoReason == stopAsked {
+		run.autoStopped, run.autoReason = false, stopStopped
+	}
+	m.askRestartLocked(inst, now)
+}
+
+// askStopUnderwayLocked says whether the rule's stop is under way, so
+// nothing can keep the game on now.
+func (m *Manager) askStopUnderwayLocked(inst *instance) bool {
+	a := &inst.ask
+	return !a.off.IsZero() && (a.stopping || inst.run != nil && inst.run.stopping)
 }
 
 // askCanReadLocked says whether a message in the channel would count: the
@@ -382,8 +442,8 @@ func (m *Manager) askTurnOffLocked(inst *instance, now time.Time, r discordRules
 func (m *Manager) askStopLocked(inst *instance, now time.Time) {
 	a := &inst.ask
 	first := a.stopTried.IsZero()
-	a.stopTried = now
-	run := a.run
+	a.stopTried, a.stopping = now, true
+	run, off := a.run, a.off
 	stop := m.disc.stop
 	if stop == nil {
 		stop = m.autoStopGame
@@ -391,8 +451,14 @@ func (m *Manager) askStopLocked(inst *instance, now time.Time) {
 	m.go_(func() {
 		err := stop(inst, stopAsked)
 		m.mu.Lock()
-		if inst.ask.run == run && err == nil {
-			inst.ask.stopStarted = true
+		// Still the same decision (Keep it on can't undo one under way, but
+		// the run may have ended).
+		if a := &inst.ask; a.run == run && a.off.Equal(off) {
+			if err == nil {
+				a.stopStarted = true
+			} else {
+				a.stopping = false // tried again in a minute
+			}
 		}
 		m.mu.Unlock()
 		if err != nil {
@@ -415,6 +481,9 @@ func (m *Manager) askStatusLocked(inst *instance) *AskStatus {
 		Channel: a.name, Problem: m.askProblemLocked(inst)}
 	if !a.asked.IsZero() {
 		asked, stop := a.asked, a.asked.Add(askWait)
+		if !a.off.IsZero() && !m.askStopUnderwayLocked(inst) {
+			stop = a.stopTried.Add(m.askRetryLocked(inst)) // the next try
+		}
 		st.Asked, st.StopAt = &asked, &stop
 	}
 	return st
@@ -433,7 +502,7 @@ func (m *Manager) KeepOn(id string) error {
 	switch {
 	case run == nil:
 		return fmt.Errorf("%s isn't running.", inst.short())
-	case !inst.ask.off.IsZero():
+	case inst.ask.run == run && m.askStopUnderwayLocked(inst):
 		return fmt.Errorf("%s is already being turned off.", inst.short())
 	case run.stopping:
 		return fmt.Errorf("%s is stopping.", inst.short())
@@ -441,7 +510,9 @@ func (m *Manager) KeepOn(id string) error {
 	if inst.ask.run != run || !m.askAppliesLocked(inst) {
 		return nil // the rule isn't running for it: there is no clock to restart
 	}
-	m.askRestartLocked(inst, m.askNowLocked())
+	// Also when the app decided to turn it off but couldn't yet: the owner
+	// wants it on after all.
+	m.askKeepLocked(inst, m.askNowLocked())
 	m.addGameActivity(inst, "info", "", fmt.Sprintf("%s stays on: Keep it on was pressed. The app asks again in 4 hours.", inst.short()))
 	go m.notify()
 	return nil
@@ -458,13 +529,21 @@ func (o askObserver) onReady(inst *instance) {
 	}
 }
 
-// onEvent: a join, or a count above zero, shows someone is playing.
+// onEvent: a join, or a count above zero, shows someone is playing. It
+// keeps on a game the app decided to turn off but whose stop isn't under
+// way (a stop that left it on is tried again later): turning it off now
+// would put that player out.
 func (o askObserver) onEvent(inst *instance, ev game.Event) {
 	a := &inst.ask
-	if a.run == nil || a.run != inst.run || !a.off.IsZero() {
+	if a.run == nil || a.run != inst.run || o.m.askStopUnderwayLocked(inst) {
 		return
 	}
 	if ev.Kind == game.KindJoin || ev.Kind == game.KindCount && ev.Count > 0 {
+		if !a.off.IsZero() {
+			o.m.askKeepLocked(inst, o.m.askNowLocked())
+			o.m.addGameActivity(inst, "info", "", fmt.Sprintf("%s stays on: someone joined. The app asks again in 4 hours.", inst.short()))
+			return
+		}
 		o.m.askRestartLocked(inst, o.m.askNowLocked())
 	}
 }
