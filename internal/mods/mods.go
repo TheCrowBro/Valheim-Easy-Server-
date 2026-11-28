@@ -140,6 +140,16 @@ var Catalog = []Mod{{
 	URL:     "https://thunderstore.io/c/valheim/p/Ivvty/FarLands/",
 	Group:   GroupLook,
 	Players: PlayersOnly,
+}, {
+	ID:      "equipmentandquickslots",
+	Package: "RandyKnapp-EquipmentAndQuickSlots",
+	Name:    "Equipment and Quick Slots",
+	Author:  "RandyKnapp",
+	Short:   "Their own slots for armor and gear, plus six quick slots.",
+	Summary: "Gives worn items their own slots (head, chest, legs, shoulders, belt and trinket) and adds up to six quick slots with hotkeys. It only changes each player's own game, so the server doesn't need it and friends can join with or without it.",
+	URL:     "https://thunderstore.io/c/valheim/p/RandyKnapp/EquipmentAndQuickSlots/",
+	Group:   GroupPlay,
+	Players: PlayersOnly,
 }}
 
 // ServerMods are the mods in ids that the server itself runs.
