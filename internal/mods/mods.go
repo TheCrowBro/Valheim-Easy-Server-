@@ -140,6 +140,26 @@ var Catalog = []Mod{{
 	URL:     "https://thunderstore.io/c/valheim/p/Ivvty/FarLands/",
 	Group:   GroupLook,
 	Players: PlayersOnly,
+}, {
+	ID:      "valheimraft",
+	Package: "zolantris-ValheimRAFT",
+	Name:    "ValheimRAFT",
+	Author:  "zolantris",
+	Short:   "Build ships and land vehicles that carry you and your base.",
+	Summary: "Build ships and land vehicles out of Valheim's own building pieces, with sails, ropes, anchors, ladders, piers and cannons. The server doesn't run it: its author says server support may not work, and boats built by players who have it are kept safely on a plain server. Every friend who wants to sail needs it in their own game: a friend without it sees the boats as loose, glitchy pieces.",
+	URL:     "https://thunderstore.io/c/valheim/p/zolantris/ValheimRAFT/",
+	Group:   GroupPlay,
+	Players: PlayersOnly,
+}, {
+	ID:      "equipmentandquickslots",
+	Package: "RandyKnapp-EquipmentAndQuickSlots",
+	Name:    "Equipment and Quick Slots",
+	Author:  "RandyKnapp",
+	Short:   "Their own slots for armor and gear, plus six quick slots.",
+	Summary: "Gives worn items their own slots (head, chest, legs, shoulders, belt and trinket) and adds up to six quick slots with hotkeys. It only changes each player's own game, so the server doesn't need it and friends can join with or without it.",
+	URL:     "https://thunderstore.io/c/valheim/p/RandyKnapp/EquipmentAndQuickSlots/",
+	Group:   GroupPlay,
+	Players: PlayersOnly,
 }}
 
 // ServerMods are the mods in ids that the server itself runs.

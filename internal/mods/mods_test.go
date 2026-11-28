@@ -363,6 +363,10 @@ func TestPlayersOnly(t *testing.T) {
 	if got := strings.Join(ServerMods([]string{"farlands", "seasonality", "gone"}), ","); got != "seasonality" {
 		t.Fatalf("ServerMods = %q", got)
 	}
+	// Two more mods that only change players' own games.
+	if got := strings.Join(ServerMods([]string{"valheimraft", "equipmentandquickslots", "seasonality"}), ","); got != "seasonality" {
+		t.Fatalf("ServerMods = %q", got)
+	}
 	in, fake, _ := setup(t)
 	ctx := context.Background()
 	if _, err := in.Prepare(ctx, []string{"seasonality"}, false, nil); err != nil {
