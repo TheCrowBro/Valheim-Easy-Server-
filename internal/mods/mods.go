@@ -141,16 +141,6 @@ var Catalog = []Mod{{
 	Group:   GroupLook,
 	Players: PlayersOnly,
 }, {
-	ID:      "valheimraft",
-	Package: "zolantris-ValheimRAFT",
-	Name:    "ValheimRAFT",
-	Author:  "zolantris",
-	Short:   "Build ships and land vehicles that carry you and your base.",
-	Summary: "Build ships and land vehicles out of Valheim's own building pieces, with sails, ropes, anchors, ladders, piers and cannons. The server doesn't run it: its author says server support may not work, and boats built by players who have it are kept safely on a plain server. Every friend who wants to sail needs it in their own game: a friend without it sees the boats as loose, glitchy pieces.",
-	URL:     "https://thunderstore.io/c/valheim/p/zolantris/ValheimRAFT/",
-	Group:   GroupPlay,
-	Players: PlayersOnly,
-}, {
 	ID:      "equipmentandquickslots",
 	Package: "RandyKnapp-EquipmentAndQuickSlots",
 	Name:    "Equipment and Quick Slots",
